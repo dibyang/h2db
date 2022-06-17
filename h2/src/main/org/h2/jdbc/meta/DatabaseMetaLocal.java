@@ -1,5 +1,5 @@
 /*
- * Copyright 2004-2023 H2 Group. Multiple-Licensed under the MPL 2.0,
+ * Copyright 2004-2022 H2 Group. Multiple-Licensed under the MPL 2.0,
  * and the EPL 1.0 (https://h2database.com/html/license.html).
  * Initial Developer: H2 Group
  */
@@ -111,7 +111,7 @@ public final class DatabaseMetaLocal extends DatabaseMetaLocalBase {
     private static final ValueSmallint TABLE_INDEX_OTHER = ValueSmallint.get(DatabaseMetaData.tableIndexOther);
 
     // This list must be ordered
-    private static final String[] TABLE_TYPES = { "BASE TABLE", "GLOBAL TEMPORARY", "LOCAL TEMPORARY", "SYNONYM",
+    private static final String[] TABLE_TYPES = { "SYS TABLE", "BASE TABLE", "GLOBAL TEMPORARY", "LOCAL TEMPORARY", "SYNONYM",
             "VIEW" };
 
     private static final ValueSmallint TYPE_NULLABLE = ValueSmallint.get((short) DatabaseMetaData.typeNullable);
@@ -131,31 +131,11 @@ public final class DatabaseMetaLocal extends DatabaseMetaLocalBase {
         return session.getDatabase().getDefaultNullOrdering();
     }
 
-    @Override
-    public String getSQLKeywords() {
-        StringBuilder builder = new StringBuilder(103).append( //
-                "CURRENT_CATALOG," //
-                        + "CURRENT_SCHEMA," //
-                        + "GROUPS," //
-                        + "IF,ILIKE," //
-                        + "KEY,");
-        Mode mode = session.getMode();
-        if (mode.limit) {
-            builder.append("LIMIT,");
-        }
-        if (mode.minusIsExcept) {
-            builder.append("MINUS,");
-        }
-        builder.append( //
-                "OFFSET," //
-                        + "QUALIFY," //
-                        + "REGEXP,ROWNUM,");
-        if (mode.topInSelect || mode.topInDML) {
-            builder.append("TOP,");
-        }
-        return builder.append("_ROWID_") //
-                .toString();
-    }
+  @Override
+  public String getSQLKeywords() {
+    //dib.yang#增加sql关键字
+    return this.getSQLKeywords4SQL92();
+  }
 
     @Override
     public String getNumericFunctions() {
@@ -510,6 +490,7 @@ public final class DatabaseMetaLocal extends DatabaseMetaLocalBase {
         SimpleResult result = new SimpleResult();
         result.addColumn("TABLE_TYPE", TypeInfo.TYPE_VARCHAR);
         // Order by TABLE_TYPE
+        result.addRow(getString("SYS TABLE"));
         result.addRow(getString("BASE TABLE"));
         result.addRow(getString("GLOBAL TEMPORARY"));
         result.addRow(getString("LOCAL TEMPORARY"));
@@ -1187,7 +1168,7 @@ public final class DatabaseMetaLocal extends DatabaseMetaLocalBase {
                     // FIXED_PREC_SCALE
                     ValueBoolean.get(t.type == Value.NUMERIC),
                     // AUTO_INCREMENT
-                    ValueBoolean.get(DataType.isNumericType(i)),
+                    ValueBoolean.FALSE,
                     // LOCAL_TYPE_NAME
                     name,
                     // MINIMUM_SCALE

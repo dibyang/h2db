@@ -184,7 +184,8 @@ public final class Database implements DataHandler, CastDataProvider {
     private boolean optimizeReuseResults = true;
     private final String cacheType;
     private boolean referentialIntegrity = true;
-    private Mode mode = Mode.getRegular();
+    //dib.yang#默认使用mysql
+    private Mode mode = Mode.getInstance(ModeEnum.MySQL.name());
     private DefaultNullOrdering defaultNullOrdering = DefaultNullOrdering.LOW;
     private int maxOperationMemory =
             Constants.DEFAULT_MAX_OPERATION_MEMORY;

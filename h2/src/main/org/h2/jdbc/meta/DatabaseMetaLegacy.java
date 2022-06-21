@@ -8,6 +8,8 @@ package org.h2.jdbc.meta;
 import java.sql.DatabaseMetaData;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 
 import org.h2.api.ErrorCode;
 import org.h2.command.CommandInterface;
@@ -51,19 +53,7 @@ public final class DatabaseMetaLegacy extends DatabaseMetaLocalBase {
 
     @Override
     public String getSQLKeywords() {
-        return "CURRENT_CATALOG," //
-                + "CURRENT_SCHEMA," //
-                + "GROUPS," //
-                + "IF,ILIKE,INTERSECTS," //
-                + "KEY," //
-                + "LIMIT," //
-                + "MINUS," //
-                + "OFFSET," //
-                + "QUALIFY," //
-                + "REGEXP,ROWNUM," //
-                + "SYSDATE,SYSTIME,SYSTIMESTAMP," //
-                + "TODAY,TOP,"//
-                + "_ROWID_";
+        return this.getSQLKeywords4SQL92();
     }
 
     @Override

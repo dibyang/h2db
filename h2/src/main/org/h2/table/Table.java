@@ -271,6 +271,9 @@ public abstract class Table extends SchemaObject {
         if (isTemporary()) {
             return isGlobalTemporary() ? "GLOBAL TEMPORARY" : "LOCAL TEMPORARY";
         }
+        if(TableType.SYSTEM_TABLE.equals(getTableType())){
+            return "SYS TABLE";
+        }
         return "BASE TABLE";
     }
 

@@ -2,6 +2,12 @@
 -- and the EPL 1.0 (https://h2database.com/html/license.html).
 -- Initial Developer: H2 Group
 --
+CREATE TABLE TEST2(A INT, B BIT(1) DEFAULT FALSE) AS VALUES (1, true), (3, false), (5, false);
+> ok
+
+DROP TABLE TEST2;
+> ok
+
 CREATE TABLE TEST(A INT, B INT) AS VALUES (1, 2), (3, 4), (5, 6);
 > ok
 

@@ -111,7 +111,7 @@ public final class DatabaseMetaLocal extends DatabaseMetaLocalBase {
     private static final ValueSmallint TABLE_INDEX_OTHER = ValueSmallint.get(DatabaseMetaData.tableIndexOther);
 
     // This list must be ordered
-    private static final String[] TABLE_TYPES = { "BASE TABLE", "GLOBAL TEMPORARY", "LOCAL TEMPORARY", "SYNONYM",
+    private static final String[] TABLE_TYPES = { "SYS TABLE", "BASE TABLE", "GLOBAL TEMPORARY", "LOCAL TEMPORARY", "SYNONYM",
             "VIEW" };
 
     private static final ValueSmallint TYPE_NULLABLE = ValueSmallint.get((short) DatabaseMetaData.typeNullable);
@@ -510,6 +510,7 @@ public final class DatabaseMetaLocal extends DatabaseMetaLocalBase {
         SimpleResult result = new SimpleResult();
         result.addColumn("TABLE_TYPE", TypeInfo.TYPE_VARCHAR);
         // Order by TABLE_TYPE
+        result.addRow(getString("SYS TABLE"));
         result.addRow(getString("BASE TABLE"));
         result.addRow(getString("GLOBAL TEMPORARY"));
         result.addRow(getString("LOCAL TEMPORARY"));

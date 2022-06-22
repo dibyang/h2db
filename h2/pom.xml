@@ -24,15 +24,15 @@
   </licenses>
 
   <scm>
-    <connection>scm:git:https://github.com/h2database/h2database</connection>
-    <url>https://github.com/h2database/h2database</url>
+    <connection>scm:git:https://github.com/dibyang/h2db</connection>
+    <url>https://github.com/dibyang/h2db</url>
   </scm>
 
   <developers>
     <developer>
-      <id>thomas.tom.mueller</id>
-      <name>Thomas Mueller</name>
-      <email>thomas.tom.mueller at gmail dot com</email>
+      <id>dibyang</id>
+      <name>yang zhijian</name>
+      <email>dib.yang@gmail.com</email>
     </developer>
   </developers>
 

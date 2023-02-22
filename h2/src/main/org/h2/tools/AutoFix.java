@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.Optional;
 
 public class AutoFix {
   public boolean fix(String dir, String db) throws SQLException, IOException {
@@ -74,7 +75,7 @@ public class AutoFix {
     return Status.original;
   }
 
-  enum Status{
+  public enum Status{
     /**
      * 修复失败
      */
@@ -93,7 +94,7 @@ public class AutoFix {
     AutoFix autoFix = new AutoFix();
     Status status = null;
     try {
-      status = autoFix.autoFixDb("D:\\h2db\\test", "aiodb", "remote", "hhrhl2016");
+      status = autoFix.autoFixDb("D:\\h2db\\test1", "aiodb", "remote", "hhrhl2016");
       System.out.println("aiodb recover:"+status);
     } catch (SQLException e) {
       e.printStackTrace();

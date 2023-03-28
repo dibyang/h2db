@@ -1,5 +1,5 @@
 /*
- * Copyright 2004-2022 H2 Group. Multiple-Licensed under the MPL 2.0,
+ * Copyright 2004-2023 H2 Group. Multiple-Licensed under the MPL 2.0,
  * and the EPL 1.0 (https://h2database.com/html/license.html).
  * Initial Developer: H2 Group
  */
@@ -1187,7 +1187,7 @@ public final class DatabaseMetaLocal extends DatabaseMetaLocalBase {
                     // FIXED_PREC_SCALE
                     ValueBoolean.get(t.type == Value.NUMERIC),
                     // AUTO_INCREMENT
-                    ValueBoolean.FALSE,
+                    ValueBoolean.get(DataType.isNumericType(i)),
                     // LOCAL_TYPE_NAME
                     name,
                     // MINIMUM_SCALE

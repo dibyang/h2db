@@ -1,5 +1,5 @@
 /*
- * Copyright 2004-2022 H2 Group. Multiple-Licensed under the MPL 2.0,
+ * Copyright 2004-2023 H2 Group. Multiple-Licensed under the MPL 2.0,
  * and the EPL 1.0 (https://h2database.com/html/license.html).
  * Initial Developer: H2 Group
  */
@@ -36,7 +36,7 @@ abstract class DatabaseMetaLocalBase extends DatabaseMeta {
         "TRIM", "TRUE", "UNION", "UNIQUE", "UNKNOWN", "UPDATE", "UPPER", "USAGE", "USER", "USING", "VALUE", "VALUES", "VARCHAR", "VARYING", "VIEW", "WHEN",
         "WHENEVER", "WHERE", "WITH", "WORK", "WRITE", "YEAR", "ZONE" };
 
-
+    //dib.yang#增加sql关键字
     public String getSQLKeywords4SQL92() {
         Set<String> keywords = new HashSet<>();
         for (String keyword : SQL92_KEYWORDS) {

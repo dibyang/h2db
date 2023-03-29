@@ -11,6 +11,10 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Optional;
 
+/**
+ * 自动修复数据库
+ * dib.yang
+ */
 public class AutoFix {
   public boolean fix(String dir, String db) throws SQLException, IOException {
     File dbFile = Paths.get(dir, db + ".mv.db").toFile();

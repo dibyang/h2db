@@ -1,5 +1,5 @@
 /*
- * Copyright 2004-2022 H2 Group. Multiple-Licensed under the MPL 2.0,
+ * Copyright 2004-2023 H2 Group. Multiple-Licensed under the MPL 2.0,
  * and the EPL 1.0 (https://h2database.com/html/license.html).
  * Initial Developer: H2 Group
  */
@@ -134,13 +134,13 @@ public class DataType {
                 "BINARY VARYING", "VARBINARY", "RAW", "BYTEA", "LONG RAW", "LONGVARBINARY");
         add(Value.BLOB, Types.BLOB, createLob(false),
                 "BINARY LARGE OBJECT", "BLOB", "TINYBLOB", "MEDIUMBLOB", "LONGBLOB", "IMAGE");
-        //允许指定 BIT 长度为1
+        //dib.yang#允许指定 BIT 长度为1
         DataType boolType = createNumeric(ValueBoolean.PRECISION, 0);
         boolType.supportsPrecision = true;
         add(Value.BOOLEAN, Types.BOOLEAN, boolType, "BOOLEAN", "BIT", "BOOL");
         add(Value.TINYINT, Types.TINYINT, createNumeric(ValueTinyint.PRECISION, 0), "TINYINT");
         add(Value.SMALLINT, Types.SMALLINT, createNumeric(ValueSmallint.PRECISION, 0), "SMALLINT", "INT2");
-        //允许指定 int 长度为
+        //dib.yang#允许指定 int 长度为
         DataType intType = createNumeric(ValueInteger.PRECISION, 0);
         intType.supportsPrecision = true;
         intType.minPrecision = 1;

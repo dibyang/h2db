@@ -133,6 +133,7 @@ public final class DatabaseMetaLocal extends DatabaseMetaLocalBase {
 
   @Override
   public String getSQLKeywords() {
+    //dib.yang#增加sql关键字
     return this.getSQLKeywords4SQL92();
   }
 

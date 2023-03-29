@@ -1216,6 +1216,7 @@ public abstract class FileStore<C extends Chunk<C>>
 
     /**
      * The time the store was created, in milliseconds since 1970.
+     * @return
      */
     public long getCreationTime() {
         return creationTime;

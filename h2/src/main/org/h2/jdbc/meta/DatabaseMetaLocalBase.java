@@ -36,7 +36,7 @@ abstract class DatabaseMetaLocalBase extends DatabaseMeta {
         "TRIM", "TRUE", "UNION", "UNIQUE", "UNKNOWN", "UPDATE", "UPPER", "USAGE", "USER", "USING", "VALUE", "VALUES", "VARCHAR", "VARYING", "VIEW", "WHEN",
         "WHENEVER", "WHERE", "WITH", "WORK", "WRITE", "YEAR", "ZONE" };
 
-
+    //dib.yang#增加sql关键字
     public String getSQLKeywords4SQL92() {
         Set<String> keywords = new HashSet<>();
         for (String keyword : SQL92_KEYWORDS) {

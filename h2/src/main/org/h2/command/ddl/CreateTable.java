@@ -171,12 +171,20 @@ public class CreateTable extends CommandWithColumns {
         return 0;
     }
 
-    /** This is called from REFRESH MATERIALIZED VIEW */
+    /**
+     * This is called from REFRESH MATERIALIZED VIEW
+     * @param table
+     */
     public void insertAsData(Table table) {
         insertAsData(false, getDatabase(), table);
     }
 
-    /** Insert data for the CREATE TABLE .. AS */
+    /**
+     * Insert data for the CREATE TABLE .. AS
+     * @param isSessionTemporary
+     * @param db
+     * @param table
+     */
     private void insertAsData(boolean isSessionTemporary, Database db, Table table) {
         boolean flushSequences = false;
         if (!isSessionTemporary) {

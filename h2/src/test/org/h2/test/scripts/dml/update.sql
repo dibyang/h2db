@@ -1,4 +1,4 @@
--- Copyright 2004-2022 H2 Group. Multiple-Licensed under the MPL 2.0,
+-- Copyright 2004-2023 H2 Group. Multiple-Licensed under the MPL 2.0,
 -- and the EPL 1.0 (https://h2database.com/html/license.html).
 -- Initial Developer: H2 Group
 --
@@ -293,32 +293,6 @@ SELECT SUM(V) FROM TEST;
 DROP TABLE TEST;
 > ok
 
-CREATE TABLE FOO (ID INT, VAL VARCHAR) AS VALUES(1, 'foo1'), (2, 'foo2'), (3, 'foo3');
-> ok
-
-CREATE TABLE BAR (ID INT, VAL VARCHAR) AS VALUES(1, 'bar1'), (3, 'bar3'), (4, 'bar4');
-> ok
-
-SET MODE PostgreSQL;
-> ok
-
-UPDATE FOO SET VAL = BAR.VAL FROM BAR WHERE FOO.ID = BAR.ID;
-> update count: 2
-
-TABLE FOO;
-> ID VAL
-> -- ----
-> 1  bar1
-> 2  foo2
-> 3  bar3
-> rows: 3
-
-UPDATE FOO SET BAR.VAL = FOO.VAL FROM BAR WHERE FOO.ID = BAR.ID;
-> exception TABLE_OR_VIEW_NOT_FOUND_1
-
-SET MODE Regular;
-> ok
-
 CREATE TABLE DEST(ID INT, X INT, Y INT);
 > ok
 
@@ -342,4 +316,80 @@ TABLE DEST;
 > rows: 2
 
 DROP TABLE SRC, DEST;
+> ok
+
+CREATE TABLE TEST(ID BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, A INTEGER ARRAY, B INTEGER);
+> ok
+
+INSERT INTO TEST(A) VALUES ARRAY[], ARRAY[1], ARRAY[1, 2], ARRAY[1, 2, 3];
+> update count: 4
+
+UPDATE TEST SET A[2] = 4;
+> update count: 4
+
+SELECT A FROM TEST ORDER BY ID;
+> A
+> ---------
+> [null, 4]
+> [1, 4]
+> [1, 4]
+> [1, 4, 3]
+> rows (ordered): 4
+
+DELETE FROM TEST;
+> update count: 4
+
+INSERT INTO TEST(A) VALUES ARRAY[], ARRAY[1], ARRAY[1, 2], ARRAY[1, 2, 3];
+> update count: 4
+
+UPDATE TEST SET (A[2], B) = SELECT 4, RANDOM() * 0.0001;
+> update count: 4
+
+SELECT A FROM TEST ORDER BY ID;
+> A
+> ---------
+> [null, 4]
+> [1, 4]
+> [1, 4]
+> [1, 4, 3]
+> rows (ordered): 4
+
+INSERT INTO TEST(A) VALUES NULL;
+> update count: 1
+
+UPDATE TEST SET A[1] = 0;
+> exception NULL_VALUE_IN_ARRAY_TARGET
+
+UPDATE TEST SET A[1] = DEFAULT;
+> exception SYNTAX_ERROR_2
+
+DROP TABLE TEST;
+> ok
+
+CREATE TABLE TEST(ID BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, A INTEGER ARRAY ARRAY);
+> ok
+
+INSERT INTO TEST(A) VALUES ARRAY[ARRAY[]], ARRAY[ARRAY[1]], ARRAY[ARRAY[1, 2], ARRAY[3, 4, 5]],
+    ARRAY[ARRAY[1], ARRAY[2, 3], ARRAY[4], NULL];
+> update count: 4
+
+UPDATE TEST SET A[2][3] = 9;
+> update count: 4
+
+SELECT A FROM TEST ORDER BY ID;
+> A
+> ---------------------------
+> [[], [null, null, 9]]
+> [[1], [null, null, 9]]
+> [[1, 2], [3, 4, 9]]
+> [[1], [2, 3, 9], [4], null]
+> rows (ordered): 4
+
+INSERT INTO TEST(A) VALUES ARRAY[ARRAY[], NULL];
+> update count: 1
+
+UPDATE TEST SET A[2][1] = 0;
+> exception NULL_VALUE_IN_ARRAY_TARGET
+
+DROP TABLE TEST;
 > ok

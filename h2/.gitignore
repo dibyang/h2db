@@ -15,5 +15,6 @@ test.out.txt
 *.log
 target/
 _tmp*
+signing.properties
 .gradle
 build

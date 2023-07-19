@@ -1,6 +1,8 @@
 package org.h2.tools;
 
 import org.h2.jdbc.JdbcSQLNonTransientConnectionException;
+import org.h2.jdbc.JdbcSQLNonTransientException;
+import org.h2.mvstore.MVStoreException;
 import org.h2.util.JdbcUtils;
 
 import java.io.File;
@@ -9,6 +11,7 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -26,8 +29,25 @@ public class AutoFix {
       RunScript runScript = new RunScript();
       File scriptFile = Paths.get(dir, db + ".h2.sql").toFile();
       if(scriptFile.exists()) {
-        runScript.runTool("-url", buildUrl(dir, db), "-script", scriptFile.getPath());
-        return true;
+        if(hasError(scriptFile)){
+          return false;
+        }else {
+          runScript.runTool("-url", buildUrl(dir, db), "-script", scriptFile.getPath());
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  private boolean hasError(File scriptFile) {
+    if(scriptFile.length() < 64 * 1024){
+      try {
+        List<String> lines = Files.readAllLines(scriptFile.toPath());
+        Optional<String> errorLine = lines.stream().filter(e -> e.startsWith("// error: org.h2.mvstore.MVStoreException")).findFirst();
+        return errorLine.isPresent();
+      } catch (IOException e) {
+        e.printStackTrace();
       }
     }
     return false;
@@ -50,14 +70,22 @@ public class AutoFix {
   public boolean needFix(String url, String user, String password) throws SQLException {
     try (Connection conn = JdbcUtils.getConnection(null, url,user,password)){
 
-    }catch(SQLException e){
+    } catch(JdbcSQLNonTransientException e){
+      if(e.getCause() instanceof MVStoreException){
+        return true;
+      }else{
+        throw e;
+      }
+    } catch(JdbcSQLNonTransientConnectionException e){
       if(e instanceof JdbcSQLNonTransientConnectionException){
         if(e.getMessage().contains("File corrupted while reading record")){
           return true;
         }
-      }else {
+      } else {
         throw e;
       }
+    } catch(SQLException e){
+      throw e;
     }
     return false;
   }

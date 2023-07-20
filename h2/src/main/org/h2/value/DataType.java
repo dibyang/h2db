@@ -134,10 +134,17 @@ public class DataType {
                 "BINARY VARYING", "VARBINARY", "RAW", "BYTEA", "LONG RAW", "LONGVARBINARY");
         add(Value.BLOB, Types.BLOB, createLob(false),
                 "BINARY LARGE OBJECT", "BLOB", "TINYBLOB", "MEDIUMBLOB", "LONGBLOB", "IMAGE");
-        add(Value.BOOLEAN, Types.BOOLEAN, createNumeric(ValueBoolean.PRECISION, 0), "BOOLEAN", "BIT", "BOOL");
+        //dib.yang#允许指定 BIT 长度为1
+        DataType boolType = createNumeric(ValueBoolean.PRECISION, 0);
+        boolType.supportsPrecision = true;
+        add(Value.BOOLEAN, Types.BOOLEAN, boolType, "BOOLEAN", "BIT", "BOOL");
         add(Value.TINYINT, Types.TINYINT, createNumeric(ValueTinyint.PRECISION, 0), "TINYINT");
         add(Value.SMALLINT, Types.SMALLINT, createNumeric(ValueSmallint.PRECISION, 0), "SMALLINT", "INT2");
-        add(Value.INTEGER, Types.INTEGER, createNumeric(ValueInteger.PRECISION, 0),
+        //dib.yang#允许指定 int 长度为
+        DataType intType = createNumeric(ValueInteger.PRECISION, 0);
+        intType.supportsPrecision = true;
+        intType.minPrecision = 1;
+        add(Value.INTEGER, Types.INTEGER, intType,
                 "INTEGER", "INT", "MEDIUMINT", "INT4", "SIGNED"
         );
         add(Value.BIGINT, Types.BIGINT, createNumeric(ValueBigint.PRECISION, 0),

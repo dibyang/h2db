@@ -2847,6 +2847,12 @@ public final class InformationSchemaTable extends MetaTable {
         NetworkConnectionInfo networkConnectionInfo = s.getNetworkConnectionInfo();
         Command command = s.getCurrentCommand();
         int blockingSessionId = s.getBlockingSessionId();
+        boolean hasPendingTransaction = false;
+        try {
+            hasPendingTransaction = s.hasPendingTransaction();
+        } catch (NullPointerException e) {
+            //ignore NullPointerException
+        }
         add(session, rows,
                 // SESSION_ID
                 ValueInteger.get(s.getId()),
@@ -2867,7 +2873,7 @@ public final class InformationSchemaTable extends MetaTable {
                 // EXECUTING_STATEMENT_START
                 command == null ? null : s.getCommandStartOrEnd(),
                 // CONTAINS_UNCOMMITTED
-                ValueBoolean.get(s.hasPendingTransaction()),
+                ValueBoolean.get(hasPendingTransaction),
                 // SESSION_STATE
                 String.valueOf(s.getState()),
                 // BLOCKER_ID

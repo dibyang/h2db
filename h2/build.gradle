@@ -1,0 +1,218 @@
+buildscript {
+    repositories {
+        mavenLocal()
+        maven { url 'https://maven.aliyun.com/repository/public/' }
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'net.researchgate:gradle-release:2.6.0'
+    }
+    //skip Test tasks
+    gradle.taskGraph.whenReady {
+        tasks.each { task ->
+            if (task.name.contains("test")) {
+                task.enabled = false
+            }
+        }
+    }
+}
+
+apply plugin: 'java'
+apply plugin: 'maven'
+apply plugin: 'signing'
+apply plugin: 'net.researchgate.release'
+
+File signing_cfg = new File("$project.rootDir/signing.properties")
+if(signing_cfg.exists()) {
+    Properties props = new Properties()
+    props.load(new FileInputStream(signing_cfg))
+    props.each { prop ->
+        project.ext.set(prop.key, prop.value)
+    }
+
+    // 将构建的包签名
+    signing {
+        sign configurations.archives
+    }
+}
+
+release {
+    failOnUnversionedFiles = true
+    failOnCommitNeeded = true
+    failOnPublishNeeded = true
+    failOnSnapshotDependencies = false
+    failOnUpdateNeeded = true
+    revertOnFail = true
+    tagTemplate = 'v${version}'
+    scmAdapters = [
+        net.researchgate.release.GitAdapter
+    ]
+
+    git {
+        requireBranch = 'master|develop'
+        pushToRemote = 'origin'
+        pushToBranchPrefix = ''
+        commitVersionFileOnly = false
+        signTag = false
+    }
+
+}
+
+
+afterReleaseBuild.dependsOn uploadArchives
+
+
+configurations.all {
+    resolutionStrategy {
+        // cache dynamic versions for 10 seconds
+        cacheDynamicVersionsFor 10, 'seconds'
+        // don't cache changing modules at all
+        cacheChangingModulesFor 0, 'seconds'
+    }
+}
+
+processResources {
+    from('src/main') {
+        include '**/*.prop'
+        include '**/*.png'
+        include '**/*.jsp'
+        include '**/*.ico'
+        include '**/*.gif'
+        include '**/*.css'
+        include '**/*.js'
+        include 'org/h2/res/help.csv'
+        include 'org/h2/res/javadoc.properties'
+        include 'META-INF/**'
+    }
+}
+
+sourceSets {
+    main {
+        java {
+            srcDirs = ['src/main']
+        }
+        resources {
+            srcDirs = []
+        }
+    }
+    test {
+        java {
+            srcDirs = []
+        }
+        resources {
+            srcDirs = []
+        }
+    }
+}
+
+
+
+sourceCompatibility = project.jdkVersion
+targetCompatibility = project.jdkVersion
+
+repositories {
+    mavenLocal()
+    maven { url 'https://maven.aliyun.com/repository/public/' }
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'javax.servlet:javax.servlet-api:4.0.1'
+    implementation 'jakarta.servlet:jakarta.servlet-api:5.0.0'
+    implementation 'org.apache.lucene:lucene-core:8.5.2'
+    implementation 'org.apache.lucene:lucene-analyzers-common:8.5.2'
+    implementation 'org.apache.lucene:lucene-queryparser:8.5.2'
+    implementation 'org.slf4j:slf4j-api:1.7.30'
+    implementation 'org.osgi:org.osgi.core:5.0.0'
+    implementation 'org.locationtech.jts:jts-core:1.17.0'
+    testImplementation 'org.slf4j:slf4j-nop:1.7.30'
+    testImplementation 'org.postgresql:postgresql:42.4.0'
+    testImplementation 'org.junit.jupiter:junit-jupiter-engine:5.6.2'
+    testImplementation 'org.ow2.asm:asm:9.4'
+    compileOnly 'org.osgi:org.osgi.service.jdbc:1.1.0'
+}
+
+
+
+tasks.withType(JavaCompile) {
+    options.encoding = 'UTF-8'
+}
+
+//对于典型的 Java 项目，您可以添加一个javadocJar以及一个 sourcesJar任务
+task javadocJar(type: Jar) {
+    classifier = 'javadoc'
+    from javadoc
+}
+
+task sourcesJar(type: Jar) {
+    classifier = 'sources'
+    from sourceSets.main.allSource
+}
+// javadoc 配置，这里是自定义了 java doc 的一些配置
+javadoc {
+    description = "Generates project-level javadoc for use in -javadoc jar"
+
+    options.memberLevel = org.gradle.external.javadoc.JavadocMemberLevel.PROTECTED
+    options.author = true
+    options.version = true
+    options.header = project.name
+    options.addStringOption('Xdoclint:none', '-quiet')
+
+    // suppress warnings due to cross-module @see and @link references;
+    // note that global 'api' task does display all warnings.
+    logging.captureStandardError LogLevel.INFO
+    logging.captureStandardOutput LogLevel.INFO // suppress "## warnings" message
+    options.encoding = "UTF-8"  //编码一定要配置否则直接出错
+    options.charSet = 'UTF-8'
+}
+
+// 并将它们与项目 jar 本身一起连接到 artifacts 集合中：
+artifacts {
+    archives javadocJar, sourcesJar
+}
+
+
+uploadArchives {
+    repositories {
+        mavenDeployer {
+            beforeDeployment { MavenDeployment deployment -> signing.signPom(deployment) }
+
+            repository(url: "https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/") {
+                authentication(userName: findProperty("ossrhUsername")?:"", password: findProperty("ossrhPassword")?:"")
+            }
+
+            snapshotRepository(url: "https://s01.oss.sonatype.org/content/repositories/snapshots/") {
+                authentication(userName: findProperty("ossrhUsername")?:"", password: findProperty("ossrhPassword")?:"")
+            }
+
+            pom.project {
+                name 'luava'
+                packaging 'jar'
+                // optionally artifactId can be defined here
+                description "H2 Database Engine"
+                url 'https://github.com/dibyang/h2db'
+
+                scm {
+                    connection 'scm:git:https://github.com/dibyang/h2db.git'
+                    developerConnection 'scm:git:https://github.com/dibyang/h2db.git'
+                    url 'https://github.com/dibyang/h2db.git'
+                }
+
+                licenses {
+                    license {
+                        name 'The Apache License, Version 2.0'
+                        url 'http://www.apache.org/licenses/LICENSE-2.0.txt'
+                    }
+                }
+
+                developers {
+                    developer {
+                        id 'yangzj'
+                        name 'Yang zhijian'
+                        email '3227817@qq.com'
+                    }
+                }
+            }
+        }
+    }
+}

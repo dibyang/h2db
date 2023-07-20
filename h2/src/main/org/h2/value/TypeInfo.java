@@ -5,13 +5,17 @@
  */
 package org.h2.value;
 
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Objects;
+import java.util.Set;
+
 import org.h2.api.ErrorCode;
 import org.h2.api.IntervalQualifier;
 import org.h2.engine.Constants;
 import org.h2.message.DbException;
-
-import java.util.*;
-import java.util.Map.Entry;
 
 /**
  * Data type with parameters.

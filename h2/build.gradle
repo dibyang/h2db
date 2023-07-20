@@ -49,7 +49,7 @@ release {
     ]
 
     git {
-        requireBranch = 'master'
+        requireBranch = 'master|develop'
         pushToRemote = 'origin'
         pushToBranchPrefix = ''
         commitVersionFileOnly = false

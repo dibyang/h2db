@@ -21,6 +21,44 @@ Change Log
 
 <h2>Next Version (unreleased)</h2>
 <ul>
+<li>Nothing yet...
+</li>
+</ul>
+
+<h2>Version 2.2.220 (2023-07-04)</h2>
+<ul>
+<li>PR #3834: Increase database format version
+</li>
+<li>PR #3833: Disallow plain webAdminPassword values to force usage of hashes
+</li>
+<li>PR #3831: Add Oracle-style NOWAIT, WAIT n, and SKIP LOCKED to FOR UPDATE clause
+</li>
+<li>PR #3830: Fix time zone of time/timestamp with time zone AT LOCAL
+</li>
+<li>PR #3822 / Issue #2671: Add quantified comparison predicates with array
+</li>
+<li>PR #3820: Add partial implementation of JSON simplified accessor
+</li>
+<li>PR #3818: Add support of underscores in numeric literals
+</li>
+<li>PR #3817: Add ANY_VALUE() aggregate function
+</li>
+<li>PR #3814: Fix regression in comparisons with infinities and NaNs
+</li>
+<li>Issue #3040: System objectIds are recycled twice when CTE queries are executed.
+</li>
+<li>PR #3812: UNIQUE null treatment
+</li>
+<li>PR #3811: BTRIM function, octal and binary literals and other changes
+</li>
+<li>Issue #352: In comparison text values are converted to INT even when they should be converted to BIGINT
+</li>
+<li>PR #3797: MSSQL mode: Discard table hints on plain UPDATE statements
+</li>
+<li>PR #3791: Formatted cast of datetimes to/from character strings
+</li>
+<li>Issue #3785: CSVRead: Fails to translate empty Numbers, when cells are quoted
+</li>
 <li>Issue #3762: Comparison predicates with row values don't create index conditions
 </li>
 <li>PR #3761: LAST_DAY function and other changes

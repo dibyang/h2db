@@ -12,17 +12,17 @@
 * Pure Java with small footprint: around 2.5 MB jar file size
 * ODBC driver
 
-fork version 2.2.218: https://h2database.com
+More information: https://h2database.com
 
 ## Downloads
 
-[Download latest version](https://github.com/dibyang/h2db) or add to `pom.xml`:
+[Download latest version](https://h2database.com/html/download.html) or add to `pom.xml`:
 
 ```XML
 <dependency>
-    <groupId>net.xdob.h2db</groupId>
+    <groupId>com.h2database</groupId>
     <artifactId>h2</artifactId>
-    <version>2.0.0</version>
+    <version>2.2.220</version>
 </dependency>
 ```
 
@@ -35,5 +35,6 @@ fork version 2.2.218: https://h2database.com
 
 ## Support
 
-* [Issue tracker](https://github.com/dibyang/h2db/issues) for bug reports and feature requests
+* [Issue tracker](https://github.com/h2database/h2database/issues) for bug reports and feature requests
+* [Mailing list / forum](https://groups.google.com/g/h2-database) for questions about H2
 * ['h2' tag on Stack Overflow](https://stackoverflow.com/questions/tagged/h2) for other questions (Hibernate with H2 etc.)

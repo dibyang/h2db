@@ -2853,9 +2853,9 @@ public final class InformationSchemaTable extends MetaTable {
         } catch (NullPointerException e) {
             //ignore NullPointerException
         }
-        //Fix bug the NullPointerException caused by accessing 'user' after the session has been closed.
         User user = s.getUser();
-        if(user==null) {
+        if (user == null) {
+            // Session was closed concurrently
             return;
         }
 

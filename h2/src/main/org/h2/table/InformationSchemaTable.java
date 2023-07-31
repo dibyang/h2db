@@ -2842,11 +2842,16 @@ public final class InformationSchemaTable extends MetaTable {
         } catch (NullPointerException e) {
             //ignore NullPointerException
         }
+        User user = session.getUser();
+        if(user==null){
+            //session is closed.
+            return;
+        }
         add(session, rows,
                 // SESSION_ID
                 ValueInteger.get(s.getId()),
                 // USER_NAME
-                s.getUser().getName(),
+                user.getName(),
                 // SERVER
                 networkConnectionInfo == null ? null : networkConnectionInfo.getServer(),
                 // CLIENT_ADDR

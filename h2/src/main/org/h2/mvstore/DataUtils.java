@@ -801,6 +801,9 @@ public final class DataUtils {
     public static HashMap<String, String> parseMap(String s) {
         HashMap<String, String> map = new HashMap<>();
         StringBuilder buff = new StringBuilder();
+        if(s==null){
+            s="";
+        }
         for (int i = 0, size = s.length(); i < size;) {
             int startKey = i;
             i = s.indexOf(':', i);

@@ -10,6 +10,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Optional;
@@ -69,7 +71,9 @@ public class AutoFix {
 
   public boolean needFix(String url, String user, String password) throws SQLException {
     try (Connection conn = JdbcUtils.getConnection(null, url,user,password)){
-
+      PreparedStatement ps = conn.prepareStatement("show tables");
+      ResultSet rs = ps.executeQuery();
+      System.out.println("check h2 db, show tables = " + rs);
     } catch(JdbcSQLNonTransientException e){
       if(e.getCause() instanceof MVStoreException){
         return true;
@@ -126,7 +130,7 @@ public class AutoFix {
     AutoFix autoFix = new AutoFix();
     Status status = null;
     try {
-      status = autoFix.autoFixDb("D:\\h2db\\test1", "aiodb", "remote", "hhrhl2016");
+      status = autoFix.autoFixDb("D:\\test", "aiodb", "remote", "hhrhl2016");
       System.out.println("aiodb recover:"+status);
     } catch (SQLException e) {
       e.printStackTrace();

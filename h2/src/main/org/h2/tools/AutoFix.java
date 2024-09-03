@@ -130,7 +130,7 @@ public class AutoFix {
     AutoFix autoFix = new AutoFix();
     Status status = null;
     try {
-      status = autoFix.autoFixDb("D:\\test", "aiodb", "remote", "hhrhl2016");
+      status = autoFix.autoFixDb("D:\\test\\db\\test\\", "aiodb", "remote", "hhrhl2016");
       System.out.println("aiodb recover:"+status);
     } catch (SQLException e) {
       e.printStackTrace();

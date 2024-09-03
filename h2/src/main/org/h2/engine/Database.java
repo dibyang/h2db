@@ -5,6 +5,8 @@
  */
 package org.h2.engine;
 
+import java.io.File;
+import java.nio.file.Paths;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.BitSet;
@@ -15,7 +17,9 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import org.h2.api.DatabaseEventListener;
@@ -2456,4 +2460,42 @@ public final class Database implements DataHandler, CastDataProvider {
         return dbSettings.zeroBasedEnums;
     }
 
+
+    private volatile long lastCompact = 0;
+    private final AtomicBoolean compacting = new AtomicBoolean(false);
+
+    public void checkCompact() {
+        if(Paths.get("/etc/h2/disabled_compact").toFile().exists()){
+            return;
+        }
+        long offset = System.nanoTime() - lastCompact;
+        if (offset > getCompactCheckTime()) {
+            lastCompact = System.nanoTime();
+            synchronized (compacting) {
+                if(compacting.compareAndSet(false, true)) {
+                    CompletableFuture.runAsync(() -> {
+                        try {
+                            Store store = this.getStore();
+                            store.compactFile(0);
+                        } catch (Exception e) {
+                            trace.error(e, "compactFile fail.");
+                        }
+                        compacting.set(false);
+                    });
+                }
+            }
+
+        }
+
+    }
+
+    private long getCompactCheckTime() {
+        int compact_check_time = 60;
+        try {
+            compact_check_time = Integer.parseInt(System.getProperty("h2_compact_check_time", "60"));
+        }catch (NumberFormatException e){
+            //ignore NumberFormatException
+        }
+        return compact_check_time * 1_000_000L;
+    }
 }

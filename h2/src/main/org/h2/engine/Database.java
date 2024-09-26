@@ -2511,8 +2511,8 @@ public final class Database implements DataHandler, CastDataProvider {
 
 
     private long getCompactCheckTime() {
-        //默认6分钟
-        int compact_check_time = 360;
+        //默认1分钟
+        int compact_check_time = 120;
         try {
             compact_check_time = Integer.parseInt(System.getProperty("h2_compact_check_time", String.valueOf(compact_check_time)));
             File file = Paths.get("/etc/aio/h2_compact_check_time").toFile();

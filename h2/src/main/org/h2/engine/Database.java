@@ -6,6 +6,9 @@
 package org.h2.engine;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -19,6 +22,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -86,6 +90,8 @@ import org.h2.value.CompareMode;
 import org.h2.value.TypeInfo;
 import org.h2.value.ValueInteger;
 import org.h2.value.ValueTimestampTimeZone;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * There is one database object per open database.
@@ -2461,41 +2467,63 @@ public final class Database implements DataHandler, CastDataProvider {
     }
 
 
-    private volatile long lastCompact = 0;
-    private final AtomicBoolean compacting = new AtomicBoolean(false);
+    private static final Map<String,CompactStatus> compactStatusMap = new ConcurrentHashMap<>();
 
+    static Logger LOG = LoggerFactory.getLogger(Database.class);
     public void checkCompact() {
         if(Paths.get("/etc/h2/disabled_compact").toFile().exists()){
             return;
         }
-        long offset = System.nanoTime() - lastCompact;
+        CompactStatus compactStatus = getCompactStatus();
+        long offset = TimeUnit.NANOSECONDS.toSeconds(System.nanoTime() - compactStatus.lastCompact);
         if (offset > getCompactCheckTime()) {
-            lastCompact = System.nanoTime();
-            synchronized (compacting) {
-                if(compacting.compareAndSet(false, true)) {
-                    CompletableFuture.runAsync(() -> {
-                        try {
-                            Store store = this.getStore();
-                            store.compactFile(0);
-                        } catch (Exception e) {
-                            trace.error(e, "compactFile fail.");
-                        }
-                        compacting.set(false);
-                    });
-                }
+            compactStatus.lastCompact = System.nanoTime();
+            if(compactStatus.compacting.compareAndSet(false, true)) {
+                CompletableFuture.runAsync(() -> {
+                    try {
+                        LOG.info("h2 file compact begin. offset={}", offset);
+                        Store store = this.getStore();
+                        store.compactFile(0);
+                        LOG.info("h2 file compact end.");
+                    } catch (Exception e) {
+                        LOG.warn("h2 file compact fail.", e);
+                        trace.error(e, "compactFile fail.");
+                    }
+                    compactStatus.compacting.set(false);
+                });
             }
 
         }
 
     }
 
+    private CompactStatus getCompactStatus() {
+        CompactStatus compactStatus = null;
+        synchronized (compactStatusMap) {
+            compactStatus = compactStatusMap.get(this.databaseName);
+            if(compactStatus==null){
+                compactStatus = new CompactStatus();
+                compactStatusMap.put(this.databaseName, compactStatus);
+            }
+        }
+        return compactStatus;
+    }
+
+
     private long getCompactCheckTime() {
         int compact_check_time = 60;
         try {
             compact_check_time = Integer.parseInt(System.getProperty("h2_compact_check_time", "60"));
+            File file = Paths.get("/etc/aio/h2_compact_check_time").toFile();
+            if(file.exists()){
+                byte[] bytes = Files.readAllBytes(file.toPath());
+                compact_check_time = Integer.parseInt(new String(bytes, StandardCharsets.UTF_8).trim());
+            }
         }catch (NumberFormatException e){
             //ignore NumberFormatException
+        } catch (IOException e) {
+          //throw new RuntimeException(e);
         }
-        return compact_check_time * 1_000_000L;
+      return compact_check_time;
     }
 }

@@ -206,7 +206,7 @@ public abstract class Chunk<C extends Chunk<C>> {
 
     Chunk(int id) {
         this.id = id;
-        if (id <= 0) {
+        if (id < 0 || id > MAX_ID) {
             throw DataUtils.newMVStoreException(
                     DataUtils.ERROR_FILE_CORRUPT, "Invalid chunk id {0}", id);
         }

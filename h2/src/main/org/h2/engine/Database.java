@@ -90,8 +90,6 @@ import org.h2.value.CompareMode;
 import org.h2.value.TypeInfo;
 import org.h2.value.ValueInteger;
 import org.h2.value.ValueTimestampTimeZone;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * There is one database object per open database.
@@ -2469,7 +2467,6 @@ public final class Database implements DataHandler, CastDataProvider {
 
     private static final Map<String,CompactStatus> compactStatusMap = new ConcurrentHashMap<>();
 
-    static Logger LOG = LoggerFactory.getLogger(Database.class);
     public void checkCompact() {
         if(Paths.get("/etc/h2/disabled_compact").toFile().exists()){
             return;
@@ -2481,12 +2478,9 @@ public final class Database implements DataHandler, CastDataProvider {
             if(compactStatus.compacting.compareAndSet(false, true)) {
                 CompletableFuture.runAsync(() -> {
                     try {
-                        LOG.info("h2 file compact begin. offset={}", offset);
                         Store store = this.getStore();
                         store.compactFile(0);
-                        LOG.info("h2 file compact end.");
                     } catch (Exception e) {
-                        LOG.warn("h2 file compact fail.", e);
                         trace.error(e, "compactFile fail.");
                     }
                     compactStatus.compacting.set(false);

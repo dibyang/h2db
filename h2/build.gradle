@@ -59,9 +59,6 @@ release {
 }
 
 
-afterReleaseBuild.dependsOn uploadArchives
-
-
 configurations.all {
     resolutionStrategy {
         // cache dynamic versions for 10 seconds

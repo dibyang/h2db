@@ -72,8 +72,16 @@ public class AutoFix {
   public boolean needFix(String url, String user, String password) throws SQLException {
     try (Connection conn = JdbcUtils.getConnection(null, url,user,password)){
       PreparedStatement ps = conn.prepareStatement("show tables");
+      ps.execute();
       ResultSet rs = ps.executeQuery();
       System.out.println("check h2 db, show tables = " + rs);
+      while(rs.next()){
+        System.out.println("rs = " + rs.getString("TABLE_NAME"));
+      }
+//      PreparedStatement ps2 = conn.prepareStatement("SELECT * FROM UTILITY_USER ");
+//      ps.execute();
+//      ResultSet rs2 = ps.executeQuery();
+//      System.out.println("check h2 db, show tables = " + rs2);
     } catch(JdbcSQLNonTransientException e){
       if(e.getCause() instanceof MVStoreException){
         return true;
@@ -130,7 +138,7 @@ public class AutoFix {
     AutoFix autoFix = new AutoFix();
     Status status = null;
     try {
-      status = autoFix.autoFixDb("D:\\test\\db\\test\\", "aiodb", "remote", "hhrhl2016");
+      status = autoFix.autoFixDb("D:\\test\\db", "fspool_db", "remote", "hhrhl2016");
       System.out.println("aiodb recover:"+status);
     } catch (SQLException e) {
       e.printStackTrace();

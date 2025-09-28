@@ -522,8 +522,6 @@ public abstract class Query extends Prepared {
         lastExists = null;
         lastEvaluated = now;
         lastLimit = limit;
-        Database database = getDatabase();
-        database.checkCompact();
         return r;
     }
 

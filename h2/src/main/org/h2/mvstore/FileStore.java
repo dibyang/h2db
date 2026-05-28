@@ -178,6 +178,10 @@ public abstract class FileStore<C extends Chunk<C>>
      */
     final ConcurrentHashMap<Integer, C> chunks = new ConcurrentHashMap<>();
 
+    private Map<Integer, C> recoveryPhysicalChunksById;
+
+    private Map<RecoveryChunkKey, C> recoveryPhysicalChunksByGeneration;
+
     protected final HashMap<String, Object> storeHeader = new HashMap<>();
 
     /**
@@ -962,11 +966,11 @@ public abstract class FileStore<C extends Chunk<C>>
                 return null;
             }
             C test = readChunkFooter(block);
-            if (test != null) {
+            if (isPlausibleDiscoveredChunk(test, block)) {
                 // if we encounter chunk footer (with or without corresponding header)
                 // in the middle of prospective chunk, stop considering it
                 candidateLocation = Long.MAX_VALUE;
-                test = readChunkHeaderOptionally(test.block, test.id);
+                test = readChunkHeaderAndFooter(test.block, test.id);
                 if (test != null) {
                     // if that footer has a corresponding header,
                     // consider them as a new candidate for a valid chunk
@@ -978,7 +982,7 @@ public abstract class FileStore<C extends Chunk<C>>
             // if we encounter chunk header without corresponding footer
             // (due to incomplete write?) in the middle of prospective
             // chunk, stop considering it
-            if (--block > candidateLocation && readChunkHeaderOptionally(block) != null) {
+            if (--block > candidateLocation && isPlausibleDiscoveredChunk(readChunkHeaderOptionally(block))) {
                 candidateLocation = Long.MAX_VALUE;
             }
         }
@@ -992,60 +996,78 @@ public abstract class FileStore<C extends Chunk<C>>
         C[] lastChunkCandidates = validChunksByLocation.values().toArray(array);
         Arrays.sort(lastChunkCandidates, chunkComparator);
         Map<Integer, C> validChunksById = new HashMap<>();
+        Map<Integer, RecoveryChunkKey> validChunkKeysById = new HashMap<>();
+        Map<RecoveryChunkKey, C> validChunksByGeneration = new HashMap<>();
         for (C chunk : lastChunkCandidates) {
-            validChunksById.put(chunk.id, chunk);
+            RecoveryChunkKey key = new RecoveryChunkKey(chunk);
+            RecoveryChunkKey oldKey = validChunkKeysById.get(chunk.id);
+            if (oldKey == null) {
+                validChunkKeysById.put(chunk.id, key);
+                validChunksById.put(chunk.id, chunk);
+            } else if (!oldKey.equals(key)) {
+                validChunksById.remove(chunk.id);
+            }
+            if (!validChunksByGeneration.containsKey(key)) {
+                validChunksByGeneration.put(key, chunk);
+            }
         }
         // Try candidates for "last chunk" in order from newest to oldest
         // until suitable is found. Suitable one should have meta map
         // where all chunk references point to valid locations.
-        for (C chunk : lastChunkCandidates) {
-            boolean verified = true;
-            try {
-                setLastChunk(chunk);
-                // load the chunk metadata: although meta's root page resides in the lastChunk,
-                // traversing meta map might recursively load another chunk(s)
-                for (C c : getChunksFromLayoutMap()) {
-                    C test;
-                    if ((test = validChunksByLocation.get(c.block)) == null || test.id != c.id) {
-                        if ((test = validChunksById.get(c.id)) != null) {
-                            // We do not have a valid chunk at that location,
-                            // but there is a copy of same chunk from original
-                            // location.
-                            // Chunk header at original location does not have
-                            // any dynamic (occupancy) metadata, so it can't be
-                            // used here as is, re-point our chunk to original
-                            // location instead.
-                            c.block = test.block;
-                        } else if (c.isLive() && (afterFullScan || readChunkHeaderAndFooter(c.block, c.id) == null)) {
-                            // chunk reference is invalid
-                            // this "last chunk" candidate is not suitable
-                            verified = false;
-                            break;
+        Map<Integer, C> oldRecoveryPhysicalChunksById = recoveryPhysicalChunksById;
+        Map<RecoveryChunkKey, C> oldRecoveryPhysicalChunksByGeneration = recoveryPhysicalChunksByGeneration;
+        recoveryPhysicalChunksById = afterFullScan ? validChunksById : null;
+        recoveryPhysicalChunksByGeneration = afterFullScan ? validChunksByGeneration : null;
+        try {
+            for (C chunk : lastChunkCandidates) {
+                clearCaches();
+                boolean verified = true;
+                try {
+                    setLastChunk(chunk);
+                    // load the chunk metadata: although meta's root page resides in the lastChunk,
+                    // traversing meta map might recursively load another chunk(s)
+                    for (C c : getChunksFromLayoutMap()) {
+                        C test;
+                        if ((test = validChunksByLocation.get(c.block)) == null || test.id != c.id) {
+                            if ((test = validChunksByGeneration.get(new RecoveryChunkKey(c))) != null) {
+                                // Header-only chunks from full scan can only supply
+                                // physical location; layout metadata remains authoritative.
+                                c.block = test.block;
+                            } else if (c.isLive() && (afterFullScan || readChunkHeaderAndFooter(c.block, c.id) == null)) {
+                                // chunk reference is invalid
+                                // this "last chunk" candidate is not suitable
+                                verified = false;
+                                break;
+                            }
+                        }
+                        if (!c.isLive()) {
+                            // we can just remove entry from meta, referencing to this chunk,
+                            // but store maybe R/O, and it's not properly started yet,
+                            // so lets make this chunk "dead" and taking no space,
+                            // and it will be automatically removed later.
+                            c.block = 0;
+                            c.len = 0;
+                            if (c.unused == 0) {
+                                c.unused = getCreationTime();
+                            }
+                            if (c.unusedAtVersion == 0) {
+                                c.unusedAtVersion = INITIAL_VERSION;
+                            }
                         }
                     }
-                    if (!c.isLive()) {
-                        // we can just remove entry from meta, referencing to this chunk,
-                        // but store maybe R/O, and it's not properly started yet,
-                        // so lets make this chunk "dead" and taking no space,
-                        // and it will be automatically removed later.
-                        c.block = 0;
-                        c.len = 0;
-                        if (c.unused == 0) {
-                            c.unused = getCreationTime();
-                        }
-                        if (c.unusedAtVersion == 0) {
-                            c.unusedAtVersion = INITIAL_VERSION;
-                        }
-                    }
+                } catch(Exception ignored) {
+                    verified = false;
                 }
-            } catch(Exception ignored) {
-                verified = false;
+                if (verified) {
+                    return true;
+                }
             }
-            if (verified) {
-                return true;
-            }
+            clearCaches();
+            return false;
+        } finally {
+            recoveryPhysicalChunksById = oldRecoveryPhysicalChunksById;
+            recoveryPhysicalChunksByGeneration = oldRecoveryPhysicalChunksByGeneration;
         }
-        return false;
     }
 
     @SuppressWarnings("unchecked")
@@ -1135,13 +1157,22 @@ public abstract class FileStore<C extends Chunk<C>>
      */
     protected final C readChunkHeaderAndFooter(long block, int expectedId) {
         C header = readChunkHeaderOptionally(block, expectedId);
-        if (header != null) {
-            C footer = readChunkFooter(block + header.len);
-            if (footer == null || footer.id != expectedId || footer.block != header.block) {
-                return null;
-            }
+        if (!isPlausibleDiscoveredChunk(header)) {
+            return null;
+        }
+        C footer = readChunkFooter(block + header.len);
+        if (footer == null || footer.id != expectedId || footer.block != header.block) {
+            return null;
         }
         return header;
+    }
+
+    private boolean isPlausibleDiscoveredChunk(C chunk) {
+        return chunk != null && chunk.len > 0 && chunk.block >= 2;
+    }
+
+    private boolean isPlausibleDiscoveredChunk(C chunk, long nextBlock) {
+        return isPlausibleDiscoveredChunk(chunk) && chunk.block + chunk.len == nextBlock;
     }
 
     protected final C readChunkHeaderOptionally(long block, int expectedId) {
@@ -1978,6 +2009,20 @@ public abstract class FileStore<C extends Chunk<C>>
                         if (exception == null) {
                             break;
                         }
+                        C recoveryChunk = getRecoveryReadChunk(chunk);
+                        if (recoveryChunk != null) {
+                            try {
+                                buff = recoveryChunk.readBufferForPage(this, pageOffset, pos);
+                                page = Page.read(buff, pos, map);
+                                break;
+                            } catch (MVStoreException e) {
+                                exception = e;
+                            } catch (Exception e) {
+                                exception = DataUtils.newMVStoreException(DataUtils.ERROR_FILE_CORRUPT,
+                                        "Unable to read the page at position 0x{0}, chunk {1}, offset 0x{3}",
+                                        Long.toHexString(pos), recoveryChunk, Long.toHexString(pageOffset), e);
+                            }
+                        }
                         throw exception;
                     }
                 }
@@ -2002,8 +2047,21 @@ public abstract class FileStore<C extends Chunk<C>>
         int chunkId = DataUtils.getPageChunkId(pos);
         C c = chunks.get(chunkId);
         if (c == null) {
-            String s = layout.get(Chunk.getMetaKey(chunkId));
+            String s;
+            try {
+                s = layout.get(Chunk.getMetaKey(chunkId));
+            } catch (MVStoreException e) {
+                c = getRecoveryPhysicalChunk(chunkId);
+                if (c != null) {
+                    return c;
+                }
+                throw e;
+            }
             if (s == null) {
+                c = getRecoveryPhysicalChunk(chunkId);
+                if (c != null) {
+                    return c;
+                }
                 throw DataUtils.newMVStoreException(
                         DataUtils.ERROR_CHUNK_NOT_FOUND,
                         "Chunk {0} not found", chunkId);
@@ -2017,6 +2075,69 @@ public abstract class FileStore<C extends Chunk<C>>
             chunks.put(c.id, c);
         }
         return c;
+    }
+
+    private C getRecoveryReadChunk(C chunk) {
+        C physical = getRecoveryPhysicalChunk(chunk);
+        if (physical == null || physical.block == chunk.block) {
+            return null;
+        }
+        C copy = createChunk(chunk.asString());
+        copy.block = physical.block;
+        return copy;
+    }
+
+    private C getRecoveryPhysicalChunk(int chunkId) {
+        Map<Integer, C> physicalChunks = recoveryPhysicalChunksById;
+        if (physicalChunks == null) {
+            return null;
+        }
+        C chunk = physicalChunks.get(chunkId);
+        return isPlausibleDiscoveredChunk(chunk) ? chunk : null;
+    }
+
+    private C getRecoveryPhysicalChunk(C expected) {
+        Map<RecoveryChunkKey, C> physicalChunks = recoveryPhysicalChunksByGeneration;
+        C chunk = physicalChunks == null ? null : physicalChunks.get(new RecoveryChunkKey(expected));
+        if (chunk == null) {
+            chunk = getRecoveryPhysicalChunk(expected.id);
+        }
+        return isSameDiscoveredChunkGeneration(chunk, expected) ? chunk : null;
+    }
+
+    private boolean isSameDiscoveredChunkGeneration(C physical, C expected) {
+        return isPlausibleDiscoveredChunk(physical) && physical.id == expected.id &&
+                physical.version == expected.version && physical.len == expected.len;
+    }
+
+    private static final class RecoveryChunkKey {
+
+        private final int id;
+        private final long version;
+        private final int len;
+
+        RecoveryChunkKey(Chunk<?> chunk) {
+            this.id = chunk.id;
+            this.version = chunk.version;
+            this.len = chunk.len;
+        }
+
+        @Override
+        public int hashCode() {
+            int hash = id;
+            hash = 31 * hash + (int) (version ^ (version >>> 32));
+            hash = 31 * hash + len;
+            return hash;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (!(obj instanceof RecoveryChunkKey)) {
+                return false;
+            }
+            RecoveryChunkKey other = (RecoveryChunkKey) obj;
+            return id == other.id && version == other.version && len == other.len;
+        }
     }
 
     private int calculatePageNo(long pos) {

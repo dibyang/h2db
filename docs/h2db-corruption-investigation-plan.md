@@ -54,7 +54,7 @@
 | --- | --- | --- |
 | `C:\Users\admin\Documents\WXWork\1688850767058383\Cache\File\2026-05\fspool_db.trace.db` | H2 trace 日志 | 从 `2026-05-13 14:52:28` 起反复打开失败，错误集中在 `RandomAccessStore.readStoreHeader`。 |
 | `C:\Users\admin\Documents\WXWork\1688850767058383\Cache\File\2026-05\fspool_db.trace (2).db` | H2 trace 日志 | 包含用户测试制造的 `No space left on device`，该线索已按用户说明排除；后续仍有重复打开坏库的日志。 |
-| `C:\Users\admin\Documents\WXWork\1688850767058383\Cache\File\2026-05\fspool_db.mv.db.20260509102112` | 损坏 `.mv.db` 文件 | `MVStoreTool -info` 复现 `unable to recover a valid set of chunks`，`-dump` 可顺序扫出大量完整 chunk。 |
+| `C:\Users\admin\Documents\WXWork\1688850767058383\Cache\File\2026-05\fspool_db.mv.db.20260509102112` | 损坏 `.mv.db` 文件 | 修复前 `MVStoreTool -info` 复现 `unable to recover a valid set of chunks`，`-dump` 可顺序扫出大量完整 chunk；修复实现后 `-info` 已能只读输出 chunk 信息。 |
 
 注意：证据文件不在仓库内。继续排查时如果本机路径不存在，需要重新向用户索取或使用新的坏库样本。
 
@@ -107,7 +107,7 @@
 | 同 JVM TCP server + embedded `SCRIPT DROP TO` + TCP `SHUTDOWN COMPACT` | autoBackup 报 `90135` exclusive mode，未造成文件损坏 | `autoBackup` 不是 TCP socket，但同 JVM embedded 会共享同一个 `Database` 实例；其失败处理可能误判正常关闭 compact。 |
 | `autoBackup` failedHandler 等价 `Runtime.halt()` | 多轮 reopen 正常 | 目前未证明 autoBackup 单独导致损坏。 |
 | JDBC `SHUTDOWN` + fault injection | `partialWrite=true` 时 30 轮中 2 轮复现 `90030` | JDBC 外层异常形态可复现，但 root 更像 chunk 集不可恢复。 |
-| 对用户坏库执行 `MVStoreTool -info/-dump/-repair` | `-info` 失败，`-dump` 能扫，`-repair` 失败 | 当前坏库是 layout/live chunk 引用错位，现有 repair 不足以恢复。 |
+| 对用户坏库执行 `MVStoreTool -info/-dump/-repair` | 修复前 `-info` 失败，`-dump` 能扫，`-repair` 失败；修复实现后 `-info` 已能只读打开 | 坏库是 layout/live chunk 引用错位；离线 repair 是否要支持更强自动修复仍需单独评审。 |
 | `MVStoreForensics` 只读诊断工具 | 对用户坏库输出 `a0d89 layoutBlock=22 physicalBlocks=[282] layoutBlockChunkIds=[a1aab]` | 用户样本明确属于“layout 指向旧位置，同 id chunk 已在新位置，旧位置已被其他 chunk 复用”。 |
 | `ReproCompactForensics scan-match`，`partialWrite=true` | 命中 `seed=0 stop=131`，样本保存为 `h2/temp/repro/compact-forensics/match-seed-0-stop-131-partial-true.mv.db`；4 个 live chunk layout 指向旧 block，同 id chunk 在其他物理 block | 证明 compact fault injection 能稳定捕获同类“搬迁后 layout 未同步”的损坏形态。 |
 | `ReproCompactForensics scan-match`，`partialWrite=false` | 命中 `seed=2 stop=242`，样本保存为 `h2/temp/repro/compact-forensics/match-seed-2-stop-242-partial-false.mv.db`；`chunk 9b layoutBlock=81c physicalBlocks=[a3]` | 不依赖半写也能复现 live chunk 位置错位，更贴近物理盘正常整块写失败/乱序落盘场景。 |
@@ -236,6 +236,7 @@ java -cp "h2\temp\repro\classes;h2\build\classes\java\main" ReproCompactForensic
 | C-05 | compact retention | `compactFile()` / `compactStore()` 临时 `setRetentionTime(0)`，可能允许仍被可恢复旧 layout 引用的 chunk 过早进入复用窗口。 | 源码路径明确；用户样本和实验样本均与旧 block 复用/搬迁有关。 | 对比 retention 为 0 与非 0 的 fault-injection 结果，验证是否减少 invalid live ref。 | P1 |
 | C-06 | 关闭 compact | `SHUTDOWN COMPACT` 或数据库退出 compact 在业务进程关闭、连接池清理、watchdog kill 之间被中断。 | 用户确认存在 `SHUTDOWN COMPACT` 和退出 compact；JDBC shutdown fault injection 可复现 `90030`。 | TCP server + 持续写入 + `SHUTDOWN COMPACT` + kill/restart 压测。 | P1 |
 | C-07 | 自动 compact | 自动 compact 虽已关闭，但历史版本、其他实例或配置残留仍可能走 `Database.checkCompact()`。 | 用户说关闭后仍偶发；当前不作为主线，但要记录验证。 | 增加配置覆盖测试，确认所有入口关闭后不再调用 compact 路径；历史配置作为兼容测试。 | P2 |
+| S-01 | 空间回收 | 关闭自动 compact 后，大量写入再删除会留下很大的 `.mv.db` 文件，即使 live 数据只剩很少。 | `T-NO-AUTO-COMPACT-BLOAT-01` 已稳定复现；`compactFile()` 对纯 dead/free 空间不保证缩文件，离线 full compact 可收缩。 | 保留 bloat 回归和离线 compact 收缩回归；后续讨论产品维护窗口或 H2 层更温和空间回收策略。 | P2 |
 | I-01 | 文件系统故障 | 正常整块写失败或写入乱序，不发生半写，也可能留下不可恢复 chunk 集。 | `partialWrite=false seed=2 stop=242` 已复现。 | 保留 `partialWrite=false` 作为主回归模式，避免修复只覆盖 torn write。 | P0 |
 | I-02 | 文件系统故障 | 半写 / torn write 发生在 chunk、footer、store header 或 layout page。 | `partialWrite=true seed=0 stop=131` 已复现 4 个 invalid live refs；JDBC shutdown 有 `90030` 对照。 | 用 `partialWrite=true` 覆盖 header、footer、layout root、data page 的恢复能力。 | P1 |
 | I-03 | 文件系统故障 | 文件头两份一致但指向的 current chunk 不是可恢复完整集合。 | 用户坏库两份 header 一致指向 `a1aac`，但 `-info` 失败。 | 构造双 header 一致但 layout/live ref 错位的样本，验证恢复算法能回退到更早候选。 | P1 |
@@ -244,8 +245,9 @@ java -cp "h2\temp\repro\classes;h2\build\classes\java\main" ReproCompactForensic
 | R-01 | 恢复算法 | `findLastChunkWithCompleteValidChunkSet()` 有同 id chunk 重定向逻辑，但用户坏库仍失败。 | 用户坏库中 `a0d89` header/footer 成对存在，`MVStoreTool -repair` 仍失败。 | 写只读模拟/单元测试，定位失败在 full scan、layout traversal、重定向后校验还是候选排序。 | P0 |
 | R-02 | 恢复算法 | layout map 遍历过程中可能先读取依赖错误 block 的 page，尚未执行到同 id 重定向就失败。 | 用户坏库已确认：`chunk.a0d89` 相关 layout leaf 位于物理 `a0d89@282 +000aa3`，但 layout 旧记录仍指向 `block=22`；strict-only 读取该页失败，strict+prime 后通过。 | 构造 layout page 位于被搬迁 chunk 的样本，验证 traversal 前置重定向或独立物理读取视图。 | P0 |
 | R-03 | 恢复算法 | full scan 的 `discoverChunk()` 未把真实物理副本纳入 `validChunksById`，导致重定向逻辑没有候选。 | 用户坏库 `82654@1af` 和实验样本 `9b@a3` 均有完整 header/footer，但分别被 `block 248`、`block 45e` 的伪 header 清空候选；实验样本在临时 strict discover 下可 `OPEN_OK`。 | 固化 `discoverChunk()` 伪 header 回归测试；修复方向是提高 header 合法性校验，至少不能让 `id=0,len=0` 的空 map 清空候选，同时保留 id 回绕兼容性。 | P0 |
-| R-04 | 恢复工具 | `MVStoreTool -repair` 对 layout/live chunk 错位样本无法恢复，甚至可能触发 rollback NPE。 | 用户坏库副本已复现 repair 失败和 NPE。 | 补 repair 回归测试：修复后至少不 NPE，并明确能否恢复 / 给出可诊断错误。 | P2 |
+| R-04 | 恢复工具 | `MVStoreTool -repair` 对 layout/live chunk 错位样本无法恢复，甚至可能触发 rollback NPE。 | 修复前用户坏库副本已复现 repair 失败和 NPE；修复后错位样本、无可用 chunk 的坏文件和声明长度超过实际文件的不完整 chunk 均不再 NPE。 | 已补 repair 回归测试；是否支持更强离线自动修复文件另行评审。 | P2 |
 | R-05 | 恢复算法 | 候选校验前如果把 full scan 找到的物理 chunk 直接塞进 `chunks`，可以读通搬迁后的 layout 页，但可能用 header-only chunk 覆盖 layout 动态元数据。 | 临时 `--strict-discover --prime-valid-chunks` 可打开用户坏库；但该实现可能让 `getChunksFromLayoutMap()` 复用 header-only chunk，丢失 occupancy/livePages 等动态字段。 | 正式修复需要区分“用于读取页面的物理位置候选”和“来自 layout 的权威 chunk 元数据”，不能简单全量替换 `chunks`。 | P0 |
+| R-06 | 恢复算法 | recovery 物理 chunk 候选如果只按 `chunk id` 匹配，chunk id 回绕或复用时可能把另一代同 id chunk 当成当前 layout 条目的物理副本。 | 代码审查发现第一版物理视图按 id 建索引；已收紧为 `id + version + len` 匹配，同 id 多世代时禁用无版本信息的 id 兜底。 | 已补 generation match 白盒测试；后续如构造真实 id 回绕文件，可再补端到端样本。 | P2 |
 | O-01 | 备份并发 | `H2DBTool.autoBackup` 使用 embedded URL 执行 `SCRIPT DROP TO`，同 JVM 下与 TCP server 共享 `Database`，遇到 shutdown compact 会进入 `90135` exclusive mode。 | 已复现 `90135`，未直接复现损坏；failedHandler 可能触发副作用。 | TCP server + embedded backup + `SHUTDOWN COMPACT` 压测；断言 `90135` 不触发破坏性恢复或 kill。 | P2 |
 | O-02 | 备份失败处理 | autoBackup 失败后删除 token、调用 failedHandler；如果 failedHandler 会重启、kill 或自动恢复，可能打断 compact。 | 用户贴出的代码中 failedHandler 可被调用；实际产品行为待确认。 | 用 fake failedHandler 模拟 kill/restart，验证 compact 期间失败处理不会扩大文件损坏。 | P1 |
 | O-03 | 自动恢复 | `H2DBTool.autoRestore` 会移动现有 `.mv.db` 后执行 `RUNSCRIPT`；如果在服务仍持有数据库时触发，可能造成运行中 DB 文件被移动或替换。 | 代码层面存在风险；尚未确认生产触发链。 | 搭建 live TCP server + restore 误触发测试；验证文件锁、路径移动和恢复流程边界。 | P2 |
@@ -275,6 +277,8 @@ java -cp "h2\temp\repro\classes;h2\build\classes\java\main" ReproCompactForensic
 | T-COMPACT-RETENTION-01 | C-05 | 对比 retention 策略，验证修复后不会过早复用仍可能被旧 layout 引用的 chunk。 |
 | T-SHUTDOWN-COMPACT-01 | C-06、O-04 | TCP 业务写入中执行 `SHUTDOWN COMPACT` 并注入退出，重启后无 `90030`。 |
 | T-AUTO-COMPACT-CONFIG-01 | C-07 | 自动 compact 关闭时，所有配置入口和历史兼容入口均不会触发 `Database.checkCompact()` 路径。 |
+| T-NO-AUTO-COMPACT-BLOAT-01 | S-01 | 关闭自动 compact 后，大量写入再删除只剩 marker，`.mv.db` 文件仍保持明显膨胀且 fill rate 很低。 |
+| T-OFFLINE-COMPACT-SHRINK-01 | S-01 | 对同一膨胀样本执行离线 full compact，生成的新文件明显缩小且 marker 可读。 |
 | T-BACKUP-COMPACT-01 | O-01、O-02 | embedded `SCRIPT DROP TO` 遇到 exclusive mode 不触发破坏性 failedHandler。 |
 | T-BACKUP-FAILED-HANDLER-01 | O-02 | backup 失败、exclusive mode、timeout 等场景下 failedHandler 不应在 compact 窗口触发破坏性 kill/restart/restore。 |
 | T-BACKUP-TIMEOUT-CONSISTENCY-01 | O-06 | backup timeout、digest 缺失、SQL 半文件时，不覆盖健康库，不留下会误导 autoRestore 的一致性状态。 |
@@ -283,9 +287,10 @@ java -cp "h2\temp\repro\classes;h2\build\classes\java\main" ReproCompactForensic
 | T-RECOVERY-REPOINT-01 | R-01、R-02、R-03 | 同 id chunk 物理副本存在时，恢复路径能重定向或安全回退。 |
 | T-DISCOVER-FALSE-HEADER-01 | R-03 | 在完整 chunk 数据区内部构造普通页面或空洞可被解析成 `chunk:0,len:0` 的内容，full scan 不应因此丢弃 header/footer 完整的外层 chunk。 |
 | T-DISCOVER-ID-WRAP-01 | R-03 | 如果构造或模拟合法 `chunk:0,len>0` 的回绕场景，header 校验不应误伤合法 chunk；伪 header 测试应主要依赖 `len=0` / 字段缺失等条件。 |
+| T-RECOVERY-GENERATION-MATCH-01 | R-06 | recovery 物理 chunk 读取视图必须匹配 `id + version + len`，不能把同 id 但不同版本的物理 chunk 用作重定向目标。 |
 | T-RECOVERY-LAYOUT-CYCLE-01 | R-02、R-05 | layout leaf 位于被搬迁 chunk 内时，恢复候选校验应能先用物理副本读取 layout 页，再用 layout 动态元数据完成重定向校验。 |
 | T-RECOVERY-PHYSICAL-VIEW-01 | R-05 | 恢复期间的物理 chunk 读取视图不能用 header-only chunk 覆盖 layout 中的 livePages、occupancy 等动态元数据。 |
-| T-REPAIR-ROBUST-01 | R-04 | `MVStoreTool -repair` 对错位样本不 NPE，并输出可诊断结果。 |
+| T-REPAIR-ROBUST-01 | R-04 | `MVStoreTool -repair` 对错位样本、短坏文件和不完整 chunk 不 NPE，并输出可诊断结果。 |
 | T-DISK-FULL-01 | I-04 | 磁盘满写失败后，旧版本仍可打开，错误路径不覆盖健康文件。 |
 | T-TORN-WRITE-01 | I-02 | chunk、footer、store header、layout page 半写后，恢复能打开旧版本或给出明确可诊断错误，不扩大损坏。 |
 | T-FSYNC-REORDER-01 | I-05 | 模拟 sync 前后写入乱序或弱 fsync 语义，验证 compact 写入顺序窗口不会留下不可恢复 chunk 集。 |
@@ -295,10 +300,10 @@ java -cp "h2\temp\repro\classes;h2\build\classes\java\main" ReproCompactForensic
 ### 已落地测试入口
 
 - `h2/src/test/org/h2/test/store/TestMVStoreRecoveryCorruption.java`
-  - 覆盖本表登记的所有测试编号：`T-COMPACT-MOVE-01`、`T-TORN-WRITE-01`、`T-COMPACT-OVERWRITE-01`、`T-COMPACT-STORE-ORDER-01`、`T-COMPACT-RETENTION-01`、`T-FSYNC-REORDER-01`、`T-DISK-FULL-01`、`T-RECOVERY-REPOINT-01`、`T-DISCOVER-FALSE-HEADER-01`、`T-DISCOVER-ID-WRAP-01`、`T-RECOVERY-LAYOUT-CYCLE-01`、`T-RECOVERY-PHYSICAL-VIEW-01`、`T-REPAIR-ROBUST-01`、`T-SHUTDOWN-COMPACT-01`、`T-AUTO-COMPACT-CONFIG-01`、`T-BACKUP-COMPACT-01`、`T-BACKUP-FAILED-HANDLER-01`、`T-BACKUP-TIMEOUT-CONSISTENCY-01`、`T-RESTORE-LIVE-01`、`T-CONNECTION-LIFECYCLE-01`、`T-UNSUPPORTED-MULTIWRITER-01`、`T-DATA-MARKER-REGRESSION-01`。
+  - 覆盖本表登记的所有测试编号：`T-COMPACT-MOVE-01`、`T-TORN-WRITE-01`、`T-COMPACT-OVERWRITE-01`、`T-COMPACT-STORE-ORDER-01`、`T-COMPACT-RETENTION-01`、`T-FSYNC-REORDER-01`、`T-DISK-FULL-01`、`T-RECOVERY-REPOINT-01`、`T-DISCOVER-FALSE-HEADER-01`、`T-DISCOVER-ID-WRAP-01`、`T-RECOVERY-GENERATION-MATCH-01`、`T-RECOVERY-LAYOUT-CYCLE-01`、`T-RECOVERY-PHYSICAL-VIEW-01`、`T-REPAIR-ROBUST-01`、`T-SHUTDOWN-COMPACT-01`、`T-AUTO-COMPACT-CONFIG-01`、`T-NO-AUTO-COMPACT-BLOAT-01`、`T-OFFLINE-COMPACT-SHRINK-01`、`T-BACKUP-COMPACT-01`、`T-BACKUP-FAILED-HANDLER-01`、`T-BACKUP-TIMEOUT-CONSISTENCY-01`、`T-RESTORE-LIVE-01`、`T-CONNECTION-LIFECYCLE-01`、`T-UNSUPPORTED-MULTIWRITER-01`、`T-DATA-MARKER-REGRESSION-01`。
   - 主要 compact 样本参数：整块写 `seed=2`、`powerFailureCountdown=242`、`partialWrite=false`；半写样本 `seed=1`、`powerFailureCountdown=142`、`partialWrite=true`。
-  - 默认运行时作为正式修复验收测试，当前版本预期失败；修复后应通过，并校验 `data[-1]` marker 或 JDBC `MARKER` 表未丢。
-  - 带 `-Dh2.test.mvStoreRecoveryCorruption.characterize=true` 运行时，当前版本应稳定复现已知恢复失败和 `MVStoreTool.repair` NPE，同时其他 operational 边界场景应通过，用于锁定问题形态。
+  - 默认运行时作为正式修复验收测试，修复实现后当前版本已通过，并校验 `data[-1]` marker 或 JDBC `MARKER` 表未丢。
+  - 带 `-Dh2.test.mvStoreRecoveryCorruption.characterize=true` 运行时，修复前用于稳定复现已知恢复失败和 `MVStoreTool.repair` NPE；修复实现后当前版本也已通过。
   - 带 `-Dh2.test.mvStoreRecoveryCorruption.keepFiles=true` 可保留生成的 `.mv.db` 样本用于离线 dump。
   - 当前测试已把所有已登记风险映射到可执行入口；其中 `H2DBTool.autoBackup/autoRestore` 不在本仓库内，相关用例用 H2 侧 TCP、embedded backup、exclusive mode、坏 SQL、live 文件移动等边界模拟风险，正式接入产品模块时仍需补模块级测试。
   - Gradle 入口：在 `h2/` 目录执行 `.\gradlew.bat runMvStoreRecoveryCheck`。PowerShell 下运行当前已知失败复现模式时执行 `.\gradlew.bat "-Dh2.test.mvStoreRecoveryCorruption.characterize=true" runMvStoreRecoveryCheck`。
@@ -309,23 +314,25 @@ java -cp "h2\temp\repro\classes;h2\build\classes\java\main" ReproCompactForensic
 
 | 故障模式 | 对应测试编号 | 当前状态 | 关闭条件 |
 | --- | --- | --- | --- |
-| C-01 | T-COMPACT-MOVE-01、T-DATA-MARKER-REGRESSION-01 | 已补默认失败的修复验收测试 `TestMVStoreRecoveryCorruption`；characterize 模式可稳定复现当前失败 | 正式测试能稳定复现 compact move 窗口，并在修复后通过。 |
-| C-02 | T-COMPACT-OVERWRITE-01、T-RECOVERY-LAYOUT-CYCLE-01 | 已补默认失败入口；当前先复用 compact 搬迁错位样本，用户坏库已证明“旧位置被其他 chunk 占用”形态 | 构造旧 block 被复用覆盖样本，验证恢复可读或安全回退。 |
-| C-03 | T-COMPACT-MOVE-01、T-COMPACT-STORE-ORDER-01 | 已补默认失败入口，覆盖 compact move 关键 stop 点 | 覆盖 `moveChunk()` 后、`store(...)` 前后的失败注入点。 |
-| C-04 | T-COMPACT-STORE-ORDER-01 | 已补默认失败入口，覆盖 layout/header/footer 写出顺序窗口的候选恢复失败 | 覆盖 layout、footer、header 部分写出或乱序写出后的候选恢复。 |
-| C-05 | T-COMPACT-RETENTION-01 | 已补默认失败入口，对比 retention 非 0 时 compact 搬迁失败窗口 | 验证 retention 策略不会过早复用仍可能被旧 layout 引用的 chunk。 |
+| C-01 | T-COMPACT-MOVE-01、T-DATA-MARKER-REGRESSION-01 | 已补修复验收测试 `TestMVStoreRecoveryCorruption`；当前默认模式和 characterize 模式均通过 | 正式测试能稳定复现 compact move 窗口，并在修复后通过。 |
+| C-02 | T-COMPACT-OVERWRITE-01、T-RECOVERY-LAYOUT-CYCLE-01 | 已补修复验收入口，当前已通过；用户坏库已证明“旧位置被其他 chunk 占用”形态 | 构造旧 block 被复用覆盖样本，验证恢复可读或安全回退。 |
+| C-03 | T-COMPACT-MOVE-01、T-COMPACT-STORE-ORDER-01 | 已补修复验收入口，覆盖 compact move 关键 stop 点，当前已通过 | 覆盖 `moveChunk()` 后、`store(...)` 前后的失败注入点。 |
+| C-04 | T-COMPACT-STORE-ORDER-01 | 已补修复验收入口，覆盖 layout/header/footer 写出顺序窗口，当前已通过 | 覆盖 layout、footer、header 部分写出或乱序写出后的候选恢复。 |
+| C-05 | T-COMPACT-RETENTION-01 | 已补修复验收入口，对比 retention 非 0 时 compact 搬迁失败窗口，当前已通过 | 验证 retention 策略不会过早复用仍可能被旧 layout 引用的 chunk。 |
 | C-06 | T-SHUTDOWN-COMPACT-01、T-DATA-MARKER-REGRESSION-01 | 已补 TCP `SHUTDOWN COMPACT` 边界入口，characterize 模式通过 | TCP 写入中 shutdown compact 注入退出后可恢复且 marker 不越界丢失。 |
 | C-07 | T-AUTO-COMPACT-CONFIG-01 | 已补配置边界入口，验证显式关闭自动 compact 时 marker 可重开读取 | 自动 compact 关闭配置覆盖所有入口。 |
-| I-01 | T-COMPACT-MOVE-01、T-FSYNC-REORDER-01 | 已补 compact move 默认失败入口；非 compact 乱序写入入口作为对照通过 | 整块写失败或乱序落盘下恢复行为可验证。 |
-| I-02 | T-TORN-WRITE-01 | 已补默认失败入口，`partialWrite=true seed=1 stop=142` 可稳定复现 | 半写覆盖 header/footer/layout/data page 后有确定断言。 |
-| I-03 | T-COMPACT-STORE-ORDER-01 | 已补默认失败入口 | 双 header 一致但 current chunk 不完整时能回退或报可诊断错误。 |
+| S-01 | T-NO-AUTO-COMPACT-BLOAT-01、T-OFFLINE-COMPACT-SHRINK-01 | 已补空间膨胀复现和离线 compact 收缩验收入口，当前已通过 | 关闭自动 compact 时文件可明显膨胀；离线 full compact 能收缩并保留数据。 |
+| I-01 | T-COMPACT-MOVE-01、T-FSYNC-REORDER-01 | 已补 compact move 修复验收入口；非 compact 乱序写入入口作为对照通过 | 整块写失败或乱序落盘下恢复行为可验证。 |
+| I-02 | T-TORN-WRITE-01 | 已补修复验收入口，`partialWrite=true seed=1 stop=142` 当前已通过 | 半写覆盖 header/footer/layout/data page 后有确定断言。 |
+| I-03 | T-COMPACT-STORE-ORDER-01 | 已补修复验收入口，当前已通过 | 双 header 一致但 current chunk 不完整时能回退或报可诊断错误。 |
 | I-04 | T-DISK-FULL-01 | 已补磁盘满模拟边界入口；用户已说明非当前主线 | 磁盘满不覆盖健康版本，错误路径可诊断。 |
 | I-05 | T-FSYNC-REORDER-01 | 已补非 compact 写入乱序对照入口 | 弱 fsync / 写入重排模拟下无不可恢复 chunk 集。 |
-| R-01 | T-RECOVERY-REPOINT-01 | 已补默认失败入口 | 同 id 物理副本存在时能重定向或安全回退。 |
-| R-02 | T-RECOVERY-LAYOUT-CYCLE-01 | 已补默认失败入口；用户样本已证明 layout 读取循环依赖 | layout leaf 位于搬迁 chunk 内时可打破读取循环依赖。 |
-| R-03 | T-DISCOVER-FALSE-HEADER-01、T-DISCOVER-ID-WRAP-01 | 已补伪 header 默认失败入口和 id 回绕边界入口；独立二进制定点样本仍可后续加强 | 伪 header 不清空完整候选，同时兼容合法 id 回绕。 |
-| R-04 | T-REPAIR-ROBUST-01 | 已补默认失败入口；当前版本 characterize 模式稳定复现 `MVStoreTool.repair` NPE | repair 不 NPE，并输出可诊断结果。 |
-| R-05 | T-RECOVERY-PHYSICAL-VIEW-01、T-RECOVERY-LAYOUT-CYCLE-01 | 已补默认失败入口；临时工具已验证方向 | 物理读取视图可读 layout 页，但不覆盖 layout 动态元数据。 |
+| R-01 | T-RECOVERY-REPOINT-01 | 已补修复验收入口，当前已通过 | 同 id 物理副本存在时能重定向或安全回退。 |
+| R-02 | T-RECOVERY-LAYOUT-CYCLE-01 | 已补修复验收入口，当前已通过；用户样本已证明 layout 读取循环依赖 | layout leaf 位于搬迁 chunk 内时可打破读取循环依赖。 |
+| R-03 | T-DISCOVER-FALSE-HEADER-01、T-DISCOVER-ID-WRAP-01 | 已补伪 header 修复验收入口和 id 回绕边界入口，当前已通过；独立二进制定点样本仍可后续加强 | 伪 header 不清空完整候选，同时兼容合法 id 回绕。 |
+| R-04 | T-REPAIR-ROBUST-01 | 已补修复验收入口，当前已通过；覆盖错位样本、无可用 chunk 坏文件和不完整 chunk，未再复现 `MVStoreTool.repair` NPE | repair 不 NPE，并输出可诊断结果。 |
+| R-05 | T-RECOVERY-PHYSICAL-VIEW-01、T-RECOVERY-LAYOUT-CYCLE-01 | 已补修复验收入口，当前已通过；临时工具已验证方向 | 物理读取视图可读 layout 页，但不覆盖 layout 动态元数据。 |
+| R-06 | T-RECOVERY-GENERATION-MATCH-01 | 已补白盒修复验收入口，当前已通过；物理读取视图对已知 layout 元数据按 `id + version + len` 匹配，同 id 多世代时禁用无版本信息的 id 兜底 | 同 id 不同版本的 chunk 不会被当成当前 layout 条目的物理副本。 |
 | O-01 | T-BACKUP-COMPACT-01 | 已补 H2 侧 TCP + embedded backup exclusive mode 边界入口；characterize 模式通过 | embedded backup 遇到 shutdown compact 不破坏数据库。 |
 | O-02 | T-BACKUP-FAILED-HANDLER-01、T-BACKUP-COMPACT-01 | 已补 exclusive mode / backup 失败边界入口；产品 `failedHandler` 破坏性动作需在引用模块补测 | failedHandler 在 compact 窗口不触发破坏性动作。 |
 | O-03 | T-RESTORE-LIVE-01 | 已补 live `.mv.db` 文件移动边界入口；characterize 模式通过 | live server 状态下 restore 不移动/替换正在使用的数据库文件。 |
@@ -431,7 +438,7 @@ git status --short
 java -cp h2\build\classes\java\main org.h2.mvstore.MVStoreTool -info "C:\Users\admin\Documents\WXWork\1688850767058383\Cache\File\2026-05\fspool_db.mv.db.20260509102112"
 ```
 
-只读复现当前坏库 `unable to recover a valid set of chunks`。
+修复前该命令可只读复现 `unable to recover a valid set of chunks`；修复实现后当前版本应输出 chunk 信息。
 
 ```powershell
 java -cp h2\build\classes\java\main org.h2.mvstore.MVStoreTool -dump "C:\Users\admin\Documents\WXWork\1688850767058383\Cache\File\2026-05\fspool_db.mv.db.20260509102112"

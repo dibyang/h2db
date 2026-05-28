@@ -586,6 +586,11 @@ public class MVStoreTool {
                     : ("Trying version " + version));
             pw.flush();
             version = rollback(fileName, version, new PrintWriter(ignore));
+            if (version < 0) {
+                FilePath.get(fileName + ".temp").delete();
+                pw.println("No valid version found");
+                break;
+            }
             try {
                 String error = info(fileName + ".temp", new PrintWriter(ignore));
                 if (error == null) {
@@ -631,6 +636,9 @@ public class MVStoreTool {
             ByteBuffer buffer = ByteBuffer.allocate(4096);
             Chunk newestChunk = null;
             for (long pos = 0; pos < fileSize;) {
+                if (fileSize - pos < blockSize) {
+                    break;
+                }
                 buffer.rewind();
                 DataUtils.readFully(file, pos, buffer);
                 buffer.rewind();
@@ -657,14 +665,18 @@ public class MVStoreTool {
                     pos += blockSize;
                     continue;
                 }
-                int length = c.len * FileStore.BLOCK_SIZE;
-                ByteBuffer chunk = ByteBuffer.allocate(length);
-                DataUtils.readFully(file, pos, chunk);
+                long length = (long) c.len * FileStore.BLOCK_SIZE;
+                if (length > Integer.MAX_VALUE || fileSize - pos < length) {
+                    pos += blockSize;
+                    continue;
+                }
                 if (c.version > targetVersion) {
                     // newer than the requested version
                     pos += length;
                     continue;
                 }
+                ByteBuffer chunk = ByteBuffer.allocate((int) length);
+                DataUtils.readFully(file, pos, chunk);
                 chunk.rewind();
                 target.write(chunk, pos);
                 if (newestChunk == null || c.version > newestChunk.version) {
@@ -673,9 +685,20 @@ public class MVStoreTool {
                 }
                 pos += length;
             }
-            int length = newestChunk.len * FileStore.BLOCK_SIZE;
-            ByteBuffer chunk = ByteBuffer.allocate(length);
-            DataUtils.readFully(file, newestChunk.block * FileStore.BLOCK_SIZE, chunk);
+            if (newestChunk == null) {
+                pw.println("No valid chunk found");
+                return newestVersion;
+            }
+            long length = (long) newestChunk.len * FileStore.BLOCK_SIZE;
+            long chunkPosition = newestChunk.block * (long) blockSize;
+            if (length > Integer.MAX_VALUE || chunkPosition < 0 ||
+                    chunkPosition / blockSize != newestChunk.block ||
+                    fileSize - chunkPosition < length) {
+                pw.println("Newest chunk is incomplete");
+                return newestVersion;
+            }
+            ByteBuffer chunk = ByteBuffer.allocate((int) length);
+            DataUtils.readFully(file, chunkPosition, chunk);
             chunk.rewind();
             target.write(chunk, fileSize);
         } catch (IOException e) {

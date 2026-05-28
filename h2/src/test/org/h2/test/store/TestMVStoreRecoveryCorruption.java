@@ -7,6 +7,9 @@ package org.h2.test.store;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.io.StringWriter;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -17,10 +20,13 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Random;
 
 import org.h2.api.ErrorCode;
+import org.h2.mvstore.Chunk;
 import org.h2.mvstore.DataUtils;
+import org.h2.mvstore.FileStore;
 import org.h2.mvstore.MVMap;
 import org.h2.mvstore.MVStore;
 import org.h2.mvstore.MVStoreException;
@@ -44,6 +50,10 @@ import org.h2.tools.Server;
  */
 public class TestMVStoreRecoveryCorruption extends TestDb {
 
+    private static final int MVSTORE_BLOCK_SIZE = 4 * 1024;
+    private static final int BLOAT_ENTRY_COUNT = 96;
+    private static final int BLOAT_VALUE_SIZE = 128 * 1024;
+    private static final long BLOAT_MIN_FILE_SIZE = 4L * 1024 * 1024;
     private static final byte MARKER = 42;
     private static final String CHARACTERIZE =
             "h2.test.mvStoreRecoveryCorruption.characterize";
@@ -73,11 +83,14 @@ public class TestMVStoreRecoveryCorruption extends TestDb {
         runScenario("T-RECOVERY-REPOINT-01", true, this::testRecoveryCanRepointMovedLiveChunk);
         runScenario("T-DISCOVER-FALSE-HEADER-01", true, this::testFalseHeaderDoesNotHideCompleteChunk);
         runScenario("T-DISCOVER-ID-WRAP-01", false, this::testChunkZeroHeaderBoundary);
+        runScenario("T-RECOVERY-GENERATION-MATCH-01", false, this::testRecoveryPhysicalChunkGenerationMatch);
         runScenario("T-RECOVERY-LAYOUT-CYCLE-01", true, this::testLayoutCycleRecovery);
         runScenario("T-RECOVERY-PHYSICAL-VIEW-01", true, this::testPhysicalViewDoesNotReplaceLayoutMetadata);
         runScenario("T-REPAIR-ROBUST-01", true, this::testRepairDoesNotThrowOnCompactMoveSample);
         runScenario("T-SHUTDOWN-COMPACT-01", false, this::testTcpShutdownCompactKeepsCommittedData);
         runScenario("T-AUTO-COMPACT-CONFIG-01", false, this::testAutoCompactConfigurationBoundary);
+        runScenario("T-NO-AUTO-COMPACT-BLOAT-01", false, this::testNoAutoCompactCanLeaveBloatedFile);
+        runScenario("T-OFFLINE-COMPACT-SHRINK-01", false, this::testOfflineCompactShrinksBloatedFile);
         runScenario("T-BACKUP-COMPACT-01", false, this::testEmbeddedScriptWhileTcpDatabaseIsOpen);
         runScenario("T-BACKUP-FAILED-HANDLER-01", false, this::testBackupFailureBoundaryDoesNotDamageOpenDatabase);
         runScenario("T-BACKUP-TIMEOUT-CONSISTENCY-01", false, this::testBrokenScriptDoesNotDamageExistingDatabase);
@@ -224,6 +237,28 @@ public class TestMVStoreRecoveryCorruption extends TestDb {
         assertNull(exception);
     }
 
+    private void testRecoveryPhysicalChunkGenerationMatch() throws Exception {
+        String base = mvStoreFile("generationMatch");
+        MVStore store = null;
+        try {
+            store = new MVStore.Builder().fileName(base).open();
+            FileStore<?> fileStore = store.getFileStore();
+            Object expected = fileStore.createChunk(chunkString(1, 3, 10));
+            Object wrongGeneration = fileStore.createChunk(chunkString(1, 4, 11));
+            Object matchingGeneration = fileStore.createChunk(chunkString(1, 5, 10));
+            Method method = FileStore.class.getDeclaredMethod("getRecoveryReadChunk", Chunk.class);
+            method.setAccessible(true);
+            setRecoveryPhysicalChunk(fileStore, wrongGeneration);
+            assertNull(method.invoke(fileStore, expected));
+            setRecoveryPhysicalChunk(fileStore, matchingGeneration);
+            assertNotNull(method.invoke(fileStore, expected));
+            method.setAccessible(false);
+        } finally {
+            closeStoreImmediately(store);
+            deleteFilesUnlessKept(base);
+        }
+    }
+
     private void testLayoutCycleRecovery() {
         String base = mvStoreFile("layoutCycle");
         try {
@@ -244,8 +279,10 @@ public class TestMVStoreRecoveryCorruption extends TestDb {
         }
     }
 
-    private void testRepairDoesNotThrowOnCompactMoveSample() {
+    private void testRepairDoesNotThrowOnCompactMoveSample() throws IOException {
         String base = mvStoreFile("repairRobust");
+        String noChunk = mvStoreFile("repairNoChunk");
+        String incompleteChunk = mvStoreFile("repairIncompleteChunk");
         try {
             runCompactMoveWorkload(base, 2, 242, false, true, true);
             try {
@@ -256,11 +293,29 @@ public class TestMVStoreRecoveryCorruption extends TestDb {
                 // Repair may fail to find a good version for this sample, but it
                 // must not fail with an implementation bug such as NPE.
             }
+            writeText(noChunk, "not a store");
+            assertNoValidChunkRollback(noChunk);
+            MVStoreTool.repair(noChunk);
+            writeIncompleteChunk(incompleteChunk);
+            assertNoValidChunkRollback(incompleteChunk);
+            MVStoreTool.repair(incompleteChunk);
         } finally {
             deleteFilesUnlessKept(base);
             deleteFilesUnlessKept(base + ".back");
             deleteFilesUnlessKept(base + ".temp");
+            deleteFilesUnlessKept(noChunk);
+            deleteFilesUnlessKept(noChunk + ".back");
+            deleteFilesUnlessKept(noChunk + ".temp");
+            deleteFilesUnlessKept(incompleteChunk);
+            deleteFilesUnlessKept(incompleteChunk + ".back");
+            deleteFilesUnlessKept(incompleteChunk + ".temp");
         }
+    }
+
+    private void assertNoValidChunkRollback(String fileName) {
+        StringWriter writer = new StringWriter();
+        assertEquals(-1, MVStoreTool.rollback(fileName, Long.MAX_VALUE, writer));
+        assertTrue(writer.toString().contains("No valid chunk found"));
     }
 
     private void testTcpShutdownCompactKeepsCommittedData() throws Exception {
@@ -292,6 +347,45 @@ public class TestMVStoreRecoveryCorruption extends TestDb {
         }
         assertJdbcMarker(db + ";AUTO_COMPACT_FILL_RATE=0;MAX_COMPACT_TIME=0", 1);
         deleteDb(db);
+    }
+
+    private void testNoAutoCompactCanLeaveBloatedFile() {
+        String base = mvStoreFile("noAutoCompactBloat");
+        try {
+            BloatStats stats = createBloatedStore(base);
+            assertTrue("file did not grow enough: " + stats.afterDeleteSize,
+                    stats.afterDeleteSize > BLOAT_MIN_FILE_SIZE);
+            assertTrue("file was unexpectedly shrunk: before=" + stats.fullSize +
+                            " afterDelete=" + stats.afterDeleteSize,
+                    stats.afterDeleteSize >= stats.fullSize / 2);
+            assertTrue("store did not report sparse usage: fillRate=" + stats.fillRate +
+                            " chunksFillRate=" + stats.chunksFillRate,
+                    stats.fillRate < 50 || stats.chunksFillRate < 50);
+            assertOnlyMarkerReadable(base);
+        } finally {
+            deleteFilesUnlessKept(base);
+        }
+    }
+
+    private void testOfflineCompactShrinksBloatedFile() {
+        String base = mvStoreFile("offlineCompactShrink");
+        String compacted = base + ".compacted";
+        try {
+            BloatStats stats = createBloatedStore(base);
+            long bloatedSize = stats.afterDeleteSize;
+            FileUtils.delete(compacted);
+            MVStoreTool.compact(base, compacted, false);
+            long compactedSize = FileUtils.size(compacted);
+            assertTrue("offline compact did not shrink enough: before=" + bloatedSize +
+                            " after=" + compactedSize,
+                    compactedSize < bloatedSize / 4);
+            assertTrue("offline compacted file is still unexpectedly large: " + compactedSize,
+                    compactedSize < BLOAT_MIN_FILE_SIZE);
+            assertOnlyMarkerReadable(compacted);
+        } finally {
+            deleteFilesUnlessKept(base);
+            deleteFilesUnlessKept(compacted);
+        }
     }
 
     private void testEmbeddedScriptWhileTcpDatabaseIsOpen() throws Exception {
@@ -475,8 +569,8 @@ public class TestMVStoreRecoveryCorruption extends TestDb {
                 compact(store, compactFile);
                 store.commit();
                 store.getFileStore().sync();
-            } catch (MVStoreException e) {
-                if (powerFailureCountdown == 0) {
+            } catch (RuntimeException e) {
+                if (powerFailureCountdown == 0 || !(e instanceof MVStoreException || isPowerFailure(e))) {
                     throw e;
                 }
                 failureInjected = true;
@@ -484,7 +578,11 @@ public class TestMVStoreRecoveryCorruption extends TestDb {
             if (powerFailureCountdown > 0 && !failureInjected) {
                 fail("Power failure was not injected");
             }
-            closeStore(store);
+            if (failureInjected) {
+                closeStoreImmediately(store);
+            } else {
+                closeStore(store);
+            }
             store = null;
         } finally {
             fs.setPowerOffCountdown(0, seed);
@@ -522,7 +620,11 @@ public class TestMVStoreRecoveryCorruption extends TestDb {
             if (!failureInjected) {
                 fail("Power failure was not injected");
             }
-            closeStore(store);
+            if (failureInjected) {
+                closeStoreImmediately(store);
+            } else {
+                closeStore(store);
+            }
             store = null;
         } finally {
             fs.setPowerOffCountdown(0, seed);
@@ -539,10 +641,66 @@ public class TestMVStoreRecoveryCorruption extends TestDb {
         }
     }
 
+    private BloatStats createBloatedStore(String base) {
+        deleteFiles(base);
+        createParentDirectories(base);
+        MVStore store = null;
+        try {
+            store = new MVStore.Builder().fileName(base).autoCommitDisabled()
+                    .autoCompactFillRate(0).open();
+            store.setRetentionTime(0);
+            store.setVersionsToKeep(0);
+            MVMap<Integer, byte[]> data = store.openMap("data");
+            data.put(-1, new byte[] { MARKER });
+            for (int i = 0; i < BLOAT_ENTRY_COUNT; i++) {
+                data.put(i, bloatBytes(i));
+                if ((i & 15) == 15) {
+                    store.commit();
+                }
+            }
+            store.commit();
+            store.getFileStore().sync();
+            long fullSize = FileUtils.size(base);
+            for (int i = 0; i < BLOAT_ENTRY_COUNT; i++) {
+                data.remove(i);
+                if ((i & 15) == 15) {
+                    store.commit();
+                }
+            }
+            store.commit();
+            store.getFileStore().sync();
+            assertEquals(1L, data.sizeAsLong());
+            BloatStats stats = new BloatStats(fullSize, FileUtils.size(base),
+                    store.getFillRate(), store.getFileStore().getChunksFillRate());
+            closeStore(store);
+            store = null;
+            return stats;
+        } finally {
+            closeStoreImmediately(store);
+        }
+    }
+
     private void assertMarkerReadable(String fileName) {
         MVStoreException failure = tryOpenAndReadMarker(fileName);
         if (failure != null) {
             throw failure;
+        }
+    }
+
+    private void assertOnlyMarkerReadable(String fileName) {
+        MVStore store = null;
+        try {
+            store = new MVStore.Builder().fileName(fileName).autoCommitDisabled().open();
+            MVMap<Integer, byte[]> data = store.openMap("data");
+            assertEquals(1L, data.sizeAsLong());
+            byte[] marker = data.get(-1);
+            assertNotNull(marker);
+            assertEquals(1, marker.length);
+            assertEquals(MARKER, marker[0]);
+            closeStore(store);
+            store = null;
+        } finally {
+            closeStoreImmediately(store);
         }
     }
 
@@ -608,11 +766,46 @@ public class TestMVStoreRecoveryCorruption extends TestDb {
         return value;
     }
 
+    private static byte[] bloatBytes(int seed) {
+        byte[] value = new byte[BLOAT_VALUE_SIZE];
+        for (int i = 0; i < value.length; i++) {
+            value[i] = (byte) (seed + i);
+        }
+        return value;
+    }
+
     private static void writeText(String fileName, String text) throws IOException {
         createParentDirectories(fileName);
         try (OutputStream out = FileUtils.newOutputStream(fileName, false)) {
             out.write(text.getBytes(StandardCharsets.UTF_8));
         }
+    }
+
+    private static void writeIncompleteChunk(String fileName) throws IOException {
+        byte[] block = new byte[MVSTORE_BLOCK_SIZE];
+        byte[] header = ("chunk:1,block:0,len:2,pages:0,max:0,map:0,root:0," +
+                "time:0,version:1\n").getBytes(StandardCharsets.UTF_8);
+        System.arraycopy(header, 0, block, 0, header.length);
+        createParentDirectories(fileName);
+        try (OutputStream out = FileUtils.newOutputStream(fileName, false)) {
+            out.write(block);
+        }
+    }
+
+    private static String chunkString(int id, long block, long version) {
+        return "chunk:" + Integer.toHexString(id) + ",block:" + Long.toHexString(block) +
+                ",len:1,pages:1,max:20,map:1,root:0,time:1,version:" +
+                Long.toHexString(version);
+    }
+
+    private static void setRecoveryPhysicalChunk(FileStore<?> fileStore, Object chunk)
+            throws Exception {
+        Field field = FileStore.class.getDeclaredField("recoveryPhysicalChunksById");
+        field.setAccessible(true);
+        HashMap<Integer, Object> chunks = new HashMap<>();
+        chunks.put(1, chunk);
+        field.set(fileStore, chunks);
+        field.setAccessible(false);
     }
 
     private static String sqlPath(String fileName) {
@@ -677,6 +870,28 @@ public class TestMVStoreRecoveryCorruption extends TestDb {
             root = root.getCause();
         }
         return root.getClass().getName() + ": " + root.getMessage();
+    }
+
+    private static boolean isPowerFailure(Throwable throwable) {
+        Throwable root = throwable;
+        while (root.getCause() != null) {
+            root = root.getCause();
+        }
+        return root instanceof IOException && "Power Failure".equals(root.getMessage());
+    }
+
+    private static final class BloatStats {
+        final long fullSize;
+        final long afterDeleteSize;
+        final int fillRate;
+        final int chunksFillRate;
+
+        BloatStats(long fullSize, long afterDeleteSize, int fillRate, int chunksFillRate) {
+            this.fullSize = fullSize;
+            this.afterDeleteSize = afterDeleteSize;
+            this.fillRate = fillRate;
+            this.chunksFillRate = chunksFillRate;
+        }
     }
 
     private interface Scenario {

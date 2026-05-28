@@ -8,13 +8,13 @@ buildscript {
         classpath 'net.researchgate:gradle-release:2.6.0'
     }
     //skip Test tasks
-    gradle.taskGraph.whenReady {
-        tasks.each { task ->
-            if (task.name.contains("test")) {
-                task.enabled = false
-            }
-        }
-    }
+//    gradle.taskGraph.whenReady {
+//        tasks.each { task ->
+//            if (task.name.contains("test")) {
+//                task.enabled = false
+//            }
+//        }
+//    }
 }
 
 plugins {
@@ -135,6 +135,29 @@ dependencies {
 
 tasks.withType(JavaCompile) {
     options.encoding = 'UTF-8'
+}
+
+task compileMvStoreRecoveryCheck(type: JavaCompile) {
+    description = 'Compiles the MVStore recovery corruption reproduction entrypoint.'
+    source = files('src/test/org/h2/test/store/TestMVStoreRecoveryCorruption.java')
+    classpath = sourceSets.main.output + configurations.testCompileClasspath + files('bin')
+    destinationDir = file("$buildDir/mvstoreRecoveryCheck/classes")
+    sourceCompatibility = project.jdkVersion
+    targetCompatibility = project.jdkVersion
+    options.encoding = 'UTF-8'
+    options.sourcepath = files('src/test', 'src/tools')
+    dependsOn classes
+}
+
+task runMvStoreRecoveryCheck(type: JavaExec) {
+    description = 'Runs the MVStore recovery corruption reproduction entrypoint.'
+    dependsOn compileMvStoreRecoveryCheck
+    main = 'org.h2.test.store.TestMVStoreRecoveryCorruption'
+    classpath = files(compileMvStoreRecoveryCheck.destinationDir) +
+            sourceSets.main.runtimeClasspath + configurations.testRuntimeClasspath + files('bin')
+    systemProperties System.properties.findAll {
+        it.key.toString().startsWith('h2.test.mvStoreRecoveryCorruption.')
+    }
 }
 
 //对于典型的 Java 项目，您可以添加一个javadocJar以及一个 sourcesJar任务

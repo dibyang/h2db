@@ -106,6 +106,19 @@ public class PluginLoaderTest {
         assertTrue(e.getMessage().contains("newSource=CONFIGURED_CLASS"));
     }
 
+    /**
+     * T-PLUGIN-F7-FORBIDDEN-CAPABILITY-01.
+     */
+    @Test
+    public void rejectsForbiddenProviderType() {
+        SQLException e = assertThrows(SQLException.class, () ->
+                DriverManager.getConnection(url("pluginForbiddenType", ForbiddenProviderPlugin.class.getName()),
+                        "sa", ""));
+
+        assertTrue(e.getMessage().contains("provider type is not allowed"));
+        assertTrue(e.getMessage().contains("type=parser"));
+    }
+
     private static String url(String name, String pluginClass) {
         return "jdbc:h2:mem:" + name + ";PLUGIN_CLASSES=" + pluginClass;
     }
@@ -168,6 +181,34 @@ public class PluginLoaderTest {
         @Override
         public Iterable<PluginDependency> getDependencies() {
             return Arrays.asList(new PluginDependency("missing.plugin", "1"));
+        }
+    }
+
+    /**
+     * 测试用非法 provider type 插件。
+     */
+    public static final class ForbiddenProviderPlugin extends ConfiguredPlugin {
+        @Override
+        public Iterable<? extends PluginProvider> getProviders() {
+            return Arrays.asList(new ForbiddenProvider());
+        }
+    }
+
+    private static final class ForbiddenProvider implements PluginProvider {
+
+        @Override
+        public String getType() {
+            return "parser";
+        }
+
+        @Override
+        public String getId() {
+            return "forbidden";
+        }
+
+        @Override
+        public boolean supports(String capability) {
+            return false;
         }
     }
 

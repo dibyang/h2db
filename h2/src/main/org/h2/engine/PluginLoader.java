@@ -55,6 +55,7 @@ public final class PluginLoader {
                         + ", version=" + dependency.getVersion());
             }
         }
+        PluginSecurity.validateProviderTypes(plugin);
     }
 
     private static H2Plugin newPlugin(String className) {

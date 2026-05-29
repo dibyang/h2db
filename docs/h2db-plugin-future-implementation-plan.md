@@ -15,7 +15,7 @@
 | F4 | 显式外部插件加载 | [x] |
 | F5 | 收敛第三方 Storage SPI 最小面 | [x] |
 | F6 | 插件依赖、版本和冲突治理 | [x] |
-| F7 | 安全边界第一版 | [ ] |
+| F7 | 安全边界第一版 | [x] |
 | F8 | S1/S2 maintenance 接入 | [ ] |
 | F9 | 自动发现、示例和生态补齐 | [ ] |
 
@@ -117,16 +117,16 @@
 
 ### F7 安全边界第一版
 
-- [ ] 限制外部插件 provider type 白名单。
-- [ ] 增加敏感配置脱敏工具和测试。
-- [ ] 明确 classloader 关闭/释放占位策略。
-- [ ] 文档化不支持热卸载。
+- [x] 限制外部插件 provider type 白名单。
+- [x] 增加敏感配置脱敏工具和测试。
+- [x] 明确 classloader 关闭/释放占位策略。
+- [x] 文档化不支持热卸载。
 
 测试编号：
 
-- [ ] `T-PLUGIN-F7-SENSITIVE-TRACE-01`
-- [ ] `T-PLUGIN-F7-FORBIDDEN-CAPABILITY-01`
-- [ ] `T-PLUGIN-F7-CLASSLOADER-CLOSE-01`
+- [x] `T-PLUGIN-F7-SENSITIVE-TRACE-01`
+- [x] `T-PLUGIN-F7-FORBIDDEN-CAPABILITY-01`
+- [x] `T-PLUGIN-F7-CLASSLOADER-CLOSE-01`
 
 ### F8 S1/S2 Maintenance 接入
 

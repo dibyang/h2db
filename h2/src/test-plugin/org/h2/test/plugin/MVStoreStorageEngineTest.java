@@ -164,10 +164,8 @@ public class MVStoreStorageEngineTest {
         try (Connection conn = DriverManager.getConnection("jdbc:h2:mem:pluginUnsupportedMaintenance", "sa", "")) {
             Database db = database(conn);
 
-            assertFalse(db.getStorageEngine().supports(PluginCapability.STORAGE_VACUUM_ONLINE));
-            assertFalse(db.getStorageEngine().getMaintenance().supports(PluginCapability.STORAGE_VACUUM_ONLINE));
-            assertTrue(db.getStorageEngine().getMaintenance().compactOnline().isUnsupported());
-            assertTrue(db.getStorageEngine().getMaintenance().vacuumOnline().isUnsupported());
+            assertFalse(db.getStorageEngine().supports(PluginCapability.STORAGE_PUBLISH_CRASH_SAFE));
+            assertFalse(db.getStorageEngine().getMaintenance().supports(PluginCapability.STORAGE_PUBLISH_CRASH_SAFE));
         }
     }
 
@@ -179,13 +177,13 @@ public class MVStoreStorageEngineTest {
         try (Connection conn = DriverManager.getConnection("jdbc:h2:mem:pluginS2Gate", "sa", "")) {
             Database db = database(conn);
 
-            assertFalse(db.getPluginRegistry().supports(StorageEngineProvider.TYPE,
+            assertTrue(db.getPluginRegistry().supports(StorageEngineProvider.TYPE,
                     MVStoreStorageEngineProvider.ID, PluginCapability.STORAGE_VACUUM_ONLINE));
             assertFalse(db.getPluginRegistry().supports(StorageEngineProvider.TYPE,
                     MVStoreStorageEngineProvider.ID, PluginCapability.STORAGE_PUBLISH_CRASH_SAFE));
             assertFalse(db.getPluginRegistry().supports(StorageEngineProvider.TYPE,
                     MVStoreStorageEngineProvider.ID, PluginCapability.STORAGE_TRUNCATE_SAFE));
-            assertTrue(db.getStorageEngine().getMaintenance().vacuumOnline().isUnsupported());
+            assertTrue(db.getStorageEngine().getMaintenance().vacuumOnline().isSuccess());
         }
     }
 
@@ -204,15 +202,31 @@ public class MVStoreStorageEngineTest {
     }
 
     /**
-     * T-PLUGIN-F8-S2-VACUUM-GATE-01.
+     * T-PLUGIN-R5-S1-COMPACT-BRIDGE-01.
      */
     @Test
-    public void rejectsS2VacuumWhenCapabilityIsMissing() throws Exception {
-        try (Connection conn = DriverManager.getConnection("jdbc:h2:mem:pluginS2MaintenanceGate", "sa", "")) {
+    public void compactOnlineRunsThroughMaintenanceBoundary() throws Exception {
+        try (Connection conn = DriverManager.getConnection(fileUrl("onlineCompact"), "sa", "")) {
             Database db = database(conn);
 
-            assertFalse(db.getStorageEngine().supports(PluginCapability.STORAGE_VACUUM_ONLINE));
-            assertTrue(db.getStorageEngine().getMaintenance().vacuumOnline().isUnsupported());
+            assertTrue(db.getStorageEngine().supports(PluginCapability.STORAGE_COMPACT_ONLINE_MAINTENANCE));
+            assertTrue(db.getStorageEngine().getMaintenance().supports(
+                    PluginCapability.STORAGE_COMPACT_ONLINE_MAINTENANCE));
+            assertTrue(db.getStorageEngine().getMaintenance().compactOnline().isSuccess());
+        }
+    }
+
+    /**
+     * T-PLUGIN-R5-S2-ONLINE-VACUUM-01.
+     */
+    @Test
+    public void vacuumOnlineRunsThroughMaintenanceBoundary() throws Exception {
+        try (Connection conn = DriverManager.getConnection(fileUrl("onlineVacuum"), "sa", "")) {
+            Database db = database(conn);
+
+            assertTrue(db.getStorageEngine().supports(PluginCapability.STORAGE_VACUUM_ONLINE));
+            assertTrue(db.getStorageEngine().getMaintenance().supports(PluginCapability.STORAGE_VACUUM_ONLINE));
+            assertTrue(db.getStorageEngine().getMaintenance().vacuumOnline().isSuccess());
         }
     }
 
@@ -225,7 +239,7 @@ public class MVStoreStorageEngineTest {
             Database db = database(conn);
 
             assertTrue(MVStoreStorageEngineProvider.ID.equals(db.getStorageEngineId()));
-            assertFalse(db.getStorageEngine().getMaintenance().supports(PluginCapability.STORAGE_VACUUM_ONLINE));
+            assertTrue(db.getStorageEngine().getMaintenance().supports(PluginCapability.STORAGE_VACUUM_ONLINE));
         }
     }
 

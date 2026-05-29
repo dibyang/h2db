@@ -26,7 +26,10 @@ final class MVStoreMaintenance implements StorageMaintenance {
 
     @Override
     public boolean supports(String capability) {
-        return PluginCapability.STORAGE_COMPACT_CLOSED.equals(capability) && engine.supports(capability);
+        return engine.supports(capability)
+                && (PluginCapability.STORAGE_COMPACT_CLOSED.equals(capability)
+                        || PluginCapability.STORAGE_COMPACT_ONLINE_MAINTENANCE.equals(capability)
+                        || PluginCapability.STORAGE_VACUUM_ONLINE.equals(capability));
     }
 
     @Override
@@ -39,11 +42,19 @@ final class MVStoreMaintenance implements StorageMaintenance {
 
     @Override
     public StorageMaintenanceResult compactOnline() {
-        return StorageMaintenanceResult.UNSUPPORTED;
+        if (!supports(PluginCapability.STORAGE_COMPACT_ONLINE_MAINTENANCE)) {
+            return StorageMaintenanceResult.UNSUPPORTED;
+        }
+        ((MVStoreBackedStorageEngine) engine).getStore().compactFile(50);
+        return StorageMaintenanceResult.success("COMPACT_ONLINE_FINISHED");
     }
 
     @Override
     public StorageMaintenanceResult vacuumOnline() {
-        return StorageMaintenanceResult.UNSUPPORTED;
+        if (!supports(PluginCapability.STORAGE_VACUUM_ONLINE)) {
+            return StorageMaintenanceResult.UNSUPPORTED;
+        }
+        ((MVStoreBackedStorageEngine) engine).getStore().compactFile(50);
+        return StorageMaintenanceResult.success("VACUUM_ONLINE_FINISHED");
     }
 }

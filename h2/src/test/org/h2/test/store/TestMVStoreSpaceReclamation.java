@@ -31,6 +31,7 @@ import org.h2.util.IOUtils;
 public class TestMVStoreSpaceReclamation extends TestBase {
 
     private static final int BLOAT_ENTRY_COUNT = 96;
+    private static final int LARGE_BLOAT_ENTRY_COUNT = 160;
     private static final int BLOAT_VALUE_SIZE = 128 * 1024;
     private static final long BLOAT_MIN_FILE_SIZE = 4L * 1024 * 1024;
     private static final byte MARKER = 42;
@@ -64,6 +65,9 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         runScenario("T-ONLINE-COMPACT-LONG-TRANSACTION-01", this::testLongTransactionBlocksSwitch);
         runScenario("T-ONLINE-COMPACT-TCP-BEHAVIOR-01", this::testTcpBehaviorDecisions);
         runScenario("T-ONLINE-COMPACT-BACKUP-INTERACTION-01", this::testBackupInteractionGate);
+        runScenario("T-ONLINE-COMPACT-LARGE-STORE-01", this::testLargeStoreCompact);
+        runScenario("T-ONLINE-COMPACT-SLOW-IO-01", this::testSlowIoCompact);
+        runScenario("T-ONLINE-COMPACT-RESIDUAL-CLEANUP-01", this::testResidualCleanup);
         runScenario("T-ONLINE-COMPACT-VERIFY-FAIL-01", this::testVerifyFailureKeepsSource);
         runScenario("T-ONLINE-COMPACT-CRASH-BEFORE-SWITCH-01", this::testCrashBeforeSwitchKeepsSource);
         runScenario("T-ONLINE-COMPACT-CRASH-DURING-SWITCH-01", this::testCrashDuringSwitchRecoversSource);
@@ -342,6 +346,53 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         gate.exitBackup();
     }
 
+    private void testLargeStoreCompact() {
+        String base = mvStoreFile("largeStoreCompact");
+        try {
+            BloatStats stats = createBloatedStore(base, LARGE_BLOAT_ENTRY_COUNT);
+            assertTrue(stats.afterDeleteSize > BLOAT_MIN_FILE_SIZE * 2);
+            MVStoreSpaceReclamationResult result = MVStoreSpaceReclamation.compactClosedStore(base,
+                    MVStoreSpaceReclamationOptions.DEFAULT);
+            assertTrue(result.isReplaced());
+            assertTrue(result.getCompactedSize() < stats.afterDeleteSize / 4);
+            assertOnlyMarkerReadable(base);
+        } finally {
+            deleteFilesUnlessKept(base);
+        }
+    }
+
+    private void testSlowIoCompact() {
+        String base = mvStoreFile("slowIoCompact");
+        try {
+            createBloatedStore(base);
+            MVStoreSpaceReclamationResult result = MVStoreSpaceReclamation.compactClosedStore(base,
+                    MVStoreSpaceReclamationOptions.builder().ioDelayMillis(1L).build());
+            assertTrue(result.isReplaced());
+            assertOnlyMarkerReadable(base);
+        } finally {
+            deleteFilesUnlessKept(base);
+        }
+    }
+
+    private void testResidualCleanup() {
+        String base = mvStoreFile("residualCleanup");
+        try {
+            createBloatedStore(base);
+            writeText(base + ".reclaim.manifest", "phase=SHADOW_READY\n");
+            copyFile(base, base + ".reclaim.backup");
+            copyFile(base, base + ".reclaim.shadow");
+            MVStoreSpaceReclamation.cleanUp(base);
+            assertFalse(FileUtils.exists(base + ".reclaim.manifest"));
+            assertFalse(FileUtils.exists(base + ".reclaim.backup"));
+            assertFalse(FileUtils.exists(base + ".reclaim.shadow"));
+            assertOnlyMarkerReadable(base);
+        } catch (IOException e) {
+            throw new AssertionError(e);
+        } finally {
+            deleteFilesUnlessKept(base);
+        }
+    }
+
     private void testVerifyFailureKeepsSource() {
         String base = mvStoreFile("verifyFailure");
         try {
@@ -414,6 +465,10 @@ public class TestMVStoreSpaceReclamation extends TestBase {
     }
 
     private BloatStats createBloatedStore(String base) {
+        return createBloatedStore(base, BLOAT_ENTRY_COUNT);
+    }
+
+    private BloatStats createBloatedStore(String base, int entryCount) {
         deleteFiles(base);
         createParentDirectories(base);
         MVStore store = null;
@@ -423,7 +478,7 @@ public class TestMVStoreSpaceReclamation extends TestBase {
             store.setVersionsToKeep(0);
             MVMap<Integer, byte[]> data = store.openMap("data");
             data.put(-1, new byte[] { MARKER });
-            for (int i = 0; i < BLOAT_ENTRY_COUNT; i++) {
+            for (int i = 0; i < entryCount; i++) {
                 data.put(i, bloatBytes(i));
                 if ((i & 15) == 15) {
                     store.commit();
@@ -432,7 +487,7 @@ public class TestMVStoreSpaceReclamation extends TestBase {
             store.commit();
             store.getFileStore().sync();
             long fullSize = FileUtils.size(base);
-            for (int i = 0; i < BLOAT_ENTRY_COUNT; i++) {
+            for (int i = 0; i < entryCount; i++) {
                 data.remove(i);
                 if ((i & 15) == 15) {
                     store.commit();

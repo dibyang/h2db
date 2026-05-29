@@ -19,12 +19,14 @@ public final class MVStoreSpaceReclamationOptions {
     final boolean verifyAfterCompact;
     final boolean keepBackup;
     final boolean refreshShadowIfSourceChanged;
+    final long ioDelayMillis;
 
     private MVStoreSpaceReclamationOptions(Builder builder) {
         this.compress = builder.compress;
         this.verifyAfterCompact = builder.verifyAfterCompact;
         this.keepBackup = builder.keepBackup;
         this.refreshShadowIfSourceChanged = builder.refreshShadowIfSourceChanged;
+        this.ioDelayMillis = builder.ioDelayMillis;
     }
 
     /**
@@ -73,6 +75,15 @@ public final class MVStoreSpaceReclamationOptions {
     }
 
     /**
+     * 人工 IO 延迟，主要用于慢盘路径测试。
+     *
+     * @return 延迟毫秒数
+     */
+    public long getIoDelayMillis() {
+        return ioDelayMillis;
+    }
+
+    /**
      * MVStore 空间回收维护操作配置构造器。
      */
     public static final class Builder {
@@ -80,6 +91,7 @@ public final class MVStoreSpaceReclamationOptions {
         private boolean verifyAfterCompact = true;
         private boolean keepBackup;
         private boolean refreshShadowIfSourceChanged;
+        private long ioDelayMillis;
 
         private Builder() {
         }
@@ -125,6 +137,17 @@ public final class MVStoreSpaceReclamationOptions {
          */
         public Builder refreshShadowIfSourceChanged(boolean refreshShadowIfSourceChanged) {
             this.refreshShadowIfSourceChanged = refreshShadowIfSourceChanged;
+            return this;
+        }
+
+        /**
+         * 设置人工 IO 延迟，主要用于慢盘路径测试。
+         *
+         * @param ioDelayMillis 延迟毫秒数
+         * @return 当前构造器
+         */
+        public Builder ioDelayMillis(long ioDelayMillis) {
+            this.ioDelayMillis = ioDelayMillis;
             return this;
         }
 

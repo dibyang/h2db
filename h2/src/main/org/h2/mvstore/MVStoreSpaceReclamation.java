@@ -63,9 +63,11 @@ public final class MVStoreSpaceReclamation {
                 verifyStore(shadowFileName);
             }
             long compactedSize = FileUtils.size(shadowFileName);
+            pauseForTesting(options.ioDelayMillis);
             copyFile(fileName, backupFileName);
             writeManifest(fileName, "SWITCHING", shadowFileName, backupFileName, sourceFingerprint);
             try {
+                pauseForTesting(options.ioDelayMillis);
                 MVStoreTool.moveAtomicReplace(shadowFileName, fileName);
             } catch (RuntimeException e) {
                 restoreBackup(fileName, backupFileName);
@@ -113,6 +115,7 @@ public final class MVStoreSpaceReclamation {
             if (options.verifyAfterCompact) {
                 verifyStore(shadowFileName);
             }
+            pauseForTesting(options.ioDelayMillis);
             writeManifest(fileName, "SHADOW_READY", shadowFileName, fileName + BACKUP_SUFFIX, sourceFingerprint);
             return new MVStoreSpaceReclamationResult(fileName, shadowFileName, fileName + BACKUP_SUFFIX,
                     sourceFingerprint.size, FileUtils.size(shadowFileName), false);
@@ -160,9 +163,11 @@ public final class MVStoreSpaceReclamation {
             if (options.verifyAfterCompact) {
                 verifyStore(shadowFileName);
             }
+            pauseForTesting(options.ioDelayMillis);
             copyFile(fileName, backupFileName);
             writeManifest(fileName, "SWITCHING", shadowFileName, backupFileName, sourceFingerprint);
             try {
+                pauseForTesting(options.ioDelayMillis);
                 MVStoreTool.moveAtomicReplace(shadowFileName, fileName);
             } catch (RuntimeException e) {
                 restoreBackup(fileName, backupFileName);
@@ -345,6 +350,19 @@ public final class MVStoreSpaceReclamation {
             FileUtils.delete(fileName);
         }
         MVStoreTool.moveAtomicReplace(backupFileName, fileName);
+    }
+
+    private static void pauseForTesting(long millis) {
+        if (millis <= 0L) {
+            return;
+        }
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw DataUtils.newMVStoreException(DataUtils.ERROR_TRANSACTION_ILLEGAL_STATE,
+                    "Interrupted during space reclamation IO delay");
+        }
     }
 
     private static final class SourceFingerprint {

@@ -104,6 +104,16 @@ sourceSets {
             srcDirs = []
         }
     }
+    pluginTest {
+        java {
+            srcDirs = ['src/test-plugin']
+        }
+        resources {
+            srcDirs = []
+        }
+        compileClasspath = sourceSets.main.output + configurations.testCompileClasspath
+        runtimeClasspath = output + compileClasspath + configurations.testRuntimeClasspath
+    }
 }
 
 
@@ -184,6 +194,14 @@ task runMvStoreSpaceReclamationCheck(type: JavaExec) {
     systemProperties System.properties.findAll {
         it.key.toString().startsWith('h2.test.mvStoreSpaceReclamation.')
     }
+}
+
+task runPluginArchitectureCheck(type: Test) {
+    description = 'Runs the plugin architecture JUnit checks.'
+    testClassesDirs = sourceSets.pluginTest.output.classesDirs
+    classpath = sourceSets.pluginTest.runtimeClasspath
+    useJUnitPlatform()
+    dependsOn pluginTestClasses
 }
 
 task javadocJar(type: Jar) {

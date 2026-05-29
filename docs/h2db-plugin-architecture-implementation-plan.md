@@ -18,7 +18,7 @@
 | 阶段 | 目标 | 状态 |
 | --- | --- | --- |
 | P0 文档与门禁 | 固定阶段一范围、测试编号、回滚边界 | [ ] |
-| P1 SPI 与 Registry 骨架 | 新增接口和内部注册中心，不接业务路径 | [ ] |
+| P1 SPI 与 Registry 骨架 | 新增接口和内部注册中心，不接业务路径 | [x] |
 | P2 MVStore Storage 适配 | 包装现有 `Store`，保留 `Database.getStore()` 过渡 | [ ] |
 | P3 MVStore Table Provider | 内置建表 provider 可调用现有 `Store.createTable()` | [ ] |
 | P4 默认建表路径切换 | `Schema.createTable()` 走 provider，legacy fallback 兼容 | [ ] |
@@ -47,20 +47,20 @@
 
 ### P1 SPI 与 Registry 骨架
 
-- [ ] 新增 `org.h2.api.H2Plugin`。
-- [ ] 新增 `org.h2.api.PluginProvider`。
-- [ ] 新增 `org.h2.api.TableEngineProvider`。
-- [ ] 新增 `org.h2.api.PluginCapability` 字符串常量类。
-- [ ] 新增 storage 相关实验接口：`StorageEngineProvider`、`StorageEngine`、`StorageMaintenance`。
-- [ ] 新增内部 `org.h2.engine.PluginRegistry`，支持按 provider type/id 注册和查找。
-- [ ] 新增内部 `org.h2.engine.BuiltinPlugins`，集中注册内置 MVStore provider。
-- [ ] 新增 provider id 冲突校验：内置 provider 不允许被覆盖。
-- [ ] 同步新增 JUnit 测试覆盖 registry 注册、查找、冲突和 capability 查询。
+- [x] 新增 `org.h2.api.H2Plugin`。
+- [x] 新增 `org.h2.api.PluginProvider`。
+- [x] 新增 `org.h2.api.TableEngineProvider`。
+- [x] 新增 `org.h2.api.PluginCapability` 字符串常量类。
+- [x] 新增 storage 相关实验接口：`StorageEngineProvider`、`StorageEngine`、`StorageMaintenance`。
+- [x] 新增内部 `org.h2.engine.PluginRegistry`，支持按 provider type/id 注册和查找。
+- [x] 新增内部 `org.h2.engine.BuiltinPlugins`，集中注册内置 MVStore provider。
+- [x] 新增 provider id 冲突校验：内置 provider 不允许被覆盖。
+- [x] 同步新增 JUnit 测试覆盖 registry 注册、查找、冲突和 capability 查询。
 
 验收：
 
-- [ ] `T-PLUGIN-BUILTIN-REGISTRY-01`
-- [ ] `T-PLUGIN-PROVIDER-ID-CONFLICT-01`
+- [x] `T-PLUGIN-BUILTIN-REGISTRY-01`
+- [x] `T-PLUGIN-PROVIDER-ID-CONFLICT-01`
 
 ### P2 MVStore Storage 适配
 

@@ -176,6 +176,30 @@ public final class MVStoreSpaceReclamation {
     }
 
     /**
+     * 分析已准备好的 shadow 文件是否仍可安全切换。
+     *
+     * @param fileName MVStore 文件名
+     * @return 切换前分析结果
+     */
+    public static MVStoreSpaceReclamationAnalysis analyzePreparedShadow(String fileName) {
+        String shadowFileName = fileName + SHADOW_SUFFIX;
+        if (!FileUtils.exists(shadowFileName)) {
+            throw DataUtils.newMVStoreException(DataUtils.ERROR_FILE_CORRUPT,
+                    "Shadow file not found: {0}", shadowFileName);
+        }
+        try {
+            assertSourceUnchanged(fileName);
+            return new MVStoreSpaceReclamationAnalysis(true, false, false,
+                    "Prepared shadow matches the current source fingerprint.");
+        } catch (IOException e) {
+            throw DbException.convertIOException(e, fileName);
+        } catch (MVStoreException e) {
+            return new MVStoreSpaceReclamationAnalysis(false, false, true,
+                    "Source changed after shadow compact; version-scan catch-up is not available in this stage.");
+        }
+    }
+
+    /**
      * 清理维护态空间回收残留文件。
      *
      * @param fileName MVStore 文件名

@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import org.h2.mvstore.MVMap;
 import org.h2.mvstore.MVStore;
 import org.h2.mvstore.MVStoreException;
+import org.h2.mvstore.MVStoreSpaceReclamationAnalysis;
 import org.h2.mvstore.MVStoreSpaceReclamation;
 import org.h2.mvstore.MVStoreSpaceReclamationOptions;
 import org.h2.mvstore.MVStoreSpaceReclamationResult;
@@ -51,6 +52,7 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         runScenario("T-SHADOW-COMPACT-PREPARE-01", this::testShadowCompactPrepareDoesNotReplaceSource);
         runScenario("T-ONLINE-COMPACT-SWITCH-SHADOW-01", this::testSwitchToPreparedShadow);
         runScenario("T-ONLINE-COMPACT-CATCHUP-WRITES-01", this::testSwitchRejectsChangedSource);
+        runScenario("T-ONLINE-COMPACT-CATCHUP-FEASIBILITY-01", this::testCatchUpFeasibilityAnalysis);
         runScenario("T-ONLINE-COMPACT-SOURCE-FINGERPRINT-01", this::testManifestRecordsSourceFingerprint);
         runScenario("T-ONLINE-COMPACT-DIAGNOSTICS-01", this::testReclamationDiagnostics);
         runScenario("T-ONLINE-COMPACT-MANIFEST-RECOVER-01", this::testManifestRecoveryRestoresSource);
@@ -210,6 +212,26 @@ public class TestMVStoreSpaceReclamation extends TestBase {
             assertTrue(manifest.contains("sourceDigest=SHA-256:"));
         } catch (IOException e) {
             throw new AssertionError(e);
+        } finally {
+            deleteFilesUnlessKept(base);
+        }
+    }
+
+    private void testCatchUpFeasibilityAnalysis() {
+        String base = mvStoreFile("catchUpFeasibilityAnalysis");
+        try {
+            createBloatedStore(base);
+            MVStoreSpaceReclamation.compactToShadow(base, MVStoreSpaceReclamationOptions.DEFAULT);
+            MVStoreSpaceReclamationAnalysis unchanged = MVStoreSpaceReclamation.analyzePreparedShadow(base);
+            assertTrue(unchanged.isSourceUnchanged());
+            assertFalse(unchanged.isVersionScanCatchUpAvailable());
+            assertFalse(unchanged.isFullCopyRequired());
+            appendExtraMarker(base);
+            MVStoreSpaceReclamationAnalysis changed = MVStoreSpaceReclamation.analyzePreparedShadow(base);
+            assertFalse(changed.isSourceUnchanged());
+            assertFalse(changed.isVersionScanCatchUpAvailable());
+            assertTrue(changed.isFullCopyRequired());
+            assertTrue(changed.getReason().contains("version-scan catch-up is not available"));
         } finally {
             deleteFilesUnlessKept(base);
         }

@@ -6,8 +6,10 @@
 package org.h2.test.plugin;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.File;
 import java.net.URL;
 import java.net.URLClassLoader;
 
@@ -40,5 +42,26 @@ public class PluginSecurityTest {
         URLClassLoader classLoader = new URLClassLoader(new URL[0]);
 
         assertTrue(PluginSecurity.closeClassLoader(classLoader));
+    }
+
+    /**
+     * T-PLUGIN-R6-CLASSLOADER-ISOLATION-01.
+     */
+    @Test
+    public void createsIsolatedClassLoaderForPluginPaths() {
+        ClassLoader classLoader = PluginSecurity.createPluginClassLoader(new File("build").getAbsolutePath());
+
+        assertNotNull(classLoader);
+        assertTrue(classLoader instanceof URLClassLoader);
+        assertTrue(PluginSecurity.closeClassLoader(classLoader));
+    }
+
+    /**
+     * T-PLUGIN-R6-RESOURCE-CLOSE-01.
+     */
+    @Test
+    public void emptyPluginPathsReuseCurrentClasspath() {
+        assertFalse(PluginSecurity.closeClassLoader(PluginSecurity.createPluginClassLoader(null)));
+        assertFalse(PluginSecurity.closeClassLoader(PluginSecurity.createPluginClassLoader("")));
     }
 }

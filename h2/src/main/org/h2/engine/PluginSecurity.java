@@ -6,7 +6,11 @@
 package org.h2.engine;
 
 import java.io.Closeable;
+import java.io.File;
 import java.io.IOException;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
@@ -72,5 +76,27 @@ public final class PluginSecurity {
             }
         }
         return false;
+    }
+
+    /**
+     * 为显式插件路径创建独立 classloader。
+     *
+     * @param pluginPaths 逗号分隔 jar 或目录路径
+     * @return 独立 classloader；路径为空时返回 null
+     */
+    public static ClassLoader createPluginClassLoader(String pluginPaths) {
+        if (pluginPaths == null || pluginPaths.trim().isEmpty()) {
+            return null;
+        }
+        String[] paths = org.h2.util.StringUtils.arraySplit(pluginPaths, ',', true);
+        URL[] urls = new URL[paths.length];
+        for (int i = 0; i < paths.length; i++) {
+            try {
+                urls[i] = new File(paths[i]).toURI().toURL();
+            } catch (MalformedURLException e) {
+                throw DbException.convert(e);
+            }
+        }
+        return new URLClassLoader(urls, PluginSecurity.class.getClassLoader());
     }
 }

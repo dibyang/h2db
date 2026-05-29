@@ -30,17 +30,33 @@ public final class PluginLoader {
      * @param pluginClasses 逗号分隔插件类名
      */
     public static void loadConfiguredPlugins(PluginRegistry registry, String pluginClasses) {
+        loadConfiguredPlugins(registry, pluginClasses, null);
+    }
+
+    /**
+     * 加载显式配置的插件类。
+     *
+     * @param registry 插件注册中心
+     * @param pluginClasses 逗号分隔插件类名
+     * @param pluginPaths 逗号分隔插件 jar 或目录路径
+     */
+    public static void loadConfiguredPlugins(PluginRegistry registry, String pluginClasses, String pluginPaths) {
         if (pluginClasses == null || pluginClasses.trim().isEmpty()) {
             return;
         }
+        ClassLoader classLoader = PluginSecurity.createPluginClassLoader(pluginPaths);
         String[] classNames = StringUtils.arraySplit(pluginClasses, ',', true);
-        for (String className : classNames) {
-            if (className.isEmpty()) {
-                continue;
+        try {
+            for (String className : classNames) {
+                if (className.isEmpty()) {
+                    continue;
+                }
+                H2Plugin plugin = newPlugin(className, classLoader);
+                validatePlugin(registry, plugin, className);
+                registry.registerPlugin(plugin, PluginSource.CONFIGURED_CLASS);
             }
-            H2Plugin plugin = newPlugin(className);
-            validatePlugin(registry, plugin, className);
-            registry.registerPlugin(plugin, PluginSource.CONFIGURED_CLASS);
+        } finally {
+            PluginSecurity.closeClassLoader(classLoader);
         }
     }
 
@@ -94,9 +110,11 @@ public final class PluginLoader {
         PluginSecurity.validateProviderTypes(plugin);
     }
 
-    private static H2Plugin newPlugin(String className) {
+    private static H2Plugin newPlugin(String className, ClassLoader classLoader) {
         try {
-            Object plugin = JdbcUtils.loadUserClass(className).getDeclaredConstructor().newInstance();
+            Class<?> pluginClass = classLoader == null ? JdbcUtils.loadUserClass(className)
+                    : Class.forName(className, true, classLoader);
+            Object plugin = pluginClass.getDeclaredConstructor().newInstance();
             if (!(plugin instanceof H2Plugin)) {
                 throw DbException.getUnsupportedException("Configured plugin class does not implement H2Plugin: "
                         + className);

@@ -290,6 +290,13 @@ public class DbSettings extends SettingsBase {
     public final String pluginClasses = get("PLUGIN_CLASSES", null);
 
     /**
+     * Database setting <code>PLUGIN_PATHS</code>
+     * (default: null).
+     * Comma-separated jar or directory paths used as isolated plugin classpath.
+     */
+    public final String pluginPaths = get("PLUGIN_PATHS", null);
+
+    /**
      * Database setting <code>PLUGIN_SERVICE_LOADER</code>
      * (default: false).
      * Whether plugins should be discovered from {@link java.util.ServiceLoader}.

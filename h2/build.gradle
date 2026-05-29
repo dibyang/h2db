@@ -207,6 +207,10 @@ task runPluginArchitectureCheck(type: Test) {
     dependsOn pluginTestClasses
 }
 
+test {
+    dependsOn runPluginArchitectureCheck
+}
+
 task javadocJar(type: Jar) {
     classifier = 'javadoc'
     from javadoc

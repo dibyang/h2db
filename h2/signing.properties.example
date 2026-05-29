@@ -1,0 +1,9 @@
+releasesRepository=https://ossrh-staging-api.central.sonatype.com/service/local/staging/deploy/maven2/
+snapshotsRepository=https://ossrh-staging-api.central.sonatype.com/content/repositories/snapshots/
+
+signing.keyId=YOUR_KEY_ID
+signing.password=YOUR_GPG_PASSPHRASE
+signing.secretKeyRingFile=/path/to/secret-keyring.gpg
+
+ossrhUsername=YOUR_CENTRAL_TOKEN_USERNAME
+ossrhPassword=YOUR_CENTRAL_TOKEN_PASSWORD

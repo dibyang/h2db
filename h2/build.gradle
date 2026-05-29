@@ -33,8 +33,10 @@ if(signing_cfg.exists()) {
     }
 
     // 将构建的包签名
-    signing {
-        sign configurations.archives
+    if (!project.version.toString().endsWith('SNAPSHOT') || project.hasProperty('signSnapshots')) {
+        signing {
+            sign configurations.archives
+        }
     }
 }
 
@@ -193,6 +195,10 @@ artifacts {
     archives javadocJar, sourceJar
 }
 
+tasks.withType(GenerateModuleMetadata) {
+    enabled = false
+}
+
 publishing {
   publications {
     maven(MavenPublication) {
@@ -214,8 +220,12 @@ publishing {
         // 许可证名称和地址
         licenses {
           license {
-            name = 'The Apache License, Version 2.0'
-            url = 'http://www.apache.org/licenses/LICENSE-2.0.txt'
+            name = 'MPL 2.0'
+            url = 'https://www.mozilla.org/en-US/MPL/2.0/'
+          }
+          license {
+            name = 'EPL 1.0'
+            url = 'https://www.eclipse.org/legal/epl-v10.html'
           }
         }
         // 开发者信息
@@ -256,7 +266,9 @@ publishing {
 }
 
 // 将构建的包签名
-signing {
-  sign publishing.publications.maven
+if (!project.version.toString().endsWith('SNAPSHOT') || project.hasProperty('signSnapshots')) {
+    signing {
+        sign publishing.publications.maven
+    }
 }
 

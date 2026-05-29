@@ -20,3 +20,7 @@
 .pmd
 docs/html/testOutput.html
 /.codex/
+signing.properties
+*.gpg
+*.asc
+/.github/

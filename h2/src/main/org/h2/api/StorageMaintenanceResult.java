@@ -14,15 +14,17 @@ public final class StorageMaintenanceResult {
      * 操作被当前存储引擎拒绝或不支持。
      */
     public static final StorageMaintenanceResult UNSUPPORTED =
-            new StorageMaintenanceResult(false, true, "UNSUPPORTED");
+            new StorageMaintenanceResult(false, true, false, "UNSUPPORTED");
 
     private final boolean success;
     private final boolean unsupported;
+    private final boolean skipped;
     private final String message;
 
-    private StorageMaintenanceResult(boolean success, boolean unsupported, String message) {
+    private StorageMaintenanceResult(boolean success, boolean unsupported, boolean skipped, String message) {
         this.success = success;
         this.unsupported = unsupported;
+        this.skipped = skipped;
         this.message = message;
     }
 
@@ -33,7 +35,17 @@ public final class StorageMaintenanceResult {
      * @return 成功结果
      */
     public static StorageMaintenanceResult success(String message) {
-        return new StorageMaintenanceResult(true, false, message);
+        return new StorageMaintenanceResult(true, false, false, message);
+    }
+
+    /**
+     * 创建跳过结果。
+     *
+     * @param message 结果消息
+     * @return 跳过结果
+     */
+    public static StorageMaintenanceResult skipped(String message) {
+        return new StorageMaintenanceResult(false, false, true, message);
     }
 
     /**
@@ -52,6 +64,15 @@ public final class StorageMaintenanceResult {
      */
     public boolean isUnsupported() {
         return unsupported;
+    }
+
+    /**
+     * 判断操作是否被跳过。
+     *
+     * @return 跳过时返回 true
+     */
+    public boolean isSkipped() {
+        return skipped;
     }
 
     /**

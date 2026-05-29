@@ -31,7 +31,8 @@ public final class MVStoreStorageEngineProvider implements StorageEngineProvider
             PluginCapability.STORAGE_PERSISTENT,
             PluginCapability.STORAGE_TRANSACTIONAL,
             PluginCapability.STORAGE_MVCC,
-            PluginCapability.STORAGE_BACKUP));
+            PluginCapability.STORAGE_BACKUP,
+            PluginCapability.STORAGE_COMPACT_CLOSED));
 
     @Override
     public String getType() {

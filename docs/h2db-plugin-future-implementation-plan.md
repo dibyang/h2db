@@ -16,7 +16,7 @@
 | F5 | 收敛第三方 Storage SPI 最小面 | [x] |
 | F6 | 插件依赖、版本和冲突治理 | [x] |
 | F7 | 安全边界第一版 | [x] |
-| F8 | S1/S2 maintenance 接入 | [ ] |
+| F8 | S1/S2 maintenance 接入 | [x] |
 | F9 | 自动发现、示例和生态补齐 | [ ] |
 
 ## 统一门禁
@@ -130,16 +130,16 @@
 
 ### F8 S1/S2 Maintenance 接入
 
-- [ ] 扩展 `StorageMaintenanceResult` 表达 skipped / unsupported / success。
-- [ ] MVStore maintenance 暴露 S1 compact 能力边界。
-- [ ] S2 入口通过 capability gate 调用。
-- [ ] 增加 JUnit 覆盖 unsupported 和 MVStore-only 行为。
+- [x] 扩展 `StorageMaintenanceResult` 表达 skipped / unsupported / success。
+- [x] MVStore maintenance 暴露 S1 compact 能力边界。
+- [x] S2 入口通过 capability gate 调用。
+- [x] 增加 JUnit 覆盖 unsupported 和 MVStore-only 行为。
 
 测试编号：
 
-- [ ] `T-PLUGIN-F8-S1-MAINTENANCE-01`
-- [ ] `T-PLUGIN-F8-S2-VACUUM-GATE-01`
-- [ ] `T-PLUGIN-F8-MVSTORE-S2-ONLY-01`
+- [x] `T-PLUGIN-F8-S1-MAINTENANCE-01`
+- [x] `T-PLUGIN-F8-S2-VACUUM-GATE-01`
+- [x] `T-PLUGIN-F8-MVSTORE-S2-ONLY-01`
 
 ### F9 自动发现、示例和生态补齐
 

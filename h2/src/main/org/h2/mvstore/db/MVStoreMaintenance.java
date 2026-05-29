@@ -5,6 +5,7 @@
  */
 package org.h2.mvstore.db;
 
+import org.h2.api.PluginCapability;
 import org.h2.api.StorageMaintenance;
 import org.h2.api.StorageMaintenanceResult;
 
@@ -16,17 +17,23 @@ import org.h2.api.StorageMaintenanceResult;
  */
 final class MVStoreMaintenance implements StorageMaintenance {
 
+    private final MVStoreStorageEngine engine;
+
     MVStoreMaintenance(MVStoreStorageEngine engine) {
+        this.engine = engine;
     }
 
     @Override
     public boolean supports(String capability) {
-        return false;
+        return PluginCapability.STORAGE_COMPACT_CLOSED.equals(capability) && engine.supports(capability);
     }
 
     @Override
     public StorageMaintenanceResult compactClosed() {
-        return StorageMaintenanceResult.UNSUPPORTED;
+        if (!supports(PluginCapability.STORAGE_COMPACT_CLOSED)) {
+            return StorageMaintenanceResult.UNSUPPORTED;
+        }
+        return StorageMaintenanceResult.skipped("COMPACT_CLOSED_REQUIRES_DATABASE_CLOSE");
     }
 
     @Override

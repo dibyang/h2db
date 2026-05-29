@@ -152,6 +152,46 @@ public class MVStoreStorageEngineTest {
         }
     }
 
+    /**
+     * T-PLUGIN-F8-S1-MAINTENANCE-01.
+     */
+    @Test
+    public void exposesClosedCompactMaintenanceCapability() throws Exception {
+        try (Connection conn = DriverManager.getConnection("jdbc:h2:mem:pluginS1Maintenance", "sa", "")) {
+            Database db = database(conn);
+
+            assertTrue(db.getStorageEngine().supports(PluginCapability.STORAGE_COMPACT_CLOSED));
+            assertTrue(db.getStorageEngine().getMaintenance().supports(PluginCapability.STORAGE_COMPACT_CLOSED));
+            assertTrue(db.getStorageEngine().getMaintenance().compactClosed().isSkipped());
+        }
+    }
+
+    /**
+     * T-PLUGIN-F8-S2-VACUUM-GATE-01.
+     */
+    @Test
+    public void rejectsS2VacuumWhenCapabilityIsMissing() throws Exception {
+        try (Connection conn = DriverManager.getConnection("jdbc:h2:mem:pluginS2MaintenanceGate", "sa", "")) {
+            Database db = database(conn);
+
+            assertFalse(db.getStorageEngine().supports(PluginCapability.STORAGE_VACUUM_ONLINE));
+            assertTrue(db.getStorageEngine().getMaintenance().vacuumOnline().isUnsupported());
+        }
+    }
+
+    /**
+     * T-PLUGIN-F8-MVSTORE-S2-ONLY-01.
+     */
+    @Test
+    public void keepsOnlineVacuumDisabledUntilMvStoreEnablesIt() throws Exception {
+        try (Connection conn = DriverManager.getConnection("jdbc:h2:mem:pluginMvStoreS2Only", "sa", "")) {
+            Database db = database(conn);
+
+            assertTrue(MVStoreStorageEngineProvider.ID.equals(db.getStorageEngineId()));
+            assertFalse(db.getStorageEngine().getMaintenance().supports(PluginCapability.STORAGE_VACUUM_ONLINE));
+        }
+    }
+
     private String fileUrl(String name) {
         return "jdbc:h2:" + baseDir + "/" + name;
     }

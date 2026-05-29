@@ -13,6 +13,9 @@ import java.util.ArrayList;
 import org.h2.mvstore.MVMap;
 import org.h2.mvstore.MVStore;
 import org.h2.mvstore.MVStoreException;
+import org.h2.mvstore.MVStoreSpaceReclamation;
+import org.h2.mvstore.MVStoreSpaceReclamationOptions;
+import org.h2.mvstore.MVStoreSpaceReclamationResult;
 import org.h2.mvstore.MVStoreTool;
 import org.h2.store.fs.FileUtils;
 import org.h2.test.TestBase;
@@ -43,6 +46,7 @@ public class TestMVStoreSpaceReclamation extends TestBase {
     @Override
     public void test() throws Exception {
         runScenario("T-SPACE-BLOAT-BASELINE-01", this::testBloatBaseline);
+        runScenario("T-MAINTENANCE-COMPACT-REPLACE-01", this::testMaintenanceCompactReplacesClosedStore);
         runScenario("T-SHADOW-COMPACT-SHRINK-01", this::testShadowCompactShrinksBloatedStore);
         runScenario("T-ONLINE-COMPACT-BLOCKS-WRITES-01", this::testMaintenanceGateBlocksWrites);
         runScenario("T-ONLINE-COMPACT-VERIFY-FAIL-01", this::testVerifyFailureKeepsSource);
@@ -89,6 +93,25 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         } finally {
             deleteFilesUnlessKept(base);
             deleteFilesUnlessKept(shadow);
+        }
+    }
+
+    private void testMaintenanceCompactReplacesClosedStore() {
+        String base = mvStoreFile("maintenanceCompactReplace");
+        try {
+            BloatStats stats = createBloatedStore(base);
+            MVStoreSpaceReclamationOptions options = MVStoreSpaceReclamationOptions.builder()
+                    .keepBackup(true).build();
+            MVStoreSpaceReclamationResult result = MVStoreSpaceReclamation.compactClosedStore(base, options);
+            assertTrue(result.isReplaced());
+            assertEquals(stats.afterDeleteSize, result.getSourceSize());
+            assertTrue(result.getCompactedSize() < stats.afterDeleteSize / 4);
+            assertTrue(FileUtils.exists(result.getBackupFileName()));
+            assertOnlyMarkerReadable(base);
+            assertOnlyMarkerReadable(result.getBackupFileName());
+        } finally {
+            deleteFilesUnlessKept(base);
+            deleteFilesUnlessKept(base + ".reclaim.backup");
         }
     }
 

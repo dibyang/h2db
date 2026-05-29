@@ -15,6 +15,7 @@ import org.h2.mvstore.MVStore;
 import org.h2.mvstore.MVStoreException;
 import org.h2.mvstore.MVStoreSpaceReclamationAnalysis;
 import org.h2.mvstore.MVStoreSpaceReclamation;
+import org.h2.mvstore.MVStoreSpaceReclamationMaintenance;
 import org.h2.mvstore.MVStoreSpaceReclamationOptions;
 import org.h2.mvstore.MVStoreSpaceReclamationResult;
 import org.h2.mvstore.MVStoreTool;
@@ -58,6 +59,7 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         runScenario("T-ONLINE-COMPACT-DIAGNOSTICS-01", this::testReclamationDiagnostics);
         runScenario("T-ONLINE-COMPACT-MANIFEST-RECOVER-01", this::testManifestRecoveryRestoresSource);
         runScenario("T-ONLINE-COMPACT-BLOCKS-WRITES-01", this::testMaintenanceGateBlocksWrites);
+        runScenario("T-ONLINE-COMPACT-LONG-TRANSACTION-01", this::testLongTransactionBlocksSwitch);
         runScenario("T-ONLINE-COMPACT-VERIFY-FAIL-01", this::testVerifyFailureKeepsSource);
         runScenario("T-ONLINE-COMPACT-CRASH-BEFORE-SWITCH-01", this::testCrashBeforeSwitchKeepsSource);
         runScenario("T-ONLINE-COMPACT-CRASH-DURING-SWITCH-01", this::testCrashDuringSwitchRecoversSource);
@@ -280,14 +282,31 @@ public class TestMVStoreSpaceReclamation extends TestBase {
     }
 
     private void testMaintenanceGateBlocksWrites() {
-        MaintenanceGate gate = new MaintenanceGate();
+        MVStoreSpaceReclamationMaintenance gate = new MVStoreSpaceReclamationMaintenance();
         gate.enter();
         try {
+            assertTrue(gate.tryEnterRead());
+            gate.exitRead();
             assertFalse(gate.tryEnterWrite());
         } finally {
             gate.exit();
         }
         assertTrue(gate.tryEnterWrite());
+        gate.exitWrite();
+    }
+
+    private void testLongTransactionBlocksSwitch() {
+        MVStoreSpaceReclamationMaintenance gate = new MVStoreSpaceReclamationMaintenance();
+        assertTrue(gate.tryEnterRead());
+        gate.enter();
+        try {
+            assertTrue(gate.isSwitchBlockedByActiveTransactions());
+            assertFalse(gate.tryEnterWrite());
+        } finally {
+            gate.exitRead();
+            gate.exit();
+        }
+        assertFalse(gate.isSwitchBlockedByActiveTransactions());
     }
 
     private void testVerifyFailureKeepsSource() {
@@ -572,22 +591,6 @@ public class TestMVStoreSpaceReclamation extends TestBase {
 
     private interface Scenario {
         void run() throws Exception;
-    }
-
-    private static final class MaintenanceGate {
-        private boolean maintenance;
-
-        void enter() {
-            maintenance = true;
-        }
-
-        void exit() {
-            maintenance = false;
-        }
-
-        boolean tryEnterWrite() {
-            return !maintenance;
-        }
     }
 
     private static final class SpaceReclamationFaultHarness {

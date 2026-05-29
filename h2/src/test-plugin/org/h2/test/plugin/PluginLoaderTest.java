@@ -84,6 +84,19 @@ public class PluginLoaderTest {
     }
 
     /**
+     * T-PLUGIN-R7-VERSION-RANGE-SEMANTICS-01.
+     */
+    @Test
+    public void acceptsSupportedH2VersionRange() throws Exception {
+        try (Connection conn = DriverManager.getConnection(url("pluginVersionRange",
+                SupportedRangePlugin.class.getName()), "sa", "")) {
+            Database db = database(conn);
+
+            assertNotNull(db.getPluginRegistry().findProvider(TableEngineProvider.TYPE, "version_range_table"));
+        }
+    }
+
+    /**
      * T-PLUGIN-F6-DEPENDENCY-MISSING-01.
      */
     @Test
@@ -94,6 +107,20 @@ public class PluginLoaderTest {
 
         assertTrue(e.getMessage().contains("Configured plugin dependency is missing"));
         assertTrue(e.getMessage().contains("dependency=missing.plugin"));
+    }
+
+    /**
+     * T-PLUGIN-R7-DEPENDENCY-ORDER-01.
+     */
+    @Test
+    public void registersConfiguredPluginsInDependencyOrder() throws Exception {
+        String classes = DependentPlugin.class.getName() + "," + ConfiguredPlugin.class.getName();
+        try (Connection conn = DriverManager.getConnection(url("pluginDependencyOrder", classes), "sa", "")) {
+            Database db = database(conn);
+
+            assertNotNull(db.getPluginRegistry().findProvider(TableEngineProvider.TYPE, "external_table"));
+            assertNotNull(db.getPluginRegistry().findProvider(TableEngineProvider.TYPE, "dependent_table"));
+        }
     }
 
     /**
@@ -215,12 +242,52 @@ public class PluginLoaderTest {
     }
 
     /**
+     * 测试用 H2 版本范围匹配插件。
+     */
+    public static final class SupportedRangePlugin extends ConfiguredPlugin {
+        @Override
+        public String getId() {
+            return "test.version.range";
+        }
+
+        @Override
+        public String getH2VersionRange() {
+            return "[0.0,999.0)";
+        }
+
+        @Override
+        public Iterable<? extends PluginProvider> getProviders() {
+            return Arrays.asList(new TestTableProvider("version_range_table"));
+        }
+    }
+
+    /**
      * 测试用缺失依赖插件。
      */
     public static final class MissingDependencyPlugin extends ConfiguredPlugin {
         @Override
         public Iterable<PluginDependency> getDependencies() {
             return Arrays.asList(new PluginDependency("missing.plugin", "1"));
+        }
+    }
+
+    /**
+     * 测试用依赖排序插件。
+     */
+    public static final class DependentPlugin extends ConfiguredPlugin {
+        @Override
+        public String getId() {
+            return "test.dependent";
+        }
+
+        @Override
+        public Iterable<PluginDependency> getDependencies() {
+            return Arrays.asList(new PluginDependency("test.configured", "1"));
+        }
+
+        @Override
+        public Iterable<? extends PluginProvider> getProviders() {
+            return Arrays.asList(new TestTableProvider("dependent_table"));
         }
     }
 

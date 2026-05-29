@@ -5,6 +5,8 @@
  */
 package org.h2.engine;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.ServiceLoader;
 
 import org.h2.api.H2Plugin;
@@ -47,14 +49,16 @@ public final class PluginLoader {
         ClassLoader classLoader = PluginSecurity.createPluginClassLoader(pluginPaths);
         String[] classNames = StringUtils.arraySplit(pluginClasses, ',', true);
         try {
+            ArrayList<H2Plugin> plugins = new ArrayList<>();
             for (String className : classNames) {
                 if (className.isEmpty()) {
                     continue;
                 }
                 H2Plugin plugin = newPlugin(className, classLoader);
-                validatePlugin(registry, plugin, className);
-                registry.registerPlugin(plugin, PluginSource.CONFIGURED_CLASS);
+                validateVersionAndSecurity(registry, plugin, className);
+                plugins.add(plugin);
             }
+            registerPluginsInDependencyOrder(registry, plugins, PluginSource.CONFIGURED_CLASS);
         } finally {
             PluginSecurity.closeClassLoader(classLoader);
         }
@@ -86,28 +90,120 @@ public final class PluginLoader {
             return 0;
         }
         int count = 0;
+        ArrayList<H2Plugin> discovered = new ArrayList<>();
         for (H2Plugin plugin : plugins) {
-            validatePlugin(registry, plugin, plugin.getClass().getName());
-            registry.registerPlugin(plugin, source);
+            validateVersionAndSecurity(registry, plugin, plugin.getClass().getName());
+            discovered.add(plugin);
             count++;
         }
+        registerPluginsInDependencyOrder(registry, discovered, source);
         return count;
     }
 
-    private static void validatePlugin(PluginRegistry registry, H2Plugin plugin, String className) {
+    private static void validateVersionAndSecurity(PluginRegistry registry, H2Plugin plugin, String className) {
         String range = plugin.getH2VersionRange();
-        if (range != null && !range.isEmpty() && !"*".equals(range) && !Constants.VERSION.equals(range)) {
+        if (!isVersionInRange(Constants.VERSION, range)) {
             throw DbException.getUnsupportedException("Configured plugin class " + className
                     + " does not support this H2 version: required=" + range + ", actual=" + Constants.VERSION);
         }
+        PluginSecurity.validateProviderTypes(plugin);
+    }
+
+    private static void registerPluginsInDependencyOrder(PluginRegistry registry, ArrayList<H2Plugin> plugins,
+            PluginSource source) {
+        HashSet<String> registered = new HashSet<>();
+        boolean progressed;
+        do {
+            progressed = false;
+            for (H2Plugin plugin : plugins) {
+                if (registered.contains(plugin.getId())) {
+                    continue;
+                }
+                if (dependenciesAvailable(registry, registered, plugin)) {
+                    registry.registerPlugin(plugin, source);
+                    registered.add(plugin.getId());
+                    progressed = true;
+                }
+            }
+        } while (progressed);
+        for (H2Plugin plugin : plugins) {
+            if (!registered.contains(plugin.getId())) {
+                throw missingDependencyException(registry, registered, plugin);
+            }
+        }
+    }
+
+    private static boolean dependenciesAvailable(PluginRegistry registry, HashSet<String> registered,
+            H2Plugin plugin) {
         for (PluginDependency dependency : plugin.getDependencies()) {
-            if (!registry.hasPlugin(dependency.getPluginId())) {
-                throw DbException.getUnsupportedException("Configured plugin dependency is missing: plugin="
+            if (!registry.hasPlugin(dependency.getPluginId()) && !registered.contains(dependency.getPluginId())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static DbException missingDependencyException(PluginRegistry registry, HashSet<String> registered,
+            H2Plugin plugin) {
+        for (PluginDependency dependency : plugin.getDependencies()) {
+            if (!registry.hasPlugin(dependency.getPluginId()) && !registered.contains(dependency.getPluginId())) {
+                return DbException.getUnsupportedException("Configured plugin dependency is missing: plugin="
                         + plugin.getId() + ", dependency=" + dependency.getPluginId()
                         + ", version=" + dependency.getVersion());
             }
         }
-        PluginSecurity.validateProviderTypes(plugin);
+        return DbException.getUnsupportedException("Configured plugin dependency cycle: plugin=" + plugin.getId());
+    }
+
+    static boolean isVersionInRange(String version, String range) {
+        if (range == null || range.isEmpty() || "*".equals(range) || version.equals(range)) {
+            return true;
+        }
+        if (range.length() < 3 || (range.charAt(0) != '[' && range.charAt(0) != '(')) {
+            return false;
+        }
+        char end = range.charAt(range.length() - 1);
+        if (end != ']' && end != ')') {
+            return false;
+        }
+        String body = range.substring(1, range.length() - 1);
+        int comma = body.indexOf(',');
+        if (comma < 0) {
+            return false;
+        }
+        String min = body.substring(0, comma).trim();
+        String max = body.substring(comma + 1).trim();
+        boolean minOk = min.isEmpty() || compareVersions(version, min) > 0
+                || range.charAt(0) == '[' && compareVersions(version, min) == 0;
+        boolean maxOk = max.isEmpty() || compareVersions(version, max) < 0
+                || end == ']' && compareVersions(version, max) == 0;
+        return minOk && maxOk;
+    }
+
+    private static int compareVersions(String left, String right) {
+        String[] leftParts = left.split("[.-]");
+        String[] rightParts = right.split("[.-]");
+        int count = Math.max(leftParts.length, rightParts.length);
+        for (int i = 0; i < count; i++) {
+            int l = i < leftParts.length ? parseVersionPart(leftParts[i]) : 0;
+            int r = i < rightParts.length ? parseVersionPart(rightParts[i]) : 0;
+            if (l != r) {
+                return l < r ? -1 : 1;
+            }
+        }
+        return 0;
+    }
+
+    private static int parseVersionPart(String value) {
+        int result = 0;
+        for (int i = 0; i < value.length(); i++) {
+            char ch = value.charAt(i);
+            if (ch < '0' || ch > '9') {
+                break;
+            }
+            result = result * 10 + ch - '0';
+        }
+        return result;
     }
 
     private static H2Plugin newPlugin(String className, ClassLoader classLoader) {

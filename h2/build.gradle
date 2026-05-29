@@ -109,7 +109,7 @@ sourceSets {
             srcDirs = ['src/test-plugin']
         }
         resources {
-            srcDirs = []
+            srcDirs = ['src/test-plugin-resources']
         }
         compileClasspath = sourceSets.main.output + configurations.testCompileClasspath
         runtimeClasspath = output + compileClasspath + configurations.testRuntimeClasspath

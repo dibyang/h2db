@@ -176,6 +176,30 @@ public class PluginLoaderTest {
     }
 
     /**
+     * T-PLUGIN-R8-SERVICE-RESOURCE-01.
+     */
+    @Test
+    public void serviceLoaderDiscoversRealServiceResource() {
+        PluginRegistry registry = new PluginRegistry();
+        int loaded = PluginLoader.loadServiceLoaderPlugins(registry, true);
+
+        assertTrue(loaded >= 1);
+        assertNotNull(registry.findProvider(TableEngineProvider.TYPE, "service_resource_table"));
+    }
+
+    /**
+     * T-PLUGIN-R8-SAMPLE-PLUGIN-01.
+     */
+    @Test
+    public void serviceLoaderStillRequiresExplicitEnablement() {
+        PluginRegistry registry = new PluginRegistry();
+        int loaded = PluginLoader.loadServiceLoaderPlugins(registry, false);
+
+        assertTrue(loaded == 0);
+        assertTrue(registry.findProvider(TableEngineProvider.TYPE, "service_resource_table") == null);
+    }
+
+    /**
      * T-PLUGIN-F9-SAMPLE-COMPILE-01.
      */
     @Test

@@ -178,6 +178,12 @@ public abstract class FileStore<C extends Chunk<C>>
      */
     final ConcurrentHashMap<Integer, C> chunks = new ConcurrentHashMap<>();
 
+    /*
+     * 恢复期临时物理视图：只在 full scan 校验 last chunk 候选时启用。
+     * 它用于在 layout 仍指向旧 block 时找到同一 chunk 的完整物理副本；
+     * 正常打开和正常读写路径不能依赖这些候选，避免把扫描得到的
+     * header-only 信息误当成权威 layout 元数据。
+     */
     private Map<Integer, C> recoveryPhysicalChunksById;
 
     private Map<RecoveryChunkKey, C> recoveryPhysicalChunksByGeneration;
@@ -981,7 +987,9 @@ public abstract class FileStore<C extends Chunk<C>>
 
             // if we encounter chunk header without corresponding footer
             // (due to incomplete write?) in the middle of prospective
-            // chunk, stop considering it
+            // chunk, stop considering it. 修复点：普通 page 内容或空洞可能被
+            // parse 成 chunk:0,len:0 之类的伪 header；这类 header 不能清空
+            // 已经找到的完整候选，否则 full scan 会丢失可用于恢复的物理副本。
             if (--block > candidateLocation && isPlausibleDiscoveredChunk(readChunkHeaderOptionally(block))) {
                 candidateLocation = Long.MAX_VALUE;
             }
@@ -1011,6 +1019,11 @@ public abstract class FileStore<C extends Chunk<C>>
                 validChunksByGeneration.put(key, chunk);
             }
         }
+        /*
+         * full scan 之后才允许启用恢复期物理视图。按 id 的索引仅在该 id
+         * 只有一个 generation 时保留；一旦发现同 id 不同 version/len，
+         * 就移除 id 兜底，后续必须走 id+version+len 的精确匹配。
+         */
         // Try candidates for "last chunk" in order from newest to oldest
         // until suitable is found. Suitable one should have meta map
         // where all chunk references point to valid locations.
@@ -1032,6 +1045,8 @@ public abstract class FileStore<C extends Chunk<C>>
                             if ((test = validChunksByGeneration.get(new RecoveryChunkKey(c))) != null) {
                                 // Header-only chunks from full scan can only supply
                                 // physical location; layout metadata remains authoritative.
+                                // 修复点：只替换 block，保留 livePages/occupancy 等
+                                // layout 动态元数据，防止 header-only 候选覆盖权威信息。
                                 c.block = test.block;
                             } else if (c.isLive() && (afterFullScan || readChunkHeaderAndFooter(c.block, c.id) == null)) {
                                 // chunk reference is invalid
@@ -1065,6 +1080,7 @@ public abstract class FileStore<C extends Chunk<C>>
             clearCaches();
             return false;
         } finally {
+            // 恢复期物理视图到这里必须还原，避免污染后续正常打开或读写路径。
             recoveryPhysicalChunksById = oldRecoveryPhysicalChunksById;
             recoveryPhysicalChunksByGeneration = oldRecoveryPhysicalChunksByGeneration;
         }
@@ -1168,6 +1184,7 @@ public abstract class FileStore<C extends Chunk<C>>
     }
 
     private boolean isPlausibleDiscoveredChunk(C chunk) {
+        // len<=0 或 header 区域内的 block 都不是可用于 full scan 恢复的物理 chunk。
         return chunk != null && chunk.len > 0 && chunk.block >= 2;
     }
 
@@ -2012,6 +2029,9 @@ public abstract class FileStore<C extends Chunk<C>>
                         C recoveryChunk = getRecoveryReadChunk(chunk);
                         if (recoveryChunk != null) {
                             try {
+                                // 恢复期 fallback：layout 指向的旧 block 读取失败时，
+                                // 只用同一代物理 chunk 的 block 重读 page，page pos 和
+                                // layout 元数据仍以原 chunk 为准。
                                 buff = recoveryChunk.readBufferForPage(this, pageOffset, pos);
                                 page = Page.read(buff, pos, map);
                                 break;
@@ -2051,6 +2071,8 @@ public abstract class FileStore<C extends Chunk<C>>
             try {
                 s = layout.get(Chunk.getMetaKey(chunkId));
             } catch (MVStoreException e) {
+                // recovery 校验 layout 时可能还没能通过 layout 自身定位 chunk。
+                // 此处只允许临时返回 full scan 发现的物理候选。
                 c = getRecoveryPhysicalChunk(chunkId);
                 if (c != null) {
                     return c;
@@ -2058,6 +2080,8 @@ public abstract class FileStore<C extends Chunk<C>>
                 throw e;
             }
             if (s == null) {
+                // layout 没有条目时仍先查恢复期物理视图，便于读取候选
+                // last chunk 的 meta/layout page；离开恢复作用域后该视图为空。
                 c = getRecoveryPhysicalChunk(chunkId);
                 if (c != null) {
                     return c;
@@ -2082,6 +2106,7 @@ public abstract class FileStore<C extends Chunk<C>>
         if (physical == null || physical.block == chunk.block) {
             return null;
         }
+        // 用 layout chunk 的元数据复制一份临时对象，只替换物理 block。
         C copy = createChunk(chunk.asString());
         copy.block = physical.block;
         return copy;
@@ -2102,6 +2127,7 @@ public abstract class FileStore<C extends Chunk<C>>
         if (chunk == null) {
             chunk = getRecoveryPhysicalChunk(expected.id);
         }
+        // 最终仍要求同一 generation，防止 chunk id 回绕或复用时读到另一代数据。
         return isSameDiscoveredChunkGeneration(chunk, expected) ? chunk : null;
     }
 

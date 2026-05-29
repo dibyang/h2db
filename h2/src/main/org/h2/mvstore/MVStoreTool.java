@@ -150,6 +150,8 @@ public class MVStoreTool {
                 try {
                     c = new SFChunk(Chunk.readChunkHeader(buffer));
                 } catch (MVStoreException e) {
+                    // 工具扫描坏文件时会遇到普通页面或半写内容，不能让
+                    // 单个不可解析 header 终止本次顺序扫描。
                     pos += blockSize;
                     continue;
                 }
@@ -667,6 +669,8 @@ public class MVStoreTool {
                 }
                 long length = (long) c.len * FileStore.BLOCK_SIZE;
                 if (length > Integer.MAX_VALUE || fileSize - pos < length) {
+                    // 声明长度超过文件剩余内容时说明 chunk 不完整；跳过该
+                    // 候选，避免后续分配过大 buffer 或越界读取触发 NPE/IO 异常。
                     pos += blockSize;
                     continue;
                 }
@@ -694,6 +698,8 @@ public class MVStoreTool {
             if (length > Integer.MAX_VALUE || chunkPosition < 0 ||
                     chunkPosition / blockSize != newestChunk.block ||
                     fileSize - chunkPosition < length) {
+                // 最新候选可能来自损坏 header；复制到 temp 尾部前再次确认
+                // 物理位置完整，失败时报告诊断并保持源文件不变。
                 pw.println("Newest chunk is incomplete");
                 return newestVersion;
             }

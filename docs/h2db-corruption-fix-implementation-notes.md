@@ -100,4 +100,4 @@ sequenceDiagram
 - `isPlausibleDiscoveredChunk()` 是否过严，特别是合法 chunk id 回绕场景。
 - `getRecoveryPhysicalChunk(C expected)` 是否始终按 generation 匹配。
 - repair 工具是否需要进一步支持离线自动导出或重建；当前只完成健壮性修复。
-- 未来空间回收优化不得复用该恢复视图作为正常读写路径。
+- 未来空间回收优化不得复用该恢复视图作为正常读写路径，也不得通过普通 Query/SQL 后置 hook 自动触发空间回收。

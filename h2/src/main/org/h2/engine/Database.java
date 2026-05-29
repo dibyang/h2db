@@ -5,11 +5,6 @@
  */
 package org.h2.engine;
 
-import java.io.File;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.BitSet;
@@ -20,10 +15,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import org.h2.api.DatabaseEventListener;
@@ -2462,63 +2454,5 @@ public final class Database implements DataHandler, CastDataProvider {
     @Override
     public boolean zeroBasedEnums() {
         return dbSettings.zeroBasedEnums;
-    }
-
-
-    private static final Map<String,CompactStatus> compactStatusMap = new ConcurrentHashMap<>();
-
-    public void checkCompact() {
-        if(Paths.get("/etc/h2/disabled_compact").toFile().exists()){
-            return;
-        }
-        CompactStatus compactStatus = getCompactStatus();
-        long offset = TimeUnit.NANOSECONDS.toSeconds(System.nanoTime() - compactStatus.lastCompact);
-        if (offset > getCompactCheckTime()) {
-            compactStatus.lastCompact = System.nanoTime();
-            if(compactStatus.compacting.compareAndSet(false, true)) {
-                CompletableFuture.runAsync(() -> {
-                    try {
-                        Store store = this.getStore();
-                        store.compactFile(0);
-                    } catch (Exception e) {
-                        trace.error(e, "compactFile fail.");
-                    }
-                    compactStatus.compacting.set(false);
-                });
-            }
-
-        }
-
-    }
-
-    private CompactStatus getCompactStatus() {
-        CompactStatus compactStatus = null;
-        synchronized (compactStatusMap) {
-            compactStatus = compactStatusMap.get(this.databaseName);
-            if(compactStatus==null){
-                compactStatus = new CompactStatus();
-                compactStatusMap.put(this.databaseName, compactStatus);
-            }
-        }
-        return compactStatus;
-    }
-
-
-    private long getCompactCheckTime() {
-        //默认1分钟
-        int compact_check_time = 120;
-        try {
-            compact_check_time = Integer.parseInt(System.getProperty("h2_compact_check_time", String.valueOf(compact_check_time)));
-            File file = Paths.get("/etc/aio/h2_compact_check_time").toFile();
-            if(file.exists()){
-                byte[] bytes = Files.readAllBytes(file.toPath());
-                compact_check_time = Integer.parseInt(new String(bytes, StandardCharsets.UTF_8).trim());
-            }
-        }catch (NumberFormatException e){
-            //ignore NumberFormatException
-        } catch (IOException e) {
-          //throw new RuntimeException(e);
-        }
-      return compact_check_time;
     }
 }

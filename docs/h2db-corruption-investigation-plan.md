@@ -94,7 +94,7 @@
 | `h2/src/main/org/h2/mvstore/RandomAccessStore.java:644` | `moveChunk()` 的顺序是读旧 chunk、写新位置、释放旧空间、更新内存中的 `chunk.block`、写入 layout 元数据。 |
 | `h2/src/main/org/h2/mvstore/db/Store.java:153` | 将 MVStore 文件损坏异常转换为 JDBC `90030`。 |
 | `h2/src/main/org/h2/engine/Database.java:1269` | 数据库关闭时根据 compact mode 判断是否执行关闭 compact。 |
-| `h2/src/main/org/h2/engine/Database.java:2470` | `checkCompact()` 自动 compact 残留路径，用户已说明自动 compact 关闭后仍损坏。 |
+| `h2/src/main/org/h2/engine/Database.java` | Query 后置 `checkCompact()` 自动回收入口已移除；显式 `SHUTDOWN COMPACT` 和关闭流程 compact 仍保留。 |
 | `h2/src/main/org/h2/command/dml/TransactionCommand.java:77` | `SHUTDOWN COMPACT` 命令入口。 |
 
 ## 已完成实验
@@ -235,7 +235,7 @@ java -cp "h2\temp\repro\classes;h2\build\classes\java\main" ReproCompactForensic
 | C-04 | compact 写入顺序 | `store(...)` 已写出部分 layout，但 `sync()` 或后续 header 更新未完成，恢复候选 last chunk 选择到不完整版本。 | `unable to recover a valid set of chunks` 复现样本说明候选集合无法通过校验；具体断点待精确。 | 在 `store(...)` 写 layout root、chunk footer、header 前后分别注入失败。 | P1 |
 | C-05 | compact retention | `compactFile()` / `compactStore()` 临时 `setRetentionTime(0)`，可能允许仍被可恢复旧 layout 引用的 chunk 过早进入复用窗口。 | 源码路径明确；用户样本和实验样本均与旧 block 复用/搬迁有关。 | 对比 retention 为 0 与非 0 的 fault-injection 结果，验证是否减少 invalid live ref。 | P1 |
 | C-06 | 关闭 compact | `SHUTDOWN COMPACT` 或数据库退出 compact 在业务进程关闭、连接池清理、watchdog kill 之间被中断。 | 用户确认存在 `SHUTDOWN COMPACT` 和退出 compact；JDBC shutdown fault injection 可复现 `90030`。 | TCP server + 持续写入 + `SHUTDOWN COMPACT` + kill/restart 压测。 | P1 |
-| C-07 | 自动 compact | 自动 compact 虽已关闭，但历史版本、其他实例或配置残留仍可能走 `Database.checkCompact()`。 | 用户说关闭后仍偶发；当前不作为主线，但要记录验证。 | 增加配置覆盖测试，确认所有入口关闭后不再调用 compact 路径；历史配置作为兼容测试。 | P2 |
+| C-07 | Query 后置自动回收 | 普通 Query/SQL 执行路径如果挂接 `Database.checkCompact()`，会在业务访问后异步触发 `compactFile()`，扩大和业务写入、TCP 连接生命周期、备份脚本的交叠窗口。 | 用户明确要求移除 Query 会引发回收空间的入口；显式 compact 能力保留。 | 移除 `Database.checkCompact()`、`CompactStatus`、`h2_compact_check_time` 和 `/etc/aio/h2_compact_check_time` 触发链；增加测试确认 Query 路径不再暴露自动回收 hook。 | P2 |
 | S-01 | 空间回收 | 关闭自动 compact 后，大量写入再删除会留下很大的 `.mv.db` 文件，即使 live 数据只剩很少。 | `T-NO-AUTO-COMPACT-BLOAT-01` 已稳定复现；`compactFile()` 对纯 dead/free 空间不保证缩文件，离线 full compact 可收缩。 | 保留 bloat 回归和离线 compact 收缩回归；后续讨论产品维护窗口或 H2 层更温和空间回收策略。 | P2 |
 | I-01 | 文件系统故障 | 正常整块写失败或写入乱序，不发生半写，也可能留下不可恢复 chunk 集。 | `partialWrite=false seed=2 stop=242` 已复现。 | 保留 `partialWrite=false` 作为主回归模式，避免修复只覆盖 torn write。 | P0 |
 | I-02 | 文件系统故障 | 半写 / torn write 发生在 chunk、footer、store header 或 layout page。 | `partialWrite=true seed=0 stop=131` 已复现 4 个 invalid live refs；JDBC shutdown 有 `90030` 对照。 | 用 `partialWrite=true` 覆盖 header、footer、layout root、data page 的恢复能力。 | P1 |
@@ -276,7 +276,7 @@ java -cp "h2\temp\repro\classes;h2\build\classes\java\main" ReproCompactForensic
 | T-COMPACT-STORE-ORDER-01 | C-03、C-04、I-03 | 在 `moveChunk()`、`store(...)`、chunk footer、store header 前后注入失败，验证候选 last chunk 可恢复或安全回退。 |
 | T-COMPACT-RETENTION-01 | C-05 | 对比 retention 策略，验证修复后不会过早复用仍可能被旧 layout 引用的 chunk。 |
 | T-SHUTDOWN-COMPACT-01 | C-06、O-04 | TCP 业务写入中执行 `SHUTDOWN COMPACT` 并注入退出，重启后无 `90030`。 |
-| T-AUTO-COMPACT-CONFIG-01 | C-07 | 自动 compact 关闭时，所有配置入口和历史兼容入口均不会触发 `Database.checkCompact()` 路径。 |
+| T-QUERY-NO-AUTO-COMPACT-01 | C-07 | 普通 Query/SQL 路径不再暴露 `Database.checkCompact()` 自动回收 hook，关闭 auto compact 参数下 marker 仍可正常查询和重开读取。 |
 | T-NO-AUTO-COMPACT-BLOAT-01 | S-01 | 关闭自动 compact 后，大量写入再删除只剩 marker，`.mv.db` 文件仍保持明显膨胀且 fill rate 很低。 |
 | T-OFFLINE-COMPACT-SHRINK-01 | S-01 | 对同一膨胀样本执行离线 full compact，生成的新文件明显缩小且 marker 可读。 |
 | T-BACKUP-COMPACT-01 | O-01、O-02 | embedded `SCRIPT DROP TO` 遇到 exclusive mode 不触发破坏性 failedHandler。 |
@@ -300,7 +300,7 @@ java -cp "h2\temp\repro\classes;h2\build\classes\java\main" ReproCompactForensic
 ### 已落地测试入口
 
 - `h2/src/test/org/h2/test/store/TestMVStoreRecoveryCorruption.java`
-  - 覆盖本表登记的所有测试编号：`T-COMPACT-MOVE-01`、`T-TORN-WRITE-01`、`T-COMPACT-OVERWRITE-01`、`T-COMPACT-STORE-ORDER-01`、`T-COMPACT-RETENTION-01`、`T-FSYNC-REORDER-01`、`T-DISK-FULL-01`、`T-RECOVERY-REPOINT-01`、`T-DISCOVER-FALSE-HEADER-01`、`T-DISCOVER-ID-WRAP-01`、`T-RECOVERY-GENERATION-MATCH-01`、`T-RECOVERY-LAYOUT-CYCLE-01`、`T-RECOVERY-PHYSICAL-VIEW-01`、`T-REPAIR-ROBUST-01`、`T-SHUTDOWN-COMPACT-01`、`T-AUTO-COMPACT-CONFIG-01`、`T-NO-AUTO-COMPACT-BLOAT-01`、`T-OFFLINE-COMPACT-SHRINK-01`、`T-BACKUP-COMPACT-01`、`T-BACKUP-FAILED-HANDLER-01`、`T-BACKUP-TIMEOUT-CONSISTENCY-01`、`T-RESTORE-LIVE-01`、`T-CONNECTION-LIFECYCLE-01`、`T-UNSUPPORTED-MULTIWRITER-01`、`T-DATA-MARKER-REGRESSION-01`。
+  - 覆盖本表登记的所有测试编号：`T-COMPACT-MOVE-01`、`T-TORN-WRITE-01`、`T-COMPACT-OVERWRITE-01`、`T-COMPACT-STORE-ORDER-01`、`T-COMPACT-RETENTION-01`、`T-FSYNC-REORDER-01`、`T-DISK-FULL-01`、`T-RECOVERY-REPOINT-01`、`T-DISCOVER-FALSE-HEADER-01`、`T-DISCOVER-ID-WRAP-01`、`T-RECOVERY-GENERATION-MATCH-01`、`T-RECOVERY-LAYOUT-CYCLE-01`、`T-RECOVERY-PHYSICAL-VIEW-01`、`T-REPAIR-ROBUST-01`、`T-SHUTDOWN-COMPACT-01`、`T-QUERY-NO-AUTO-COMPACT-01`、`T-NO-AUTO-COMPACT-BLOAT-01`、`T-OFFLINE-COMPACT-SHRINK-01`、`T-BACKUP-COMPACT-01`、`T-BACKUP-FAILED-HANDLER-01`、`T-BACKUP-TIMEOUT-CONSISTENCY-01`、`T-RESTORE-LIVE-01`、`T-CONNECTION-LIFECYCLE-01`、`T-UNSUPPORTED-MULTIWRITER-01`、`T-DATA-MARKER-REGRESSION-01`。
   - 主要 compact 样本参数：整块写 `seed=2`、`powerFailureCountdown=242`、`partialWrite=false`；半写样本 `seed=1`、`powerFailureCountdown=142`、`partialWrite=true`。
   - 默认运行时作为正式修复验收测试，修复实现后当前版本已通过，并校验 `data[-1]` marker 或 JDBC `MARKER` 表未丢。
   - 带 `-Dh2.test.mvStoreRecoveryCorruption.characterize=true` 运行时，修复前用于稳定复现已知恢复失败和 `MVStoreTool.repair` NPE；修复实现后当前版本也已通过。
@@ -320,7 +320,7 @@ java -cp "h2\temp\repro\classes;h2\build\classes\java\main" ReproCompactForensic
 | C-04 | T-COMPACT-STORE-ORDER-01 | 已补修复验收入口，覆盖 layout/header/footer 写出顺序窗口，当前已通过 | 覆盖 layout、footer、header 部分写出或乱序写出后的候选恢复。 |
 | C-05 | T-COMPACT-RETENTION-01 | 已补修复验收入口，对比 retention 非 0 时 compact 搬迁失败窗口，当前已通过 | 验证 retention 策略不会过早复用仍可能被旧 layout 引用的 chunk。 |
 | C-06 | T-SHUTDOWN-COMPACT-01、T-DATA-MARKER-REGRESSION-01 | 已补 TCP `SHUTDOWN COMPACT` 边界入口，characterize 模式通过 | TCP 写入中 shutdown compact 注入退出后可恢复且 marker 不越界丢失。 |
-| C-07 | T-AUTO-COMPACT-CONFIG-01 | 已补配置边界入口，验证显式关闭自动 compact 时 marker 可重开读取 | 自动 compact 关闭配置覆盖所有入口。 |
+| C-07 | T-QUERY-NO-AUTO-COMPACT-01 | 已补 Query 后置自动回收 hook 移除验收入口，验证 `Database.checkCompact()` 不再存在，普通查询和 marker 重开读取正常 | Query/SQL 路径不再触发自动空间回收；显式 compact 入口单独验证。 |
 | S-01 | T-NO-AUTO-COMPACT-BLOAT-01、T-OFFLINE-COMPACT-SHRINK-01 | 已补空间膨胀复现和离线 compact 收缩验收入口，当前已通过 | 关闭自动 compact 时文件可明显膨胀；离线 full compact 能收缩并保留数据。 |
 | I-01 | T-COMPACT-MOVE-01、T-FSYNC-REORDER-01 | 已补 compact move 修复验收入口；非 compact 乱序写入入口作为对照通过 | 整块写失败或乱序落盘下恢复行为可验证。 |
 | I-02 | T-TORN-WRITE-01 | 已补修复验收入口，`partialWrite=true seed=1 stop=142` 当前已通过 | 半写覆盖 header/footer/layout/data page 后有确定断言。 |
@@ -485,7 +485,7 @@ java -cp "h2\temp\repro\classes;h2\build\classes\java\main" org.h2.mvstore.Recov
 - 生产中的退出 compact 具体由哪段业务生命周期触发，是否与 watchdog/restart 管理器重叠？
 - `H2DBTool.autoBackup` 的 `failedHandler` 在实际产品中会做什么？是否会触发节点下线、进程退出、删除 token、自动恢复？
 - 损坏前后是否有服务异常退出、kill、系统重启、断电、杀进程、容器停止超时？
-- 自动 compact 虽已关闭，是否所有运行实例和历史版本都已同步关闭？
+- Query 后置自动回收入口已移除后，是否所有运行实例和历史版本都已升级到同一行为？
 - 是否存在定期 `SHUTDOWN COMPACT` 或人工维护脚本在业务仍有连接时执行？
 - 是否有更多坏库样本可验证是否都存在“live chunk 引用错位”。
 - 正式修复中如何实现“恢复期间的物理 chunk 读取视图”，既打破 layout 遍历循环依赖，又不让 header-only chunk 覆盖 layout 动态元数据？

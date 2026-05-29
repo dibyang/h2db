@@ -24,6 +24,7 @@ import java.util.HashMap;
 import java.util.Random;
 
 import org.h2.api.ErrorCode;
+import org.h2.engine.Database;
 import org.h2.mvstore.Chunk;
 import org.h2.mvstore.DataUtils;
 import org.h2.mvstore.FileStore;
@@ -88,7 +89,7 @@ public class TestMVStoreRecoveryCorruption extends TestDb {
         runScenario("T-RECOVERY-PHYSICAL-VIEW-01", true, this::testPhysicalViewDoesNotReplaceLayoutMetadata);
         runScenario("T-REPAIR-ROBUST-01", true, this::testRepairDoesNotThrowOnCompactMoveSample);
         runScenario("T-SHUTDOWN-COMPACT-01", false, this::testTcpShutdownCompactKeepsCommittedData);
-        runScenario("T-AUTO-COMPACT-CONFIG-01", false, this::testAutoCompactConfigurationBoundary);
+        runScenario("T-QUERY-NO-AUTO-COMPACT-01", false, this::testQueryDoesNotExposeAutomaticCompactHook);
         runScenario("T-NO-AUTO-COMPACT-BLOAT-01", false, this::testNoAutoCompactCanLeaveBloatedFile);
         runScenario("T-OFFLINE-COMPACT-SHRINK-01", false, this::testOfflineCompactShrinksBloatedFile);
         runScenario("T-BACKUP-COMPACT-01", false, this::testEmbeddedScriptWhileTcpDatabaseIsOpen);
@@ -337,12 +338,21 @@ public class TestMVStoreRecoveryCorruption extends TestDb {
         }
     }
 
-    private void testAutoCompactConfigurationBoundary() throws SQLException {
-        String db = "autoCompactConfig";
+    private void testQueryDoesNotExposeAutomaticCompactHook() throws SQLException {
+        for (Method method : Database.class.getDeclaredMethods()) {
+            assertFalse("Query-triggered compact hook must not be present",
+                    "checkCompact".equals(method.getName()));
+        }
+
+        String db = "queryNoAutoCompact";
         deleteDb(db);
         try (Connection conn = getConnection(db + ";AUTO_COMPACT_FILL_RATE=0;MAX_COMPACT_TIME=0")) {
             Statement stat = conn.createStatement();
             createMarkerTable(stat);
+            try (ResultSet rs = stat.executeQuery("SELECT COUNT(*) FROM MARKER")) {
+                rs.next();
+                assertEquals(1, rs.getInt(1));
+            }
             stat.execute("CHECKPOINT SYNC");
         }
         assertJdbcMarker(db + ";AUTO_COMPACT_FILL_RATE=0;MAX_COMPACT_TIME=0", 1);

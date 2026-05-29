@@ -18,11 +18,13 @@ public final class MVStoreSpaceReclamationOptions {
     final boolean compress;
     final boolean verifyAfterCompact;
     final boolean keepBackup;
+    final boolean refreshShadowIfSourceChanged;
 
     private MVStoreSpaceReclamationOptions(Builder builder) {
         this.compress = builder.compress;
         this.verifyAfterCompact = builder.verifyAfterCompact;
         this.keepBackup = builder.keepBackup;
+        this.refreshShadowIfSourceChanged = builder.refreshShadowIfSourceChanged;
     }
 
     /**
@@ -62,12 +64,22 @@ public final class MVStoreSpaceReclamationOptions {
     }
 
     /**
+     * prepared shadow 过期时是否降级为维护态 full copy。
+     *
+     * @return true 表示允许降级重建 shadow 并替换
+     */
+    public boolean isRefreshShadowIfSourceChanged() {
+        return refreshShadowIfSourceChanged;
+    }
+
+    /**
      * MVStore 空间回收维护操作配置构造器。
      */
     public static final class Builder {
         private boolean compress;
         private boolean verifyAfterCompact = true;
         private boolean keepBackup;
+        private boolean refreshShadowIfSourceChanged;
 
         private Builder() {
         }
@@ -102,6 +114,17 @@ public final class MVStoreSpaceReclamationOptions {
          */
         public Builder keepBackup(boolean keepBackup) {
             this.keepBackup = keepBackup;
+            return this;
+        }
+
+        /**
+         * 设置 prepared shadow 过期时是否降级为维护态 full copy。
+         *
+         * @param refreshShadowIfSourceChanged true 表示允许降级
+         * @return 当前构造器
+         */
+        public Builder refreshShadowIfSourceChanged(boolean refreshShadowIfSourceChanged) {
+            this.refreshShadowIfSourceChanged = refreshShadowIfSourceChanged;
             return this;
         }
 

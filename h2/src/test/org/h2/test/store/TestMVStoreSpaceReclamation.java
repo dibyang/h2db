@@ -53,6 +53,7 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         runScenario("T-ONLINE-COMPACT-SWITCH-SHADOW-01", this::testSwitchToPreparedShadow);
         runScenario("T-ONLINE-COMPACT-CATCHUP-WRITES-01", this::testSwitchRejectsChangedSource);
         runScenario("T-ONLINE-COMPACT-CATCHUP-FEASIBILITY-01", this::testCatchUpFeasibilityAnalysis);
+        runScenario("T-ONLINE-COMPACT-FULL-COPY-FALLBACK-01", this::testFullCopyFallbackForChangedSource);
         runScenario("T-ONLINE-COMPACT-SOURCE-FINGERPRINT-01", this::testManifestRecordsSourceFingerprint);
         runScenario("T-ONLINE-COMPACT-DIAGNOSTICS-01", this::testReclamationDiagnostics);
         runScenario("T-ONLINE-COMPACT-MANIFEST-RECOVER-01", this::testManifestRecoveryRestoresSource);
@@ -232,6 +233,23 @@ public class TestMVStoreSpaceReclamation extends TestBase {
             assertFalse(changed.isVersionScanCatchUpAvailable());
             assertTrue(changed.isFullCopyRequired());
             assertTrue(changed.getReason().contains("version-scan catch-up is not available"));
+        } finally {
+            deleteFilesUnlessKept(base);
+        }
+    }
+
+    private void testFullCopyFallbackForChangedSource() {
+        String base = mvStoreFile("fullCopyFallbackForChangedSource");
+        try {
+            createBloatedStore(base);
+            MVStoreSpaceReclamation.compactToShadow(base, MVStoreSpaceReclamationOptions.DEFAULT);
+            appendExtraMarker(base);
+            MVStoreSpaceReclamationResult result = MVStoreSpaceReclamation.switchToShadow(base,
+                    MVStoreSpaceReclamationOptions.builder().refreshShadowIfSourceChanged(true).build());
+            assertTrue(result.isReplaced());
+            assertMarkerAndExtraReadable(base);
+            assertFalse(FileUtils.exists(base + ".reclaim.shadow"));
+            assertFalse(FileUtils.exists(base + ".reclaim.manifest"));
         } finally {
             deleteFilesUnlessKept(base);
         }

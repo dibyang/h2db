@@ -148,7 +148,15 @@ public final class MVStoreSpaceReclamation {
         }
         long compactedSize = FileUtils.size(shadowFileName);
         try {
-            SourceFingerprint sourceFingerprint = assertSourceUnchanged(fileName);
+            SourceFingerprint sourceFingerprint;
+            try {
+                sourceFingerprint = assertSourceUnchanged(fileName);
+            } catch (MVStoreException e) {
+                if (options.refreshShadowIfSourceChanged) {
+                    return compactClosedStore(fileName, options);
+                }
+                throw e;
+            }
             if (options.verifyAfterCompact) {
                 verifyStore(shadowFileName);
             }

@@ -63,7 +63,7 @@ production-grade implementation.
 
 ## Current Implementation Status
 
-This branch has completed internal phases 1 through 9. The scope is still a
+This branch has completed internal phases 1 through 10. The scope is still a
 controlled maintenance entry point: no SQL exposure, no automatic scheduling,
 and no `.mv.db` format change.
 
@@ -78,14 +78,15 @@ and no `.mv.db` format change.
 | Phase 7 | Done | The manifest records source size and last-modified time; `switchToShadow()` rejects switching when the source file changed; `T-ONLINE-COMPACT-CATCHUP-WRITES-01` fixes this conservative safety behavior. |
 | Phase 8 | Done | The manifest adds a SHA-256 source-content fingerprint; `switchToShadow()` validates size, last-modified time, and digest to reduce false switches from same-size changes or timestamp granularity. |
 | Phase 9 | Done | `analyzePreparedShadow()` reports whether a prepared shadow can be switched, whether version-scan catch-up is available, and whether full-copy fallback is required. Conclusion: version-scan catch-up is not available in this file-level shadow compact stage. |
+| Phase 10 | Done | Added the explicit `refreshShadowIfSourceChanged` fallback option; when a prepared shadow is stale, the code can rebuild it and run maintenance full copy without losing new data. |
 
-Remaining productization work after phase 9 includes public entry-point review,
-full-copy fallback, TCP server behavior, backup/restore exclusion, long
+Remaining productization work after phase 10 includes public entry-point review,
+TCP server behavior, backup/restore exclusion, long
 transaction and slow-disk stress tests, user-visible logging rules, and the
 separate S2 online chunk vacuum RFC.
-After phase 9, writes during copy are no longer silently overwritten; version-scan
+After phase 10, writes during copy are no longer silently overwritten; version-scan
 incremental catch-up is explicitly unavailable in the current stage, so S1
-continues with a diagnosable full-copy fallback path.
+continues with an explicit full-copy fallback path.
 
 ## P0: Documents and Review
 
@@ -127,6 +128,7 @@ Test ids:
 | `T-ONLINE-COMPACT-VERIFY-FAIL-01` | Verify failed validation does not replace the old store. |
 | `T-ONLINE-COMPACT-CATCHUP-WRITES-01` | Before real catch-up exists, verify switching is rejected when the source changes, avoiding silent data loss. |
 | `T-ONLINE-COMPACT-CATCHUP-FEASIBILITY-01` | Verify changed sources analyze to full-copy fallback instead of unavailable version-scan catch-up. |
+| `T-ONLINE-COMPACT-FULL-COPY-FALLBACK-01` | Verify explicit fallback rebuilds the shadow and preserves new data after the source changes. |
 | `T-ONLINE-COMPACT-SOURCE-FINGERPRINT-01` | Verify the manifest records source size, last-modified time, and a SHA-256 content fingerprint. |
 | `T-ONLINE-COMPACT-CRASH-BEFORE-SWITCH-01` | Verify crash before switch keeps the old store recoverable. |
 | `T-ONLINE-COMPACT-CRASH-DURING-SWITCH-01` | Verify crash during switch can recover to the old or new store. |

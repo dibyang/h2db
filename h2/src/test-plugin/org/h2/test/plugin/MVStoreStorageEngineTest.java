@@ -108,6 +108,7 @@ public class MVStoreStorageEngineTest {
     public void reportsPersistentAndMemoryMvStoreFlags() throws Exception {
         try (Connection conn = DriverManager.getConnection(fileUrl("persistent"), "sa", "")) {
             Database db = database(conn);
+            assertTrue(MVStoreStorageEngineProvider.ID.equals(db.getStorageEngineId()));
             assertTrue(db.getStore().getMvStore().isPersistent());
             assertTrue(db.getStorageEngine().supports(PluginCapability.STORAGE_PERSISTENT));
         }

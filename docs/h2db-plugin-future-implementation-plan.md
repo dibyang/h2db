@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | F0 | 建立后续阶段可追踪计划 | [x] |
 | F1 | 插件诊断与 registry 可观测性 | [x] |
-| F2 | storage engine id 持久化边界 | [ ] |
+| F2 | storage engine id 持久化边界 | [x] |
 | F3 | 缺失 storage 插件处理策略 | [ ] |
 | F4 | 显式外部插件加载 | [ ] |
 | F5 | 收敛第三方 Storage SPI 最小面 | [ ] |
@@ -52,16 +52,16 @@
 
 ### F2 Storage Engine Id 持久化边界
 
-- [ ] 新增 storage engine id 解析策略，旧库缺省为 `mvstore`。
-- [ ] 新增显式 storage engine id 与数据库实际 id 的校验入口。
-- [ ] 文档化真正磁盘格式持久化仍需单独 RFC。
-- [ ] 增加 JUnit 覆盖旧库默认、显式不匹配、回滚开关。
+- [x] 新增 storage engine id 解析策略，旧库缺省为 `mvstore`。
+- [x] 新增显式 storage engine id 与数据库实际 id 的校验入口。
+- [x] 文档化真正磁盘格式持久化仍需单独 RFC。
+- [x] 增加 JUnit 覆盖旧库默认、显式不匹配、回滚开关。
 
 测试编号：
 
-- [ ] `T-PLUGIN-F2-OLD-DB-DEFAULT-01`
-- [ ] `T-PLUGIN-F2-STORAGE-ID-MISMATCH-01`
-- [ ] `T-PLUGIN-F2-ROLLBACK-01`
+- [x] `T-PLUGIN-F2-OLD-DB-DEFAULT-01`
+- [x] `T-PLUGIN-F2-STORAGE-ID-MISMATCH-01`
+- [x] `T-PLUGIN-F2-ROLLBACK-01`
 
 ### F3 缺失 Storage 插件处理策略
 

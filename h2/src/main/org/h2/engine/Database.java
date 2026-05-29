@@ -207,6 +207,7 @@ public final class Database implements DataHandler, CastDataProvider {
     private int defaultTableType = Table.TYPE_CACHED;
     private final DbSettings dbSettings;
     private final PluginRegistry pluginRegistry = new PluginRegistry();
+    private final String storageEngineId;
     private final StorageEngine storageEngine;
     private final Store store;
     private boolean allowBuiltinAliasOverride;
@@ -330,8 +331,10 @@ public final class Database implements DataHandler, CastDataProvider {
             BuiltinPlugins.register(pluginRegistry);
             starting = true;
             if (dbSettings.mvStore) {
+                storageEngineId = StorageEngineResolver.resolveRequested(dbSettings);
+                StorageEngineResolver.validateMatch(storageEngineId, null);
                 StorageEngineProvider provider = (StorageEngineProvider) pluginRegistry.findProvider(
-                        StorageEngineProvider.TYPE, MVStoreStorageEngineProvider.ID);
+                        StorageEngineProvider.TYPE, storageEngineId);
                 storageEngine = provider.open(new DatabaseStorageEngineContext(ci.getFileEncryptionKey()));
                 store = ((MVStoreStorageEngine) storageEngine).getStore();
             } else {
@@ -451,6 +454,15 @@ public final class Database implements DataHandler, CastDataProvider {
      */
     public StorageEngine getStorageEngine() {
         return storageEngine;
+    }
+
+    /**
+     * 获取当前数据库解析出的 storage engine id。
+     *
+     * @return storage engine id
+     */
+    public String getStorageEngineId() {
+        return storageEngineId;
     }
 
     /**

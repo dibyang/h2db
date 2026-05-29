@@ -268,6 +268,13 @@ public class DbSettings extends SettingsBase {
     public final String defaultTableEngine = get("DEFAULT_TABLE_ENGINE", null);
 
     /**
+     * Database setting <code>STORAGE_ENGINE</code>
+     * (default: mvstore).
+     * The database storage engine provider id to use when opening a database.
+     */
+    public final String storageEngine = get("STORAGE_ENGINE", StorageEngineResolver.DEFAULT_STORAGE_ENGINE_ID);
+
+    /**
      * Database setting <code>MV_STORE</code>
      * (default: true).
      * Use the MVStore storage engine.

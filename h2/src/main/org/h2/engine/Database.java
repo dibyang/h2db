@@ -334,11 +334,16 @@ public final class Database implements DataHandler, CastDataProvider {
             starting = true;
             if (dbSettings.mvStore) {
                 storageEngineId = StorageEngineResolver.resolveRequested(dbSettings);
-                StorageEngineResolver.validateMatch(storageEngineId, null);
+                String persistedStorageEngineId = persistent
+                        ? StorageEngineResolver.readPersistedStorageEngineId(databaseName) : null;
+                StorageEngineResolver.validateMatch(storageEngineId, persistedStorageEngineId);
                 StorageEngineProvider provider = StorageEngineResolver.requireStorageProvider(pluginRegistry,
                         storageEngineId, readOnly);
                 storageEngine = provider.open(new DatabaseStorageEngineContext(ci.getFileEncryptionKey()));
                 store = ((MVStoreStorageEngine) storageEngine).getStore();
+                if (persistent && !readOnly && persistedStorageEngineId == null) {
+                    StorageEngineResolver.writePersistedStorageEngineId(databaseName, storageEngineId);
+                }
             } else {
                 throw new UnsupportedOperationException();
             }

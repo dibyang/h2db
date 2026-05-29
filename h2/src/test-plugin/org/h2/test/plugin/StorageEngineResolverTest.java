@@ -10,17 +10,22 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.File;
+import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import org.h2.engine.StorageEngineResolver;
 import org.h2.message.DbException;
 import org.h2.mvstore.db.MVStoreStorageEngineProvider;
+import org.h2.store.fs.FileUtils;
 import org.junit.jupiter.api.Test;
 
 /**
  * storage engine id 解析边界的 JUnit 验证。
  */
 public class StorageEngineResolverTest {
+
+    private final String baseDir = new File("build/plugin-db/storage-id").getAbsolutePath().replace('\\', '/');
 
     /**
      * T-PLUGIN-F2-OLD-DB-DEFAULT-01.
@@ -49,6 +54,47 @@ public class StorageEngineResolverTest {
     @Test
     public void validatesDefaultMvStoreForRollbackPath() {
         StorageEngineResolver.validateMatch(MVStoreStorageEngineProvider.ID, null);
+    }
+
+    /**
+     * T-PLUGIN-R2-STORAGE-ID-PERSIST-01.
+     */
+    @Test
+    public void persistsStorageEngineIdBesideDatabase() throws Exception {
+        String databaseName = baseDir + "/persistedId";
+        FileUtils.deleteRecursive(baseDir, true);
+        try {
+            try (Connection conn = DriverManager.getConnection("jdbc:h2:" + databaseName, "sa", "")) {
+                conn.createStatement().execute("create table test(id int)");
+            }
+
+            assertEquals(MVStoreStorageEngineProvider.ID,
+                    StorageEngineResolver.readPersistedStorageEngineId(databaseName));
+        } finally {
+            FileUtils.deleteRecursive(baseDir, true);
+        }
+    }
+
+    /**
+     * T-PLUGIN-R2-UPGRADE-ROLLBACK-01.
+     */
+    @Test
+    public void rejectsStorageEngineMismatchFromPersistedMetadata() throws Exception {
+        String databaseName = baseDir + "/mismatch";
+        FileUtils.deleteRecursive(baseDir, true);
+        try {
+            try (Connection conn = DriverManager.getConnection("jdbc:h2:" + databaseName, "sa", "")) {
+                conn.createStatement().execute("create table test(id int)");
+            }
+
+            SQLException e = assertThrows(SQLException.class, () ->
+                    DriverManager.getConnection("jdbc:h2:" + databaseName + ";STORAGE_ENGINE=other", "sa", ""));
+            assertTrue(e.getMessage().contains("Storage engine mismatch"));
+            assertTrue(e.getMessage().contains("requested=other"));
+            assertTrue(e.getMessage().contains("persisted=mvstore"));
+        } finally {
+            FileUtils.deleteRecursive(baseDir, true);
+        }
     }
 
     /**

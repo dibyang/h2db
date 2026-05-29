@@ -5,10 +5,15 @@
  */
 package org.h2.engine;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+
 import org.h2.api.PluginProvider;
 import org.h2.api.StorageEngineProvider;
 import org.h2.message.DbException;
 import org.h2.mvstore.db.MVStoreStorageEngineProvider;
+import org.h2.store.fs.FileUtils;
 
 /**
  * 解析数据库 storage engine id 的阶段性入口。
@@ -23,6 +28,8 @@ public final class StorageEngineResolver {
      * 旧库和缺省新库使用的 storage engine id。
      */
     public static final String DEFAULT_STORAGE_ENGINE_ID = MVStoreStorageEngineProvider.ID;
+
+    private static final String STORAGE_METADATA_SUFFIX = ".storage";
 
     private StorageEngineResolver() {
     }
@@ -90,6 +97,60 @@ public final class StorageEngineResolver {
      */
     public static boolean isMissingStorageReadOnlyDowngradeAllowed() {
         return false;
+    }
+
+    /**
+     * 读取数据库旁路 storage 元数据。
+     *
+     * @param databaseName 数据库路径
+     * @return 已持久化的 storage engine id；不存在时返回 null
+     */
+    public static String readPersistedStorageEngineId(String databaseName) {
+        String fileName = storageMetadataFileName(databaseName);
+        if (!FileUtils.exists(fileName)) {
+            return null;
+        }
+        try (InputStream in = FileUtils.newInputStream(fileName)) {
+            byte[] data = new byte[(int) FileUtils.size(fileName)];
+            int offset = 0;
+            while (offset < data.length) {
+                int read = in.read(data, offset, data.length - offset);
+                if (read < 0) {
+                    break;
+                }
+                offset += read;
+            }
+            String value = new String(data, 0, offset, "UTF-8").trim();
+            return value.isEmpty() ? null : value;
+        } catch (IOException e) {
+            throw DbException.convertIOException(e, fileName);
+        }
+    }
+
+    /**
+     * 写入数据库旁路 storage 元数据。
+     *
+     * @param databaseName 数据库路径
+     * @param storageEngineId storage engine id
+     */
+    public static void writePersistedStorageEngineId(String databaseName, String storageEngineId) {
+        String fileName = storageMetadataFileName(databaseName);
+        try (OutputStream out = FileUtils.newOutputStream(fileName, false)) {
+            out.write(storageEngineId.getBytes("UTF-8"));
+            out.write('\n');
+        } catch (IOException e) {
+            throw DbException.convertIOException(e, fileName);
+        }
+    }
+
+    /**
+     * 获取 storage 元数据旁路文件名。
+     *
+     * @param databaseName 数据库路径
+     * @return 元数据文件名
+     */
+    public static String storageMetadataFileName(String databaseName) {
+        return databaseName + STORAGE_METADATA_SUFFIX;
     }
 
     private static DbException missingStorageProvider(String storageEngineId, boolean readOnly) {

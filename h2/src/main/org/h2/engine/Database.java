@@ -41,7 +41,7 @@ import org.h2.message.TraceSystem;
 import org.h2.mode.DefaultNullOrdering;
 import org.h2.mode.PgCatalogSchema;
 import org.h2.mvstore.MVStoreException;
-import org.h2.mvstore.db.MVStoreStorageEngine;
+import org.h2.mvstore.db.MVStoreBackedStorageEngine;
 import org.h2.mvstore.db.MVStoreStorageEngineProvider;
 import org.h2.mvstore.db.LobStorageMap;
 import org.h2.mvstore.db.Store;
@@ -340,7 +340,11 @@ public final class Database implements DataHandler, CastDataProvider {
                 StorageEngineProvider provider = StorageEngineResolver.requireStorageProvider(pluginRegistry,
                         storageEngineId, readOnly);
                 storageEngine = provider.open(new DatabaseStorageEngineContext(ci.getFileEncryptionKey()));
-                store = ((MVStoreStorageEngine) storageEngine).getStore();
+                if (!(storageEngine instanceof MVStoreBackedStorageEngine)) {
+                    throw DbException.getUnsupportedException("Storage engine is not MVStore-backed: "
+                            + storageEngineId);
+                }
+                store = ((MVStoreBackedStorageEngine) storageEngine).getStore();
                 if (persistent && !readOnly && persistedStorageEngineId == null) {
                     StorageEngineResolver.writePersistedStorageEngineId(databaseName, storageEngineId);
                 }

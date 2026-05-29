@@ -15,7 +15,7 @@ import org.h2.table.Table;
 /**
  * 内置 MVStore 表引擎 provider。
  * <p>
- * 当前 provider 只适配内置 MVStore storage engine，并委托现有
+ * 当前 provider 适配 MVStore-backed storage engine，并委托现有
  * {@link Store#createTable(CreateTableData)} 完成真实建表。
  */
 public final class MVStoreTableEngineProvider implements TableEngineProvider {
@@ -42,9 +42,9 @@ public final class MVStoreTableEngineProvider implements TableEngineProvider {
 
     @Override
     public Table createTable(CreateTableData data, TableEngineContext context) {
-        if (!(context.getStorageEngine() instanceof MVStoreStorageEngine)) {
-            throw DbException.getUnsupportedException("MVStore table provider requires MVStore storage engine");
+        if (!(context.getStorageEngine() instanceof MVStoreBackedStorageEngine)) {
+            throw DbException.getUnsupportedException("MVStore table provider requires MVStore-backed storage engine");
         }
-        return ((MVStoreStorageEngine) context.getStorageEngine()).getStore().createTable(data);
+        return ((MVStoreBackedStorageEngine) context.getStorageEngine()).getStore().createTable(data);
     }
 }

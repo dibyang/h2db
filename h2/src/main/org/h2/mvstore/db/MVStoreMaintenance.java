@@ -6,6 +6,7 @@
 package org.h2.mvstore.db;
 
 import org.h2.api.PluginCapability;
+import org.h2.api.StorageEngine;
 import org.h2.api.StorageMaintenance;
 import org.h2.api.StorageMaintenanceResult;
 
@@ -17,9 +18,9 @@ import org.h2.api.StorageMaintenanceResult;
  */
 final class MVStoreMaintenance implements StorageMaintenance {
 
-    private final MVStoreStorageEngine engine;
+    private final StorageEngine engine;
 
-    MVStoreMaintenance(MVStoreStorageEngine engine) {
+    MVStoreMaintenance(StorageEngine engine) {
         this.engine = engine;
     }
 

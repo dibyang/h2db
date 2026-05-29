@@ -23,6 +23,7 @@ import org.h2.engine.SessionLocal;
 import org.h2.jdbc.JdbcConnection;
 import org.h2.mvstore.db.MVStoreStorageEngine;
 import org.h2.mvstore.db.MVStoreStorageEngineProvider;
+import org.h2.mvstore.db.SecondaryMVStoreStorageEngineProvider;
 import org.h2.store.fs.FileUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -116,6 +117,42 @@ public class MVStoreStorageEngineTest {
             Database db = database(conn);
             assertFalse(db.getStore().getMvStore().isPersistent());
             assertTrue(db.getStorageEngine().supports(PluginCapability.STORAGE_PERSISTENT));
+        }
+    }
+
+    /**
+     * T-PLUGIN-R3-SECOND-STORAGE-CRUD-01.
+     */
+    @Test
+    public void opensDatabaseWithSecondaryStorageEngine() throws Exception {
+        String url = fileUrl("secondary") + ";STORAGE_ENGINE=" + SecondaryMVStoreStorageEngineProvider.ID;
+        try (Connection conn = DriverManager.getConnection(url, "sa", "");
+                Statement stat = conn.createStatement()) {
+            Database db = database(conn);
+            assertTrue(SecondaryMVStoreStorageEngineProvider.ID.equals(db.getStorageEngineId()));
+            assertTrue(SecondaryMVStoreStorageEngineProvider.ID.equals(db.getStorageEngine().getEngineId()));
+            assertNotNull(db.getPluginRegistry().findProvider(StorageEngineProvider.TYPE,
+                    SecondaryMVStoreStorageEngineProvider.ID));
+            stat.execute("create table test(id int primary key, name varchar)");
+            stat.execute("insert into test values(1, 'secondary')");
+        }
+
+        try (Connection conn = DriverManager.getConnection(url, "sa", "");
+                ResultSet rs = conn.createStatement().executeQuery("select name from test where id = 1")) {
+            assertTrue(rs.next());
+            assertTrue("secondary".equals(rs.getString(1)));
+        }
+    }
+
+    /**
+     * T-PLUGIN-R3-COMPAT-SQL-01.
+     */
+    @Test
+    public void defaultStorageEngineStillUsesMvStore() throws Exception {
+        try (Connection conn = DriverManager.getConnection(fileUrl("defaultAfterSecondary"), "sa", "")) {
+            Database db = database(conn);
+            assertTrue(MVStoreStorageEngineProvider.ID.equals(db.getStorageEngineId()));
+            assertTrue(db.getStorageEngine() instanceof MVStoreStorageEngine);
         }
     }
 

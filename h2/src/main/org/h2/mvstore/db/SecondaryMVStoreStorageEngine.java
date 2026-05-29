@@ -9,18 +9,15 @@ import org.h2.api.StorageEngineContext;
 import org.h2.api.StorageMaintenance;
 
 /**
- * MVStore 存储引擎适配器。
- * <p>
- * 该类是插件化改造的过渡层，内部仍持有现有 {@link Store}，用于保持
- * {@code Database.getStore()} 以及现有 MVTable 调用链兼容。
+ * 第二个 MVStore-backed storage engine 实例。
  */
-public final class MVStoreStorageEngine implements MVStoreBackedStorageEngine {
+final class SecondaryMVStoreStorageEngine implements MVStoreBackedStorageEngine {
 
-    private final MVStoreStorageEngineProvider provider;
+    private final SecondaryMVStoreStorageEngineProvider provider;
     private final Store store;
     private final StorageMaintenance maintenance;
 
-    MVStoreStorageEngine(StorageEngineContext context, MVStoreStorageEngineProvider provider) {
+    SecondaryMVStoreStorageEngine(StorageEngineContext context, SecondaryMVStoreStorageEngineProvider provider) {
         this.provider = provider;
         this.store = new Store(context.getDatabase(), context.getFilePasswordHash());
         this.maintenance = new MVStoreMaintenance(this);
@@ -28,7 +25,7 @@ public final class MVStoreStorageEngine implements MVStoreBackedStorageEngine {
 
     @Override
     public String getEngineId() {
-        return MVStoreStorageEngineProvider.ID;
+        return SecondaryMVStoreStorageEngineProvider.ID;
     }
 
     @Override
@@ -51,11 +48,7 @@ public final class MVStoreStorageEngine implements MVStoreBackedStorageEngine {
         return maintenance;
     }
 
-    /**
-     * 获取现有 MVStore Store。
-     *
-     * @return 现有 Store 实例
-     */
+    @Override
     public Store getStore() {
         return store;
     }

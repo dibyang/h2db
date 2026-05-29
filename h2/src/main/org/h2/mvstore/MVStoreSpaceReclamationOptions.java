@@ -20,6 +20,7 @@ public final class MVStoreSpaceReclamationOptions {
     final boolean keepBackup;
     final boolean refreshShadowIfSourceChanged;
     final long ioDelayMillis;
+    final MVStoreSpaceReclamationListener diagnosticListener;
 
     private MVStoreSpaceReclamationOptions(Builder builder) {
         this.compress = builder.compress;
@@ -27,6 +28,7 @@ public final class MVStoreSpaceReclamationOptions {
         this.keepBackup = builder.keepBackup;
         this.refreshShadowIfSourceChanged = builder.refreshShadowIfSourceChanged;
         this.ioDelayMillis = builder.ioDelayMillis;
+        this.diagnosticListener = builder.diagnosticListener;
     }
 
     /**
@@ -84,6 +86,15 @@ public final class MVStoreSpaceReclamationOptions {
     }
 
     /**
+     * 诊断事件监听器。
+     *
+     * @return 监听器，未设置时为 null
+     */
+    public MVStoreSpaceReclamationListener getDiagnosticListener() {
+        return diagnosticListener;
+    }
+
+    /**
      * MVStore 空间回收维护操作配置构造器。
      */
     public static final class Builder {
@@ -92,6 +103,7 @@ public final class MVStoreSpaceReclamationOptions {
         private boolean keepBackup;
         private boolean refreshShadowIfSourceChanged;
         private long ioDelayMillis;
+        private MVStoreSpaceReclamationListener diagnosticListener;
 
         private Builder() {
         }
@@ -148,6 +160,17 @@ public final class MVStoreSpaceReclamationOptions {
          */
         public Builder ioDelayMillis(long ioDelayMillis) {
             this.ioDelayMillis = ioDelayMillis;
+            return this;
+        }
+
+        /**
+         * 设置诊断事件监听器。
+         *
+         * @param diagnosticListener 诊断事件监听器
+         * @return 当前构造器
+         */
+        public Builder diagnosticListener(MVStoreSpaceReclamationListener diagnosticListener) {
+            this.diagnosticListener = diagnosticListener;
             return this;
         }
 

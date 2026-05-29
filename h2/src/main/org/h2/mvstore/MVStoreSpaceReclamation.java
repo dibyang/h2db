@@ -27,11 +27,39 @@ import org.h2.util.StringUtils;
  */
 public final class MVStoreSpaceReclamation {
 
+    /**
+     * 当前公开 API 稳定级别。
+     */
+    public static final String API_STATUS = "EXPERIMENTAL_MAINTENANCE_API";
+
+    /**
+     * 当前支持的公开入口形态。
+     */
+    public static final String ENTRY_POINT = "JAVA_MAINTENANCE_API";
+
     private static final String SHADOW_SUFFIX = ".reclaim.shadow";
     private static final String BACKUP_SUFFIX = ".reclaim.backup";
     private static final String SOURCE_DIGEST_ALGORITHM = "SHA-256";
 
     private MVStoreSpaceReclamation() {
+    }
+
+    /**
+     * 获取当前公开 API 稳定级别。
+     *
+     * @return 稳定级别
+     */
+    public static String getApiStatus() {
+        return API_STATUS;
+    }
+
+    /**
+     * 获取当前支持的公开入口形态。
+     *
+     * @return 入口形态
+     */
+    public static String getEntryPoint() {
+        return ENTRY_POINT;
     }
 
     /**
@@ -56,16 +84,22 @@ public final class MVStoreSpaceReclamation {
 
         try {
             SourceFingerprint sourceFingerprint = sourceFingerprint(fileName);
-            writeManifest(fileName, "PREPARING", shadowFileName, backupFileName, sourceFingerprint);
+            emit(options, MVStoreSpaceReclamationPhase.PREPARING, fileName, "Preparing closed-store compact");
+            writeManifest(fileName, MVStoreSpaceReclamationPhase.PREPARING.name(), shadowFileName, backupFileName,
+                    sourceFingerprint);
             MVStoreTool.compact(fileName, shadowFileName, options.compress);
-            writeManifest(fileName, "VERIFYING", shadowFileName, backupFileName, sourceFingerprint);
+            emit(options, MVStoreSpaceReclamationPhase.VERIFYING, fileName, "Verifying compacted shadow");
+            writeManifest(fileName, MVStoreSpaceReclamationPhase.VERIFYING.name(), shadowFileName, backupFileName,
+                    sourceFingerprint);
             if (options.verifyAfterCompact) {
                 verifyStore(shadowFileName);
             }
             long compactedSize = FileUtils.size(shadowFileName);
             pauseForTesting(options.ioDelayMillis);
             copyFile(fileName, backupFileName);
-            writeManifest(fileName, "SWITCHING", shadowFileName, backupFileName, sourceFingerprint);
+            emit(options, MVStoreSpaceReclamationPhase.SWITCHING, fileName, "Switching compacted shadow");
+            writeManifest(fileName, MVStoreSpaceReclamationPhase.SWITCHING.name(), shadowFileName, backupFileName,
+                    sourceFingerprint);
             try {
                 pauseForTesting(options.ioDelayMillis);
                 MVStoreTool.moveAtomicReplace(shadowFileName, fileName);
@@ -77,15 +111,20 @@ public final class MVStoreSpaceReclamation {
                 FileUtils.delete(backupFileName);
             }
             FileUtils.delete(manifestFileName(fileName));
-            return new MVStoreSpaceReclamationResult(fileName, shadowFileName, backupFileName,
+            MVStoreSpaceReclamationResult result = new MVStoreSpaceReclamationResult(fileName, shadowFileName,
+                    backupFileName,
                     sourceFingerprint.size, compactedSize, true);
+            emit(options, MVStoreSpaceReclamationPhase.COMPLETED, fileName, result.getDiagnosticSummary());
+            return result;
         } catch (IOException e) {
             FileUtils.delete(shadowFileName);
             restoreBackup(fileName, backupFileName);
+            emit(options, MVStoreSpaceReclamationPhase.ABORTED, fileName, e.getMessage());
             throw DbException.convertIOException(e, fileName);
         } catch (RuntimeException e) {
             FileUtils.delete(shadowFileName);
             restoreBackup(fileName, backupFileName);
+            emit(options, MVStoreSpaceReclamationPhase.ABORTED, fileName, e.getMessage());
             throw e;
         }
     }
@@ -109,21 +148,32 @@ public final class MVStoreSpaceReclamation {
         FileUtils.delete(shadowFileName);
         try {
             SourceFingerprint sourceFingerprint = sourceFingerprint(fileName);
-            writeManifest(fileName, "PREPARING", shadowFileName, fileName + BACKUP_SUFFIX, sourceFingerprint);
+            emit(options, MVStoreSpaceReclamationPhase.PREPARING, fileName, "Preparing shadow compact");
+            writeManifest(fileName, MVStoreSpaceReclamationPhase.PREPARING.name(), shadowFileName,
+                    fileName + BACKUP_SUFFIX, sourceFingerprint);
             MVStoreTool.compact(fileName, shadowFileName, options.compress);
-            writeManifest(fileName, "VERIFYING", shadowFileName, fileName + BACKUP_SUFFIX, sourceFingerprint);
+            emit(options, MVStoreSpaceReclamationPhase.VERIFYING, fileName, "Verifying prepared shadow");
+            writeManifest(fileName, MVStoreSpaceReclamationPhase.VERIFYING.name(), shadowFileName,
+                    fileName + BACKUP_SUFFIX, sourceFingerprint);
             if (options.verifyAfterCompact) {
                 verifyStore(shadowFileName);
             }
             pauseForTesting(options.ioDelayMillis);
-            writeManifest(fileName, "SHADOW_READY", shadowFileName, fileName + BACKUP_SUFFIX, sourceFingerprint);
-            return new MVStoreSpaceReclamationResult(fileName, shadowFileName, fileName + BACKUP_SUFFIX,
+            emit(options, MVStoreSpaceReclamationPhase.SHADOW_READY, fileName, "Prepared shadow is ready");
+            writeManifest(fileName, MVStoreSpaceReclamationPhase.SHADOW_READY.name(), shadowFileName,
+                    fileName + BACKUP_SUFFIX, sourceFingerprint);
+            MVStoreSpaceReclamationResult result = new MVStoreSpaceReclamationResult(fileName, shadowFileName,
+                    fileName + BACKUP_SUFFIX,
                     sourceFingerprint.size, FileUtils.size(shadowFileName), false);
+            emit(options, MVStoreSpaceReclamationPhase.COMPLETED, fileName, result.getDiagnosticSummary());
+            return result;
         } catch (IOException e) {
             FileUtils.delete(shadowFileName);
+            emit(options, MVStoreSpaceReclamationPhase.ABORTED, fileName, e.getMessage());
             throw DbException.convertIOException(e, fileName);
         } catch (RuntimeException e) {
             FileUtils.delete(shadowFileName);
+            emit(options, MVStoreSpaceReclamationPhase.ABORTED, fileName, e.getMessage());
             throw e;
         }
     }
@@ -156,16 +206,21 @@ public final class MVStoreSpaceReclamation {
                 sourceFingerprint = assertSourceUnchanged(fileName);
             } catch (MVStoreException e) {
                 if (options.refreshShadowIfSourceChanged) {
+                    emit(options, MVStoreSpaceReclamationPhase.FALLBACK_FULL_COPY, fileName,
+                            "Prepared shadow is stale; falling back to closed-store compact");
                     return compactClosedStore(fileName, options);
                 }
                 throw e;
             }
+            emit(options, MVStoreSpaceReclamationPhase.VERIFYING, fileName, "Verifying prepared shadow");
             if (options.verifyAfterCompact) {
                 verifyStore(shadowFileName);
             }
             pauseForTesting(options.ioDelayMillis);
             copyFile(fileName, backupFileName);
-            writeManifest(fileName, "SWITCHING", shadowFileName, backupFileName, sourceFingerprint);
+            emit(options, MVStoreSpaceReclamationPhase.SWITCHING, fileName, "Switching prepared shadow");
+            writeManifest(fileName, MVStoreSpaceReclamationPhase.SWITCHING.name(), shadowFileName, backupFileName,
+                    sourceFingerprint);
             try {
                 pauseForTesting(options.ioDelayMillis);
                 MVStoreTool.moveAtomicReplace(shadowFileName, fileName);
@@ -177,13 +232,18 @@ public final class MVStoreSpaceReclamation {
                 FileUtils.delete(backupFileName);
             }
             FileUtils.delete(manifestFileName(fileName));
-            return new MVStoreSpaceReclamationResult(fileName, shadowFileName, backupFileName,
+            MVStoreSpaceReclamationResult result = new MVStoreSpaceReclamationResult(fileName, shadowFileName,
+                    backupFileName,
                     sourceFingerprint.size, compactedSize, true);
+            emit(options, MVStoreSpaceReclamationPhase.COMPLETED, fileName, result.getDiagnosticSummary());
+            return result;
         } catch (IOException e) {
             restoreBackup(fileName, backupFileName);
+            emit(options, MVStoreSpaceReclamationPhase.ABORTED, fileName, e.getMessage());
             throw DbException.convertIOException(e, fileName);
         } catch (RuntimeException e) {
             restoreBackup(fileName, backupFileName);
+            emit(options, MVStoreSpaceReclamationPhase.ABORTED, fileName, e.getMessage());
             throw e;
         }
     }
@@ -362,6 +422,18 @@ public final class MVStoreSpaceReclamation {
             Thread.currentThread().interrupt();
             throw DataUtils.newMVStoreException(DataUtils.ERROR_TRANSACTION_ILLEGAL_STATE,
                     "Interrupted during space reclamation IO delay");
+        }
+    }
+
+    private static void emit(MVStoreSpaceReclamationOptions options, MVStoreSpaceReclamationPhase phase,
+            String fileName, String message) {
+        MVStoreSpaceReclamationListener listener = options.diagnosticListener;
+        if (listener != null) {
+            try {
+                listener.onEvent(new MVStoreSpaceReclamationEvent(phase, fileName, message));
+            } catch (RuntimeException ignore) {
+                // 诊断回调不得改变维护操作结果。
+            }
         }
     }
 

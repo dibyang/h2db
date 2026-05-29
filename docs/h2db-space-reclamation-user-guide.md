@@ -6,6 +6,13 @@
 
 当前能力不暴露 SQL，不自动调度，不改变 `.mv.db` 磁盘格式。外部用户可以在明确关闭数据库或进入维护窗口后，通过 Java API 显式触发。
 
+代码层公开状态：
+
+- `MVStoreSpaceReclamation.getApiStatus()`：当前返回 `EXPERIMENTAL_MAINTENANCE_API`。
+- `MVStoreSpaceReclamation.getEntryPoint()`：当前返回 `JAVA_MAINTENANCE_API`。
+
+这两个值用于让集成方在启动检查、发布说明或诊断页面中明确显示当前能力的稳定级别和入口形态。
+
 ## 适用场景
 
 - `.mv.db` 文件明显大于实际 live 数据。
@@ -65,6 +72,18 @@ MVStoreSpaceReclamation.switchToShadow(
 - `getDiagnosticSummary()`
 
 建议在 GitHub Release 或 Maven Central 发布说明中提示用户保留该摘要，便于定位失败阶段、文件大小变化和是否发生替换。
+
+如果需要把阶段事件接入应用日志，可设置诊断监听器：
+
+```java
+MVStoreSpaceReclamationOptions options = MVStoreSpaceReclamationOptions.builder()
+        .diagnosticListener(event -> {
+            System.out.println(event.getPhase() + " " + event.getMessage());
+        })
+        .build();
+```
+
+事件阶段由 `MVStoreSpaceReclamationPhase` 表示，当前包括 `PREPARING`、`VERIFYING`、`SHADOW_READY`、`FALLBACK_FULL_COPY`、`SWITCHING`、`COMPLETED` 和 `ABORTED`。监听器不应抛出异常；如果监听器抛出运行时异常，该异常会被忽略，避免诊断系统反向影响维护操作。
 
 ## 残留文件和恢复
 

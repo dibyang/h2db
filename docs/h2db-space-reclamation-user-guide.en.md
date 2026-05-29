@@ -10,6 +10,13 @@ The Chinese document is the primary version.
 
 The current capability does not expose SQL, does not schedule itself automatically, and does not change the `.mv.db` file format. External users can call the Java API explicitly after closing the database or entering a controlled maintenance window.
 
+Code-level public status:
+
+- `MVStoreSpaceReclamation.getApiStatus()` currently returns `EXPERIMENTAL_MAINTENANCE_API`.
+- `MVStoreSpaceReclamation.getEntryPoint()` currently returns `JAVA_MAINTENANCE_API`.
+
+Integrators can display these values in startup checks, release notes, or diagnostics pages to make the current stability level and entry-point shape explicit.
+
 ## Suitable Scenarios
 
 - The `.mv.db` file is much larger than the actual live data.
@@ -69,6 +76,18 @@ MVStoreSpaceReclamation.switchToShadow(
 - `getDiagnosticSummary()`
 
 GitHub Release and Maven Central notes should ask users to keep this summary when reporting issues. It helps identify the failed phase, file-size changes, and whether replacement happened.
+
+Applications can also attach a diagnostic listener:
+
+```java
+MVStoreSpaceReclamationOptions options = MVStoreSpaceReclamationOptions.builder()
+        .diagnosticListener(event -> {
+            System.out.println(event.getPhase() + " " + event.getMessage());
+        })
+        .build();
+```
+
+Event phases are represented by `MVStoreSpaceReclamationPhase`. Current phases are `PREPARING`, `VERIFYING`, `SHADOW_READY`, `FALLBACK_FULL_COPY`, `SWITCHING`, `COMPLETED`, and `ABORTED`. Listeners should not throw exceptions; if a listener throws a runtime exception, it is ignored so diagnostics cannot change the maintenance operation result.
 
 ## Leftovers and Recovery
 

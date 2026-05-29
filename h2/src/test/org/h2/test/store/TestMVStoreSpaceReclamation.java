@@ -18,6 +18,9 @@ import org.h2.mvstore.MVStoreSpaceReclamation;
 import org.h2.mvstore.MVStoreSpaceReclamationMaintenance;
 import org.h2.mvstore.MVStoreSpaceReclamationOperationGate;
 import org.h2.mvstore.MVStoreSpaceReclamationOptions;
+import org.h2.mvstore.MVStoreSpaceReclamationEvent;
+import org.h2.mvstore.MVStoreSpaceReclamationListener;
+import org.h2.mvstore.MVStoreSpaceReclamationPhase;
 import org.h2.mvstore.MVStoreSpaceReclamationRequestDecision;
 import org.h2.mvstore.MVStoreSpaceReclamationResult;
 import org.h2.mvstore.MVStoreTool;
@@ -60,6 +63,9 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         runScenario("T-ONLINE-COMPACT-FULL-COPY-FALLBACK-01", this::testFullCopyFallbackForChangedSource);
         runScenario("T-ONLINE-COMPACT-SOURCE-FINGERPRINT-01", this::testManifestRecordsSourceFingerprint);
         runScenario("T-ONLINE-COMPACT-DIAGNOSTICS-01", this::testReclamationDiagnostics);
+        runScenario("T-ONLINE-COMPACT-DIAGNOSTIC-LISTENER-01", this::testDiagnosticListener);
+        runScenario("T-ONLINE-COMPACT-DIAGNOSTIC-LISTENER-FAIL-01", this::testDiagnosticListenerFailureIgnored);
+        runScenario("T-ONLINE-COMPACT-API-STATUS-01", this::testApiStatus);
         runScenario("T-ONLINE-COMPACT-MANIFEST-RECOVER-01", this::testManifestRecoveryRestoresSource);
         runScenario("T-ONLINE-COMPACT-BLOCKS-WRITES-01", this::testMaintenanceGateBlocksWrites);
         runScenario("T-ONLINE-COMPACT-LONG-TRANSACTION-01", this::testLongTransactionBlocksSwitch);
@@ -287,6 +293,55 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         } finally {
             deleteFilesUnlessKept(base);
         }
+    }
+
+    private void testDiagnosticListener() {
+        String base = mvStoreFile("diagnosticListener");
+        final ArrayList<MVStoreSpaceReclamationPhase> phases = new ArrayList<>();
+        try {
+            createBloatedStore(base);
+            MVStoreSpaceReclamationOptions options = MVStoreSpaceReclamationOptions.builder()
+                    .diagnosticListener(new MVStoreSpaceReclamationListener() {
+                        @Override
+                        public void onEvent(MVStoreSpaceReclamationEvent event) {
+                            assertTrue(event.getFileName().contains("diagnosticListener"));
+                            assertNotNull(event.getMessage());
+                            phases.add(event.getPhase());
+                        }
+                    }).build();
+            MVStoreSpaceReclamationResult result = MVStoreSpaceReclamation.compactClosedStore(base, options);
+            assertTrue(result.isReplaced());
+            assertTrue(phases.contains(MVStoreSpaceReclamationPhase.PREPARING));
+            assertTrue(phases.contains(MVStoreSpaceReclamationPhase.VERIFYING));
+            assertTrue(phases.contains(MVStoreSpaceReclamationPhase.SWITCHING));
+            assertEquals(MVStoreSpaceReclamationPhase.COMPLETED, phases.get(phases.size() - 1));
+        } finally {
+            deleteFilesUnlessKept(base);
+        }
+    }
+
+    private void testDiagnosticListenerFailureIgnored() {
+        String base = mvStoreFile("diagnosticListenerFailureIgnored");
+        try {
+            createBloatedStore(base);
+            MVStoreSpaceReclamationOptions options = MVStoreSpaceReclamationOptions.builder()
+                    .diagnosticListener(new MVStoreSpaceReclamationListener() {
+                        @Override
+                        public void onEvent(MVStoreSpaceReclamationEvent event) {
+                            throw new IllegalStateException("diagnostic sink failed");
+                        }
+                    }).build();
+            MVStoreSpaceReclamationResult result = MVStoreSpaceReclamation.compactClosedStore(base, options);
+            assertTrue(result.isReplaced());
+            assertOnlyMarkerReadable(base);
+        } finally {
+            deleteFilesUnlessKept(base);
+        }
+    }
+
+    private void testApiStatus() {
+        assertEquals("EXPERIMENTAL_MAINTENANCE_API", MVStoreSpaceReclamation.getApiStatus());
+        assertEquals("JAVA_MAINTENANCE_API", MVStoreSpaceReclamation.getEntryPoint());
     }
 
     private void testMaintenanceGateBlocksWrites() {

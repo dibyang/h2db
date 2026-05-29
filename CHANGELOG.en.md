@@ -10,6 +10,7 @@ This file records public h2db release changes for external users. Keep one secti
 
 - Added open-source release materials, including README, contributing guide, security policy, support guide, GitHub Release guide, Maven Central release guide, third-party notices, and English companions.
 - Added documentation for the experimental MVStore space reclamation maintenance API, including controlled maintenance windows, diagnostics, leftover cleanup, and rollback strategy.
+- Added public status, entry-point introspection, and diagnostic event listener support for the MVStore space reclamation maintenance API.
 
 ### Changed
 

@@ -23,7 +23,7 @@
 | P3 MVStore Table Provider | 内置建表 provider 可调用现有 `Store.createTable()` | [x] |
 | P4 默认建表路径切换 | `Schema.createTable()` 走 provider，legacy fallback 兼容 | [x] |
 | P5 Capability 与 Maintenance 边界 | 暴露能力查询和 S2 gate，不迁移 S1 实现 | [x] |
-| P6 回归与文档收口 | 补齐测试、兼容说明和后续 backlog | [ ] |
+| P6 回归与文档收口 | 补齐测试、兼容说明和后续 backlog | [x] |
 
 ## 执行门禁
 
@@ -125,11 +125,11 @@
 
 ### P6 回归与文档收口
 
-- [ ] 补充或更新插件化设计文档中的实际类名、边界和测试结果。
-- [ ] 确认后续阶段能力清单仍保留外部插件加载、第三方稳定 Storage SPI、storage engine id 持久化、S1 迁移、S2 实现等延期项。
-- [ ] 在 `h2/` 目录运行编译验证。
-- [ ] 运行插件化相关最小测试入口；若新增 Gradle 专项入口，记录命令。
-- [ ] 记录剩余风险和后续阶段建议。
+- [x] 补充或更新插件化设计文档中的实际类名、边界和测试结果。
+- [x] 确认后续阶段能力清单仍保留外部插件加载、第三方稳定 Storage SPI、storage engine id 持久化、S1 迁移、S2 实现等延期项。
+- [x] 在 `h2/` 目录运行编译验证。
+- [x] 运行插件化相关最小测试入口；若新增 Gradle 专项入口，记录命令。
+- [x] 记录剩余风险和后续阶段建议。
 
 验收：
 
@@ -144,6 +144,16 @@
 ```
 
 如果专项入口尚未实现，必须说明实际替代命令和覆盖范围。
+
+阶段一最终验证命令：
+
+```powershell
+cd D:\work\java\h2db\h2
+.\gradlew.bat runPluginArchitectureCheck
+.\gradlew.bat compileJava
+```
+
+`runPluginArchitectureCheck` 使用 JUnit 5，覆盖 `src/test-plugin` 下的插件化专项测试，并排除内部辅助类。
 
 ## 测试编号
 
@@ -174,12 +184,12 @@
 
 | 风险 | 影响 | 缓解 | 状态 |
 | --- | --- | --- | --- |
-| 默认建表 SQL 输出变化 | `SCRIPT` / dump 兼容性破坏 | 不写回系统默认 `mvstore` 到 `CreateTableData.tableEngine`，补 `T-PLUGIN-CREATE-SQL-COMPAT-01` | [ ] |
-| legacy `TableEngine` 行为变化 | 破坏已有用户扩展 | registry 未命中时 fallback 到旧类名加载，补 legacy 测试 | [ ] |
-| `Database.getStore()` 一次性移除风险过高 | 大范围编译和行为回归 | 阶段一保留过渡字段和方法 | [ ] |
-| storage SPI 过早公开 | 后续兼容成本高 | 阶段一标 experimental/internal，仅服务 S2 边界 | [ ] |
-| capability 粒度不足 | S2 无法安全 gate | 使用明确字符串常量，单独列出 S2 相关能力 | [ ] |
-| 外部插件加载被误纳入阶段一 | 范围失控 | 本计划明确 Out，后续阶段单独 RFC | [ ] |
+| 默认建表 SQL 输出变化 | `SCRIPT` / dump 兼容性破坏 | 不写回系统默认 `mvstore` 到 `CreateTableData.tableEngine`，补 `T-PLUGIN-CREATE-SQL-COMPAT-01` | [x] 已覆盖 |
+| legacy `TableEngine` 行为变化 | 破坏已有用户扩展 | registry 未命中时 fallback 到旧类名加载，补 legacy 测试 | [x] 已覆盖 |
+| `Database.getStore()` 一次性移除风险过高 | 大范围编译和行为回归 | 阶段一保留过渡字段和方法 | [x] 已缓解 |
+| storage SPI 过早公开 | 后续兼容成本高 | 阶段一标 experimental/internal，仅服务 S2 边界 | [ ] 后续仍需收敛 API 稳定性 |
+| capability 粒度不足 | S2 无法安全 gate | 使用明确字符串常量，单独列出 S2 相关能力 | [x] 已覆盖 |
+| 外部插件加载被误纳入阶段一 | 范围失控 | 本计划明确 Out，后续阶段单独 RFC | [x] 已隔离 |
 
 ## 后续阶段待办
 

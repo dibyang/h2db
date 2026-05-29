@@ -63,8 +63,8 @@ H2 当前已经存在局部扩展点，例如：
 
 内置 MVStore 拆成两个内置 provider：
 
-- `MvStoreStorageEngineProvider`
-- `MvStoreTableEngineProvider`
+- `MVStoreStorageEngineProvider`
+- `MVStoreTableEngineProvider`
 
 `Schema.createTable()` 不再把“无自定义 table engine”直接解释为 `database.getStore().createTable(data)`，而是解析出有效 table engine id，默认指向内置 `mvstore` table engine。内置 table engine 再调用对应 storage engine 创建 `MVTable`。
 
@@ -132,12 +132,28 @@ sequenceDiagram
 | `org.h2.api.StorageMaintenance` | 接口 | 实验 SPI | 维护能力入口。 |
 | `org.h2.engine.PluginRegistry` | 实现类 | 内部 | 注册、查找、校验 provider。 |
 | `org.h2.engine.BuiltinPlugins` | 实现类 | 内部 | 注册内置 provider。 |
-| `org.h2.engine.LegacyTableEngineProvider` | 适配器 | 内部 | 包装旧 `TableEngine`。 |
+| `org.h2.engine.LegacyTableEngineProvider` | 适配器 | 后续 | 阶段一未新增类，先由 `Schema` 在 registry 未命中时 fallback 到旧 `Database.getTableEngine()`。 |
 | `org.h2.mvstore.db.MVStoreStorageEngineProvider` | provider | 内置 | 打开 MVStore storage。 |
 | `org.h2.mvstore.db.MVStoreTableEngineProvider` | provider | 内置 | 创建 MVTable。 |
 | `org.h2.mvstore.db.MVStoreStorageEngine` | 适配器 | 内置 | 包装现有 `Store`。 |
 
 如果担心公开 API 面过大，可以把 storage 相关 SPI 第一轮放在内部包并标注实验；但 S2 需要稳定 capability 模型，因此 capability 命名要提前固定。
+
+## 阶段一实现结果
+
+截至 2026-05-30，阶段一已按最小可落地范围实现：
+
+| 类/入口 | 实现结果 |
+| --- | --- |
+| `org.h2.engine.PluginRegistry` | 支持按 provider type/id 注册、查找、capability 查询和内置 provider 冲突保护。 |
+| `org.h2.engine.BuiltinPlugins` | 数据库启动期注册内置 `mvstore` storage/table provider。 |
+| `org.h2.mvstore.db.MVStoreStorageEngineProvider` | 包装现有 `Store` 打开路径，保留旧库、只读、加密、内存库、持久库行为。 |
+| `org.h2.mvstore.db.MVStoreStorageEngine` | 暴露 `StorageEngine`，内部持有现有 `Store`，过渡期继续支撑 `Database.getStore()`。 |
+| `org.h2.mvstore.db.MVStoreTableEngineProvider` | 通过 `TableEngineProvider` 委托 `Store.createTable(CreateTableData)` 创建 `MVTable`。 |
+| `org.h2.schema.Schema#createTable()` | 无显式 `ENGINE` 时走内置 `mvstore` provider；registry 未命中时继续走旧类名加载。 |
+| `org.h2.api.StorageMaintenance` | 已建立维护能力边界；S2 相关 capability 保持 false / `UNSUPPORTED`。 |
+
+阶段一仍不包含外部插件加载、稳定第三方 storage SPI、storage engine id 持久化、S1 迁移和 S2 在线空间回收实现。这些能力已保留在后续阶段待办中。
 
 ## 接口设计
 

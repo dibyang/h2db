@@ -195,6 +195,7 @@ cd D:\work\java\h2db\h2
 
 以下不属于阶段一，后续单独设计和计划：
 
+- [ ] 后续插件化路线图：见 [h2db-plugin-architecture-future-roadmap.md](h2db-plugin-architecture-future-roadmap.md)。
 - [ ] 外部插件加载：URL 参数、系统属性、database setting、`ServiceLoader` 取舍。
 - [ ] 第三方稳定 Storage SPI：公开接口、版本承诺、兼容策略。
 - [ ] storage engine id 持久化：URL、setting、store header 或独立元数据。

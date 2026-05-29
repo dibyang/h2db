@@ -49,6 +49,7 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         runScenario("T-MAINTENANCE-COMPACT-REPLACE-01", this::testMaintenanceCompactReplacesClosedStore);
         runScenario("T-SHADOW-COMPACT-SHRINK-01", this::testShadowCompactShrinksBloatedStore);
         runScenario("T-SHADOW-COMPACT-PREPARE-01", this::testShadowCompactPrepareDoesNotReplaceSource);
+        runScenario("T-ONLINE-COMPACT-SWITCH-SHADOW-01", this::testSwitchToPreparedShadow);
         runScenario("T-ONLINE-COMPACT-MANIFEST-RECOVER-01", this::testManifestRecoveryRestoresSource);
         runScenario("T-ONLINE-COMPACT-BLOCKS-WRITES-01", this::testMaintenanceGateBlocksWrites);
         runScenario("T-ONLINE-COMPACT-VERIFY-FAIL-01", this::testVerifyFailureKeepsSource);
@@ -153,6 +154,25 @@ public class TestMVStoreSpaceReclamation extends TestBase {
             throw new AssertionError(e);
         } finally {
             deleteFilesUnlessKept(base);
+        }
+    }
+
+    private void testSwitchToPreparedShadow() {
+        String base = mvStoreFile("switchToPreparedShadow");
+        try {
+            BloatStats stats = createBloatedStore(base);
+            MVStoreSpaceReclamation.compactToShadow(base, MVStoreSpaceReclamationOptions.DEFAULT);
+            MVStoreSpaceReclamationResult result = MVStoreSpaceReclamation.switchToShadow(base,
+                    MVStoreSpaceReclamationOptions.builder().keepBackup(true).build());
+            assertTrue(result.isReplaced());
+            assertTrue(result.getCompactedSize() < stats.afterDeleteSize / 4);
+            assertTrue(FileUtils.exists(result.getBackupFileName()));
+            assertFalse(FileUtils.exists(result.getShadowFileName()));
+            assertOnlyMarkerReadable(base);
+            assertOnlyMarkerReadable(result.getBackupFileName());
+        } finally {
+            deleteFilesUnlessKept(base);
+            deleteFilesUnlessKept(base + ".reclaim.backup");
         }
     }
 

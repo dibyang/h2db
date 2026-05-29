@@ -120,6 +120,56 @@ public final class MVStoreSpaceReclamation {
     }
 
     /**
+     * 将已准备好的 shadow 文件切换为当前 MVStore 文件。
+     *
+     * @param fileName MVStore 文件名
+     * @param options 回收配置，null 时使用默认配置
+     * @return 切换结果
+     */
+    public static MVStoreSpaceReclamationResult switchToShadow(String fileName,
+            MVStoreSpaceReclamationOptions options) {
+        if (options == null) {
+            options = MVStoreSpaceReclamationOptions.DEFAULT;
+        }
+        if (!FileUtils.exists(fileName)) {
+            throw DataUtils.newMVStoreException(DataUtils.ERROR_FILE_CORRUPT, "File not found: {0}", fileName);
+        }
+        String shadowFileName = fileName + SHADOW_SUFFIX;
+        String backupFileName = fileName + BACKUP_SUFFIX;
+        if (!FileUtils.exists(shadowFileName)) {
+            throw DataUtils.newMVStoreException(DataUtils.ERROR_FILE_CORRUPT,
+                    "Shadow file not found: {0}", shadowFileName);
+        }
+        long sourceSize = FileUtils.size(fileName);
+        long compactedSize = FileUtils.size(shadowFileName);
+        try {
+            if (options.verifyAfterCompact) {
+                verifyStore(shadowFileName);
+            }
+            copyFile(fileName, backupFileName);
+            writeManifest(fileName, "SWITCHING", shadowFileName, backupFileName);
+            try {
+                MVStoreTool.moveAtomicReplace(shadowFileName, fileName);
+            } catch (RuntimeException e) {
+                restoreBackup(fileName, backupFileName);
+                throw e;
+            }
+            if (!options.keepBackup) {
+                FileUtils.delete(backupFileName);
+            }
+            FileUtils.delete(manifestFileName(fileName));
+            return new MVStoreSpaceReclamationResult(fileName, shadowFileName, backupFileName,
+                    sourceSize, compactedSize, true);
+        } catch (IOException e) {
+            restoreBackup(fileName, backupFileName);
+            throw DbException.convertIOException(e, fileName);
+        } catch (RuntimeException e) {
+            restoreBackup(fileName, backupFileName);
+            throw e;
+        }
+    }
+
+    /**
      * 清理维护态空间回收残留文件。
      *
      * @param fileName MVStore 文件名

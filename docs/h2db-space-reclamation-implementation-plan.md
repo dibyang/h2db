@@ -38,10 +38,10 @@
 ## 任务清单
 
 - [ ] 评审 [h2db-space-reclamation-optimization-rfc.md](h2db-space-reclamation-optimization-rfc.md)，确认 S1 为中期主线，S2 作为长期优化。
-- [ ] 新增空间回收测试登记表，避免继续膨胀 [h2db-corruption-investigation-plan.md](h2db-corruption-investigation-plan.md)。
-- [ ] 新增 `TestMVStoreSpaceReclamation` 或等价测试类，迁移/复用 `T-NO-AUTO-COMPACT-BLOAT-01` 和 `T-OFFLINE-COMPACT-SHRINK-01` 的样本构造逻辑。
-- [ ] 新增 Gradle 入口，例如 `runMvStoreSpaceReclamationCheck`，用于独立运行空间回收测试。
-- [ ] 实现测试用 fault injection：copy 失败、manifest 写失败、verify 失败、切换前 crash、切换中 crash、清理失败。
+- [x] 新增空间回收测试登记表，避免继续膨胀 [h2db-corruption-investigation-plan.md](h2db-corruption-investigation-plan.md)。
+- [x] 新增 `TestMVStoreSpaceReclamation` 或等价测试类，迁移/复用 `T-NO-AUTO-COMPACT-BLOAT-01` 和 `T-OFFLINE-COMPACT-SHRINK-01` 的样本构造逻辑。
+- [x] 新增 Gradle 入口，例如 `runMvStoreSpaceReclamationCheck`，用于独立运行空间回收测试。
+- [x] 实现测试用 fault injection：copy 失败、manifest 写失败、verify 失败、切换前 crash、切换中 crash、清理失败。
 - [ ] 设计并评审 `OnlineCompactManifest` 字段和恢复规则。
 - [ ] 实现 S1 原型：生成 shadow 文件、校验 shadow 文件、维护态阻塞新事务、完成基础切换。
 - [ ] 补齐 copy 期间写入处理策略，优先验证版本扫描增量追平是否可行。
@@ -69,6 +69,12 @@
 ## P1：测试基础设施
 
 目标：先让风险可复现、可验证、可回归。
+
+状态：已完成阶段 1 的测试基础设施。新增 `TestMVStoreSpaceReclamation` 和
+`runMvStoreSpaceReclamationCheck`，覆盖膨胀基线、shadow compact 收缩、
+维护态写入阻断契约、verify 失败、切换前 crash、切换中 crash，以及
+copy、manifest、verify、switch、cleanup 的 fault injection 矩阵。该阶段仍不修改
+`h2/src/main` 生产逻辑。
 
 建议新增或拆分：
 

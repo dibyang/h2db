@@ -163,6 +163,29 @@ task runMvStoreRecoveryCheck(type: JavaExec) {
 }
 
 //对于典型的 Java 项目，您可以添加一个javadocJar以及一个 sourcesJar任务
+task compileMvStoreSpaceReclamationCheck(type: JavaCompile) {
+    description = 'Compiles the MVStore space reclamation test infrastructure entrypoint.'
+    source = files('src/test/org/h2/test/store/TestMVStoreSpaceReclamation.java')
+    classpath = sourceSets.main.output + configurations.testCompileClasspath + files('bin')
+    destinationDir = file("$buildDir/mvstoreSpaceReclamationCheck/classes")
+    sourceCompatibility = project.jdkVersion
+    targetCompatibility = project.jdkVersion
+    options.encoding = 'UTF-8'
+    options.sourcepath = files('src/test', 'src/tools')
+    dependsOn classes
+}
+
+task runMvStoreSpaceReclamationCheck(type: JavaExec) {
+    description = 'Runs the MVStore space reclamation test infrastructure entrypoint.'
+    dependsOn compileMvStoreSpaceReclamationCheck
+    main = 'org.h2.test.store.TestMVStoreSpaceReclamation'
+    classpath = files(compileMvStoreSpaceReclamationCheck.destinationDir) +
+            sourceSets.main.runtimeClasspath + configurations.testRuntimeClasspath + files('bin')
+    systemProperties System.properties.findAll {
+        it.key.toString().startsWith('h2.test.mvStoreSpaceReclamation.')
+    }
+}
+
 task javadocJar(type: Jar) {
     classifier = 'javadoc'
     from javadoc

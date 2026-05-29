@@ -6,16 +6,19 @@
 package org.h2.test.plugin;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.Statement;
 import java.util.Collections;
 import java.util.List;
 
 import org.h2.api.PluginCapability;
 import org.h2.api.PluginProvider;
 import org.h2.api.StorageEngine;
+import org.h2.api.TableEngine;
 import org.h2.api.TableEngineContext;
 import org.h2.api.TableEngineProvider;
 import org.h2.command.ddl.CreateTableData;
@@ -66,6 +69,58 @@ public class MVStoreTableEngineProviderTest {
             Table table = provider.createTable(data, new Context(db, data.schema));
 
             assertTrue(table instanceof MVTable);
+        }
+    }
+
+    /**
+     * T-PLUGIN-CREATE-SQL-COMPAT-01.
+     */
+    @Test
+    public void defaultCreateTableDoesNotWriteMvstoreEngineToScript() throws Exception {
+        try (Connection conn = DriverManager.getConnection("jdbc:h2:mem:pluginCreateSqlCompat", "sa", "");
+                Statement stat = conn.createStatement()) {
+            stat.execute("create table test(id int primary key)");
+
+            try (java.sql.ResultSet rs = stat.executeQuery("script nodata")) {
+                StringBuilder script = new StringBuilder();
+                while (rs.next()) {
+                    script.append(rs.getString(1)).append('\n');
+                }
+                assertTrue(script.toString().contains("CREATE MEMORY TABLE"));
+                assertFalse(script.toString().contains("ENGINE"));
+            }
+        }
+    }
+
+    /**
+     * T-PLUGIN-LEGACY-TABLE-ENGINE-01.
+     */
+    @Test
+    public void keepsLegacyExplicitTableEngineClassName() throws Exception {
+        RecordingTableEngine.createTableData = null;
+        try (Connection conn = DriverManager.getConnection("jdbc:h2:mem:pluginLegacyEngine;MODE=REGULAR", "sa", "");
+                Statement stat = conn.createStatement()) {
+            stat.execute("create table legacy(id int) engine \"" + RecordingTableEngine.class.getName() + "\"");
+
+            assertNotNull(RecordingTableEngine.createTableData);
+            assertTrue(RecordingTableEngine.class.getName().equals(RecordingTableEngine.createTableData.tableEngine));
+        }
+    }
+
+    /**
+     * T-PLUGIN-DEFAULT-TABLE-ENGINE-CLASSNAME-01.
+     */
+    @Test
+    public void keepsLegacyDefaultTableEngineClassName() throws Exception {
+        RecordingTableEngine.createTableData = null;
+        String url = "jdbc:h2:mem:pluginDefaultLegacyEngine;DEFAULT_TABLE_ENGINE="
+                + RecordingTableEngine.class.getName();
+        try (Connection conn = DriverManager.getConnection(url, "sa", "");
+                Statement stat = conn.createStatement()) {
+            stat.execute("create table default_legacy(id int)");
+
+            assertNotNull(RecordingTableEngine.createTableData);
+            assertTrue(RecordingTableEngine.class.getName().equals(RecordingTableEngine.createTableData.tableEngine));
         }
     }
 
@@ -129,6 +184,19 @@ public class MVStoreTableEngineProviderTest {
         @Override
         public boolean isReadOnly() {
             return database.isReadOnly();
+        }
+    }
+
+    /**
+     * 旧 TableEngine 类名加载路径使用的测试引擎。
+     */
+    public static final class RecordingTableEngine implements TableEngine {
+        static CreateTableData createTableData;
+
+        @Override
+        public Table createTable(CreateTableData data) {
+            createTableData = data;
+            return data.session.getDatabase().getStore().createTable(data);
         }
     }
 }

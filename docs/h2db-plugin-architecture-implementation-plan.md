@@ -21,7 +21,7 @@
 | P1 SPI 与 Registry 骨架 | 新增接口和内部注册中心，不接业务路径 | [x] |
 | P2 MVStore Storage 适配 | 包装现有 `Store`，保留 `Database.getStore()` 过渡 | [x] |
 | P3 MVStore Table Provider | 内置建表 provider 可调用现有 `Store.createTable()` | [x] |
-| P4 默认建表路径切换 | `Schema.createTable()` 走 provider，legacy fallback 兼容 | [ ] |
+| P4 默认建表路径切换 | `Schema.createTable()` 走 provider，legacy fallback 兼容 | [x] |
 | P5 Capability 与 Maintenance 边界 | 暴露能力查询和 S2 gate，不迁移 S1 实现 | [ ] |
 | P6 回归与文档收口 | 补齐测试、兼容说明和后续 backlog | [ ] |
 
@@ -95,19 +95,19 @@
 
 ### P4 默认建表路径切换
 
-- [ ] 修改 `Schema.createTable()`：无显式 `ENGINE` 且无 `DEFAULT_TABLE_ENGINE` 时解析到内置 `mvstore` provider。
-- [ ] 不把系统默认 `mvstore` 写回 `CreateTableData.tableEngine`。
-- [ ] registry 命中 provider id 时走 `TableEngineProvider.createTable()`。
-- [ ] registry 未命中时保留旧 `Database.getTableEngine(tableEngine).createTable(data)` 行为。
-- [ ] 确认 `CreateTable.update()` 权限规则保持当前 custom engine admin 约束。
-- [ ] 确认 `TableBase.getCreateSQL()` 不因系统默认 provider 多输出 `ENGINE mvstore`。
-- [ ] 同步新增 JUnit 测试覆盖默认建表、legacy class name、`DEFAULT_TABLE_ENGINE` 和 `SCRIPT` 输出兼容。
+- [x] 修改 `Schema.createTable()`：无显式 `ENGINE` 且无 `DEFAULT_TABLE_ENGINE` 时解析到内置 `mvstore` provider。
+- [x] 不把系统默认 `mvstore` 写回 `CreateTableData.tableEngine`。
+- [x] registry 命中 provider id 时走 `TableEngineProvider.createTable()`。
+- [x] registry 未命中时保留旧 `Database.getTableEngine(tableEngine).createTable(data)` 行为。
+- [x] 确认 `CreateTable.update()` 权限规则保持当前 custom engine admin 约束。
+- [x] 确认 `TableBase.getCreateSQL()` 不因系统默认 provider 多输出 `ENGINE mvstore`。
+- [x] 同步新增 JUnit 测试覆盖默认建表、legacy class name、`DEFAULT_TABLE_ENGINE` 和 `SCRIPT` 输出兼容。
 
 验收：
 
-- [ ] `T-PLUGIN-CREATE-SQL-COMPAT-01`
-- [ ] `T-PLUGIN-LEGACY-TABLE-ENGINE-01`
-- [ ] `T-PLUGIN-DEFAULT-TABLE-ENGINE-CLASSNAME-01`
+- [x] `T-PLUGIN-CREATE-SQL-COMPAT-01`
+- [x] `T-PLUGIN-LEGACY-TABLE-ENGINE-01`
+- [x] `T-PLUGIN-DEFAULT-TABLE-ENGINE-CLASSNAME-01`
 
 ### P5 Capability 与 Maintenance 边界
 

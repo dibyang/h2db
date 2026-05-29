@@ -12,6 +12,10 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.h2.api.ErrorCode;
+import org.h2.api.PluginProvider;
+import org.h2.api.StorageEngine;
+import org.h2.api.TableEngineContext;
+import org.h2.api.TableEngineProvider;
 import org.h2.command.ddl.CreateSynonymData;
 import org.h2.command.ddl.CreateTableData;
 import org.h2.constraint.Constraint;
@@ -25,6 +29,7 @@ import org.h2.engine.SysProperties;
 import org.h2.index.Index;
 import org.h2.message.DbException;
 import org.h2.message.Trace;
+import org.h2.mvstore.db.MVStoreTableEngineProvider;
 import org.h2.table.MaterializedView;
 import org.h2.table.MetaTable;
 import org.h2.table.Table;
@@ -794,14 +799,67 @@ public class Schema extends DbObject {
                 DbSettings s = database.getSettings();
                 tableEngine = s.defaultTableEngine;
                 if (tableEngine == null) {
-                    return database.getStore().createTable(data);
+                    TableEngineProvider provider = findTableEngineProvider(MVStoreTableEngineProvider.ID);
+                    return provider.createTable(data, new SchemaTableEngineContext(data));
                 }
                 data.tableEngine = tableEngine;
             }
             if (data.tableEngineParams == null) {
                 data.tableEngineParams = this.tableEngineParams;
             }
+            TableEngineProvider provider = findTableEngineProvider(tableEngine);
+            if (provider != null) {
+                return provider.createTable(data, new SchemaTableEngineContext(data));
+            }
             return database.getTableEngine(tableEngine).createTable(data);
+        }
+    }
+
+    private TableEngineProvider findTableEngineProvider(String tableEngine) {
+        PluginProvider provider = database.getPluginRegistry().findProvider(TableEngineProvider.TYPE, tableEngine);
+        return provider instanceof TableEngineProvider ? (TableEngineProvider) provider : null;
+    }
+
+    private final class SchemaTableEngineContext implements TableEngineContext {
+        private final CreateTableData data;
+
+        SchemaTableEngineContext(CreateTableData data) {
+            this.data = data;
+        }
+
+        @Override
+        public Database getDatabase() {
+            return database;
+        }
+
+        @Override
+        public Schema getSchema() {
+            return Schema.this;
+        }
+
+        @Override
+        public StorageEngine getStorageEngine() {
+            return database.getStorageEngine();
+        }
+
+        @Override
+        public Trace getTrace() {
+            return trace;
+        }
+
+        @Override
+        public java.util.List<String> getTableEngineParams() {
+            return data.tableEngineParams == null ? java.util.Collections.emptyList() : data.tableEngineParams;
+        }
+
+        @Override
+        public boolean isPersistent() {
+            return database.isPersistent();
+        }
+
+        @Override
+        public boolean isReadOnly() {
+            return database.isReadOnly();
         }
     }
 

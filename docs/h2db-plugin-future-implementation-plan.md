@@ -13,7 +13,7 @@
 | F2 | storage engine id 持久化边界 | [x] |
 | F3 | 缺失 storage 插件处理策略 | [x] |
 | F4 | 显式外部插件加载 | [x] |
-| F5 | 收敛第三方 Storage SPI 最小面 | [ ] |
+| F5 | 收敛第三方 Storage SPI 最小面 | [x] |
 | F6 | 插件依赖、版本和冲突治理 | [ ] |
 | F7 | 安全边界第一版 | [ ] |
 | F8 | S1/S2 maintenance 接入 | [ ] |
@@ -91,16 +91,16 @@
 
 ### F5 稳定第三方 Storage SPI 最小面
 
-- [ ] 收敛 storage SPI 的最小生命周期和异常语义。
-- [ ] 增加 fake storage provider 编译/注册测试。
-- [ ] 明确 `supports()` 无副作用。
-- [ ] 文档化 experimental/stable 边界。
+- [x] 收敛 storage SPI 的最小生命周期和异常语义。
+- [x] 增加 fake storage provider 编译/注册测试。
+- [x] 明确 `supports()` 无副作用。
+- [x] 文档化 experimental/stable 边界。
 
 测试编号：
 
-- [ ] `T-PLUGIN-F5-SPI-COMPAT-01`
-- [ ] `T-PLUGIN-F5-CAPABILITY-PURE-01`
-- [ ] `T-PLUGIN-F5-LIFECYCLE-01`
+- [x] `T-PLUGIN-F5-SPI-COMPAT-01`
+- [x] `T-PLUGIN-F5-CAPABILITY-PURE-01`
+- [x] `T-PLUGIN-F5-LIFECYCLE-01`
 
 ### F6 插件依赖、版本和冲突治理
 

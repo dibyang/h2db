@@ -36,6 +36,17 @@ public interface StorageEngine {
     void closeImmediately();
 
     /**
+     * 正常关闭存储引擎。
+     * <p>
+     * 默认实现先刷新待持久化数据，再执行立即关闭。需要更精细关闭流程的存储引擎
+     * 可以覆盖该方法。
+     */
+    default void close() {
+        flush();
+        closeImmediately();
+    }
+
+    /**
      * 获取维护能力入口。
      *
      * @return 维护能力入口

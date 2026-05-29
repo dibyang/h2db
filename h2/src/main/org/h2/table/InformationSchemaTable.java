@@ -23,6 +23,8 @@ import org.h2.constraint.ConstraintReferential;
 import org.h2.constraint.ConstraintUnique;
 import org.h2.engine.Constants;
 import org.h2.engine.DbObject;
+import org.h2.engine.PluginRegistry;
+import org.h2.engine.PluginSource;
 import org.h2.engine.QueryStatisticsData;
 import org.h2.engine.Right;
 import org.h2.engine.RightOwner;
@@ -156,11 +158,17 @@ public final class InformationSchemaTable extends MetaTable {
 
     private static final int USERS = SYNONYMS + 1;
 
+    private static final int PLUGINS = USERS + 1;
+
+    private static final int PLUGIN_PROVIDERS = PLUGINS + 1;
+
+    private static final int PLUGIN_CAPABILITIES = PLUGIN_PROVIDERS + 1;
+
     /**
      * The number of meta table types. Supported meta table types are
      * {@code 0..META_TABLE_TYPE_COUNT - 1}.
      */
-    public static final int META_TABLE_TYPE_COUNT = USERS + 1;
+    public static final int META_TABLE_TYPE_COUNT = PLUGIN_CAPABILITIES + 1;
 
     private final boolean isView;
 
@@ -854,6 +862,42 @@ public final class InformationSchemaTable extends MetaTable {
                     column("REMARKS"), //
             };
             break;
+        case PLUGINS:
+            setMetaTableName("PLUGINS");
+            isView = false;
+            cols = new Column[] {
+                    column("PLUGIN_ID"), //
+                    column("PLUGIN_VERSION"), //
+                    column("SOURCE"), //
+                    column("IS_BUILTIN", TypeInfo.TYPE_BOOLEAN), //
+            };
+            indexColumnName = "PLUGIN_ID";
+            break;
+        case PLUGIN_PROVIDERS:
+            setMetaTableName("PLUGIN_PROVIDERS");
+            isView = false;
+            cols = new Column[] {
+                    column("PLUGIN_ID"), //
+                    column("PLUGIN_VERSION"), //
+                    column("PROVIDER_TYPE"), //
+                    column("PROVIDER_ID"), //
+                    column("SOURCE"), //
+                    column("IS_BUILTIN", TypeInfo.TYPE_BOOLEAN), //
+            };
+            indexColumnName = "PROVIDER_ID";
+            break;
+        case PLUGIN_CAPABILITIES:
+            setMetaTableName("PLUGIN_CAPABILITIES");
+            isView = false;
+            cols = new Column[] {
+                    column("PLUGIN_ID"), //
+                    column("PROVIDER_TYPE"), //
+                    column("PROVIDER_ID"), //
+                    column("CAPABILITY_NAME"), //
+                    column("SOURCE"), //
+            };
+            indexColumnName = "CAPABILITY_NAME";
+            break;
         default:
             throw DbException.getInternalError("type=" + type);
         }
@@ -991,6 +1035,15 @@ public final class InformationSchemaTable extends MetaTable {
             break;
         case USERS:
             users(session, rows);
+            break;
+        case PLUGINS:
+            plugins(session, indexFrom, indexTo, rows);
+            break;
+        case PLUGIN_PROVIDERS:
+            pluginProviders(session, indexFrom, indexTo, rows);
+            break;
+        case PLUGIN_CAPABILITIES:
+            pluginCapabilities(session, indexFrom, indexTo, rows);
             break;
         default:
             throw DbException.getInternalError("type=" + type);
@@ -3034,6 +3087,73 @@ public final class InformationSchemaTable extends MetaTable {
                 // REMARKS
                 user.getComment()
         );
+    }
+
+    private void plugins(SessionLocal session, Value indexFrom, Value indexTo, ArrayList<Row> rows) {
+        HashSet<String> seen = new HashSet<>();
+        for (PluginRegistry.ProviderDiagnostic diagnostic : database.getPluginRegistry().getProviderDiagnostics()) {
+            String pluginId = diagnostic.getPluginId();
+            if (!checkIndex(session, pluginId, indexFrom, indexTo) || !seen.add(pluginId)) {
+                continue;
+            }
+            PluginSource source = diagnostic.getSource();
+            add(session, rows,
+                    // PLUGIN_ID
+                    pluginId,
+                    // PLUGIN_VERSION
+                    diagnostic.getPluginVersion(),
+                    // SOURCE
+                    source.name(),
+                    // IS_BUILTIN
+                    ValueBoolean.get(source == PluginSource.BUILTIN)
+            );
+        }
+    }
+
+    private void pluginProviders(SessionLocal session, Value indexFrom, Value indexTo, ArrayList<Row> rows) {
+        for (PluginRegistry.ProviderDiagnostic diagnostic : database.getPluginRegistry().getProviderDiagnostics()) {
+            String providerId = diagnostic.getId();
+            if (!checkIndex(session, providerId, indexFrom, indexTo)) {
+                continue;
+            }
+            PluginSource source = diagnostic.getSource();
+            add(session, rows,
+                    // PLUGIN_ID
+                    diagnostic.getPluginId(),
+                    // PLUGIN_VERSION
+                    diagnostic.getPluginVersion(),
+                    // PROVIDER_TYPE
+                    diagnostic.getType(),
+                    // PROVIDER_ID
+                    providerId,
+                    // SOURCE
+                    source.name(),
+                    // IS_BUILTIN
+                    ValueBoolean.get(source == PluginSource.BUILTIN)
+            );
+        }
+    }
+
+    private void pluginCapabilities(SessionLocal session, Value indexFrom, Value indexTo, ArrayList<Row> rows) {
+        for (PluginRegistry.ProviderDiagnostic diagnostic : database.getPluginRegistry().getProviderDiagnostics()) {
+            for (String capability : diagnostic.getCapabilities()) {
+                if (!checkIndex(session, capability, indexFrom, indexTo)) {
+                    continue;
+                }
+                add(session, rows,
+                        // PLUGIN_ID
+                        diagnostic.getPluginId(),
+                        // PROVIDER_TYPE
+                        diagnostic.getType(),
+                        // PROVIDER_ID
+                        diagnostic.getId(),
+                        // CAPABILITY_NAME
+                        capability,
+                        // SOURCE
+                        diagnostic.getSource().name()
+                );
+            }
+        }
     }
 
     private void addConstraintColumnUsage(SessionLocal session, ArrayList<Row> rows, String catalog,

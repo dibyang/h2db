@@ -50,6 +50,7 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         runScenario("T-SHADOW-COMPACT-SHRINK-01", this::testShadowCompactShrinksBloatedStore);
         runScenario("T-SHADOW-COMPACT-PREPARE-01", this::testShadowCompactPrepareDoesNotReplaceSource);
         runScenario("T-ONLINE-COMPACT-SWITCH-SHADOW-01", this::testSwitchToPreparedShadow);
+        runScenario("T-ONLINE-COMPACT-DIAGNOSTICS-01", this::testReclamationDiagnostics);
         runScenario("T-ONLINE-COMPACT-MANIFEST-RECOVER-01", this::testManifestRecoveryRestoresSource);
         runScenario("T-ONLINE-COMPACT-BLOCKS-WRITES-01", this::testMaintenanceGateBlocksWrites);
         runScenario("T-ONLINE-COMPACT-VERIFY-FAIL-01", this::testVerifyFailureKeepsSource);
@@ -173,6 +174,30 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         } finally {
             deleteFilesUnlessKept(base);
             deleteFilesUnlessKept(base + ".reclaim.backup");
+        }
+    }
+
+    private void testReclamationDiagnostics() {
+        String base = mvStoreFile("reclamationDiagnostics");
+        try {
+            BloatStats stats = createBloatedStore(base);
+            MVStoreSpaceReclamationResult result = MVStoreSpaceReclamation.compactClosedStore(base,
+                    MVStoreSpaceReclamationOptions.DEFAULT);
+            assertTrue(result.isReplaced());
+            assertEquals(stats.afterDeleteSize, result.getSourceSize());
+            assertEquals(result.getSourceSize() - result.getCompactedSize(), result.getSavedBytes());
+            assertTrue(result.getSavedBytes() > 0);
+            assertTrue(result.getSavedPercent() > 0);
+            String summary = result.getDiagnosticSummary();
+            assertTrue(summary.contains("sourceSize=" + result.getSourceSize()));
+            assertTrue(summary.contains("compactedSize=" + result.getCompactedSize()));
+            assertTrue(summary.contains("savedBytes=" + result.getSavedBytes()));
+            assertTrue(summary.contains("savedPercent=" + result.getSavedPercent()));
+            assertTrue(summary.contains("replaced=true"));
+            assertEquals(summary, result.toString());
+            assertOnlyMarkerReadable(base);
+        } finally {
+            deleteFilesUnlessKept(base);
         }
     }
 

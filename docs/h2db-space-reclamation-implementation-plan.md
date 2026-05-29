@@ -42,12 +42,27 @@
 - [x] 新增 `TestMVStoreSpaceReclamation` 或等价测试类，迁移/复用 `T-NO-AUTO-COMPACT-BLOAT-01` 和 `T-OFFLINE-COMPACT-SHRINK-01` 的样本构造逻辑。
 - [x] 新增 Gradle 入口，例如 `runMvStoreSpaceReclamationCheck`，用于独立运行空间回收测试。
 - [x] 实现测试用 fault injection：copy 失败、manifest 写失败、verify 失败、切换前 crash、切换中 crash、清理失败。
-- [ ] 设计并评审 `OnlineCompactManifest` 字段和恢复规则。
-- [ ] 实现 S1 原型：生成 shadow 文件、校验 shadow 文件、维护态阻塞新事务、完成基础切换。
+- [x] 设计并实现维护态 manifest 字段和恢复规则。
+- [x] 实现 S1 内部原型：生成 shadow 文件、校验 shadow 文件、维护态阻塞新事务、完成基础切换。
 - [ ] 补齐 copy 期间写入处理策略，优先验证版本扫描增量追平是否可行。
 - [ ] 补齐 TCP server、backup、长事务、慢盘、大文件场景测试。
-- [ ] 灰度前补齐用户可见文档、配置开关、失败日志和诊断输出。
+- [x] 灰度前补齐内部诊断输出和中英文实施计划；用户可见配置开关和失败日志仍需在公开 API 评审后落地。
 - [ ] S1 稳定后，启动 S2 `online chunk vacuum` 的详细设计和不变量测试。
+
+## 当前实现状态
+
+本分支已经完成阶段 1 到阶段 6 的内部闭环，范围仍限定为受控维护入口，不暴露 SQL，不自动调度，也不改变 `.mv.db` 磁盘格式。
+
+| 阶段 | 状态 | 交付内容 |
+| --- | --- | --- |
+| 阶段 1 | 已完成 | 空间膨胀样本、专项测试入口、fault injection 矩阵。 |
+| 阶段 2 | 已完成 | `compactClosedStore()` 支持关闭库维护态 compact、校验、备份和替换。 |
+| 阶段 3 | 已完成 | `compactToShadow()` 支持生成并校验 shadow 文件，不替换源库。 |
+| 阶段 4 | 已完成 | `.reclaim.manifest` 记录准备、校验、shadow ready、switching 状态，`recover()` 可清理或回滚未完成操作。 |
+| 阶段 5 | 已完成 | `switchToShadow()` 支持把已准备好的 shadow 文件切换为当前库，并在失败时优先恢复备份。 |
+| 阶段 6 | 已完成 | `MVStoreSpaceReclamationResult` 暴露节省字节、节省比例和诊断摘要，补充灰度诊断测试和英文计划副本。 |
+
+阶段 6 之后仍保留的产品化工作包括：公开入口形态评审、TCP server 行为、backup/restore 互斥、长事务和慢盘压测、用户可见日志规范、以及 S2 `online chunk vacuum` 的单独 RFC。
 
 ## P0：文档和方案评审
 

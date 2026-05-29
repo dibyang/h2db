@@ -80,4 +80,46 @@ public final class MVStoreSpaceReclamationResult {
     public boolean isReplaced() {
         return replaced;
     }
+
+    /**
+     * 本次回收节省的文件字节数。
+     *
+     * @return 节省字节数，回收后文件更大时返回 0
+     */
+    public long getSavedBytes() {
+        return Math.max(0L, sourceSize - compactedSize);
+    }
+
+    /**
+     * 本次回收节省的空间比例。
+     *
+     * @return 节省比例，取值范围为 0 到 100
+     */
+    public int getSavedPercent() {
+        if (sourceSize <= 0L) {
+            return 0;
+        }
+        return (int) (getSavedBytes() * 100L / sourceSize);
+    }
+
+    /**
+     * 生成便于灰度观察和日志记录的诊断摘要。
+     *
+     * @return 诊断摘要
+     */
+    public String getDiagnosticSummary() {
+        return "source=" + sourceFileName +
+                ", shadow=" + shadowFileName +
+                ", backup=" + backupFileName +
+                ", sourceSize=" + sourceSize +
+                ", compactedSize=" + compactedSize +
+                ", savedBytes=" + getSavedBytes() +
+                ", savedPercent=" + getSavedPercent() +
+                ", replaced=" + replaced;
+    }
+
+    @Override
+    public String toString() {
+        return getDiagnosticSummary();
+    }
 }

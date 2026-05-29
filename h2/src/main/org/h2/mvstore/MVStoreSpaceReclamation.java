@@ -8,6 +8,7 @@ package org.h2.mvstore;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 
 import org.h2.message.DbException;
 import org.h2.store.fs.FileUtils;
@@ -49,16 +50,17 @@ public final class MVStoreSpaceReclamation {
         FileUtils.delete(backupFileName);
 
         long sourceSize = FileUtils.size(fileName);
+        long sourceLastModified = FileUtils.lastModified(fileName);
         try {
-            writeManifest(fileName, "PREPARING", shadowFileName, backupFileName);
+            writeManifest(fileName, "PREPARING", shadowFileName, backupFileName, sourceSize, sourceLastModified);
             MVStoreTool.compact(fileName, shadowFileName, options.compress);
-            writeManifest(fileName, "VERIFYING", shadowFileName, backupFileName);
+            writeManifest(fileName, "VERIFYING", shadowFileName, backupFileName, sourceSize, sourceLastModified);
             if (options.verifyAfterCompact) {
                 verifyStore(shadowFileName);
             }
             long compactedSize = FileUtils.size(shadowFileName);
             copyFile(fileName, backupFileName);
-            writeManifest(fileName, "SWITCHING", shadowFileName, backupFileName);
+            writeManifest(fileName, "SWITCHING", shadowFileName, backupFileName, sourceSize, sourceLastModified);
             try {
                 MVStoreTool.moveAtomicReplace(shadowFileName, fileName);
             } catch (RuntimeException e) {
@@ -100,14 +102,18 @@ public final class MVStoreSpaceReclamation {
         String shadowFileName = fileName + SHADOW_SUFFIX;
         FileUtils.delete(shadowFileName);
         long sourceSize = FileUtils.size(fileName);
+        long sourceLastModified = FileUtils.lastModified(fileName);
         try {
-            writeManifest(fileName, "PREPARING", shadowFileName, fileName + BACKUP_SUFFIX);
+            writeManifest(fileName, "PREPARING", shadowFileName, fileName + BACKUP_SUFFIX, sourceSize,
+                    sourceLastModified);
             MVStoreTool.compact(fileName, shadowFileName, options.compress);
-            writeManifest(fileName, "VERIFYING", shadowFileName, fileName + BACKUP_SUFFIX);
+            writeManifest(fileName, "VERIFYING", shadowFileName, fileName + BACKUP_SUFFIX, sourceSize,
+                    sourceLastModified);
             if (options.verifyAfterCompact) {
                 verifyStore(shadowFileName);
             }
-            writeManifest(fileName, "SHADOW_READY", shadowFileName, fileName + BACKUP_SUFFIX);
+            writeManifest(fileName, "SHADOW_READY", shadowFileName, fileName + BACKUP_SUFFIX, sourceSize,
+                    sourceLastModified);
             return new MVStoreSpaceReclamationResult(fileName, shadowFileName, fileName + BACKUP_SUFFIX,
                     sourceSize, FileUtils.size(shadowFileName), false);
         } catch (IOException e) {
@@ -143,11 +149,13 @@ public final class MVStoreSpaceReclamation {
         long sourceSize = FileUtils.size(fileName);
         long compactedSize = FileUtils.size(shadowFileName);
         try {
+            assertSourceUnchanged(fileName);
             if (options.verifyAfterCompact) {
                 verifyStore(shadowFileName);
             }
             copyFile(fileName, backupFileName);
-            writeManifest(fileName, "SWITCHING", shadowFileName, backupFileName);
+            writeManifest(fileName, "SWITCHING", shadowFileName, backupFileName, sourceSize,
+                    FileUtils.lastModified(fileName));
             try {
                 MVStoreTool.moveAtomicReplace(shadowFileName, fileName);
             } catch (RuntimeException e) {
@@ -216,16 +224,56 @@ public final class MVStoreSpaceReclamation {
     }
 
     private static void writeManifest(String fileName, String phase, String shadowFileName,
-            String backupFileName) throws IOException {
+            String backupFileName, long sourceSize, long sourceLastModified) throws IOException {
         String text = "magic=H2_MVSTORE_SPACE_RECLAMATION\n" +
                 "manifestVersion=1\n" +
                 "phase=" + phase + "\n" +
                 "sourceFile=" + fileName + "\n" +
                 "shadowFile=" + shadowFileName + "\n" +
                 "backupFile=" + backupFileName + "\n" +
+                "sourceSize=" + sourceSize + "\n" +
+                "sourceLastModified=" + sourceLastModified + "\n" +
                 "updatedAt=" + System.currentTimeMillis() + "\n";
         try (OutputStream out = FileUtils.newOutputStream(manifestFileName(fileName), false)) {
             out.write(text.getBytes("UTF-8"));
+        }
+    }
+
+    private static void assertSourceUnchanged(String fileName) throws IOException {
+        String manifestFileName = manifestFileName(fileName);
+        if (!FileUtils.exists(manifestFileName)) {
+            throw DataUtils.newMVStoreException(DataUtils.ERROR_FILE_CORRUPT,
+                    "Space reclamation manifest not found: {0}", manifestFileName);
+        }
+        String sourceSize = readManifestValue(manifestFileName, "sourceSize");
+        String sourceLastModified = readManifestValue(manifestFileName, "sourceLastModified");
+        if (sourceSize == null || sourceLastModified == null) {
+            throw DataUtils.newMVStoreException(DataUtils.ERROR_FILE_CORRUPT,
+                    "Space reclamation manifest misses source fingerprint: {0}", manifestFileName);
+        }
+        if (Long.parseLong(sourceSize) != FileUtils.size(fileName) ||
+                Long.parseLong(sourceLastModified) != FileUtils.lastModified(fileName)) {
+            throw DataUtils.newMVStoreException(DataUtils.ERROR_TRANSACTION_ILLEGAL_STATE,
+                    "Source file changed after shadow compact: {0}", fileName);
+        }
+    }
+
+    private static String readManifestValue(String fileName, String key) throws IOException {
+        try (InputStream in = FileUtils.newInputStream(fileName)) {
+            String text = new String(IOUtils.readBytesAndClose(in, -1), StandardCharsets.UTF_8);
+            String prefix = key + '=';
+            int start = 0;
+            while (start < text.length()) {
+                int end = text.indexOf('\n', start);
+                if (end < 0) {
+                    end = text.length();
+                }
+                if (text.startsWith(prefix, start)) {
+                    return text.substring(start + prefix.length(), end).trim();
+                }
+                start = end + 1;
+            }
+            return null;
         }
     }
 

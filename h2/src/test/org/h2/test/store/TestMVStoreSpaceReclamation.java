@@ -50,6 +50,7 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         runScenario("T-SHADOW-COMPACT-SHRINK-01", this::testShadowCompactShrinksBloatedStore);
         runScenario("T-SHADOW-COMPACT-PREPARE-01", this::testShadowCompactPrepareDoesNotReplaceSource);
         runScenario("T-ONLINE-COMPACT-SWITCH-SHADOW-01", this::testSwitchToPreparedShadow);
+        runScenario("T-ONLINE-COMPACT-CATCHUP-WRITES-01", this::testSwitchRejectsChangedSource);
         runScenario("T-ONLINE-COMPACT-DIAGNOSTICS-01", this::testReclamationDiagnostics);
         runScenario("T-ONLINE-COMPACT-MANIFEST-RECOVER-01", this::testManifestRecoveryRestoresSource);
         runScenario("T-ONLINE-COMPACT-BLOCKS-WRITES-01", this::testMaintenanceGateBlocksWrites);
@@ -174,6 +175,26 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         } finally {
             deleteFilesUnlessKept(base);
             deleteFilesUnlessKept(base + ".reclaim.backup");
+        }
+    }
+
+    private void testSwitchRejectsChangedSource() {
+        String base = mvStoreFile("switchRejectsChangedSource");
+        try {
+            createBloatedStore(base);
+            MVStoreSpaceReclamation.compactToShadow(base, MVStoreSpaceReclamationOptions.DEFAULT);
+            appendExtraMarker(base);
+            try {
+                MVStoreSpaceReclamation.switchToShadow(base, MVStoreSpaceReclamationOptions.DEFAULT);
+                fail("switch should reject a source file changed after shadow compact");
+            } catch (MVStoreException expected) {
+                assertTrue(expected.getMessage().contains("Source file changed after shadow compact"));
+            }
+            assertMarkerAndExtraReadable(base);
+            assertFalse(FileUtils.exists(base + ".reclaim.backup"));
+            assertTrue(FileUtils.exists(base + ".reclaim.shadow"));
+        } finally {
+            deleteFilesUnlessKept(base);
         }
     }
 
@@ -346,6 +367,40 @@ public class TestMVStoreSpaceReclamation extends TestBase {
             assertNotNull(marker);
             assertEquals(1, marker.length);
             assertEquals(MARKER, marker[0]);
+            closeStore(store);
+            store = null;
+        } finally {
+            closeStoreImmediately(store);
+        }
+    }
+
+    private void assertMarkerAndExtraReadable(String fileName) {
+        MVStore store = null;
+        try {
+            store = new MVStore.Builder().fileName(fileName).autoCommitDisabled().open();
+            MVMap<Integer, byte[]> data = store.openMap("data");
+            assertEquals(2L, data.sizeAsLong());
+            byte[] marker = data.get(-1);
+            byte[] extra = data.get(-2);
+            assertNotNull(marker);
+            assertNotNull(extra);
+            assertEquals(MARKER, marker[0]);
+            assertEquals(MARKER + 1, extra[0]);
+            closeStore(store);
+            store = null;
+        } finally {
+            closeStoreImmediately(store);
+        }
+    }
+
+    private void appendExtraMarker(String fileName) {
+        MVStore store = null;
+        try {
+            store = new MVStore.Builder().fileName(fileName).autoCommitDisabled().open();
+            MVMap<Integer, byte[]> data = store.openMap("data");
+            data.put(-2, new byte[] { MARKER + 1 });
+            store.commit();
+            store.getFileStore().sync();
             closeStore(store);
             store = null;
         } finally {

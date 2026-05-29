@@ -55,14 +55,15 @@ production-grade implementation.
 - [x] Add fault injection for copy failure, manifest write failure, verify failure, crash before switch, crash during switch, and cleanup failure.
 - [x] Design and implement maintenance manifest fields and recovery rules.
 - [x] Implement the internal S1 prototype: create a shadow file, verify it, block new write transactions in maintenance mode, and perform a basic switch.
-- [ ] Complete the write handling strategy during copy, preferably by validating version-scan catch-up.
+- [x] Add the conservative safety gate for writes during copy: reject switching if the source file changes after shadow creation.
+- [ ] Complete the real write catch-up strategy during copy, preferably by validating version-scan catch-up.
 - [ ] Add TCP server, backup, long transaction, slow disk, and large file tests.
 - [x] Add internal diagnostics and this English companion plan before rollout; public settings and user-visible failure logging still require API review.
 - [ ] Start the detailed S2 `online chunk vacuum` design and invariant tests after S1 stabilizes.
 
 ## Current Implementation Status
 
-This branch has completed internal phases 1 through 6. The scope is still a
+This branch has completed internal phases 1 through 7. The scope is still a
 controlled maintenance entry point: no SQL exposure, no automatic scheduling,
 and no `.mv.db` format change.
 
@@ -74,11 +75,15 @@ and no `.mv.db` format change.
 | Phase 4 | Done | `.reclaim.manifest` records preparing, verifying, shadow-ready, and switching states; `recover()` can clean up or roll back incomplete operations. |
 | Phase 5 | Done | `switchToShadow()` promotes a prepared shadow file and restores from backup on failure when possible. |
 | Phase 6 | Done | `MVStoreSpaceReclamationResult` exposes saved bytes, saved percent, and a diagnostic summary; rollout diagnostics are covered by tests. |
+| Phase 7 | Done | The manifest records source size and last-modified time; `switchToShadow()` rejects switching when the source file changed; `T-ONLINE-COMPACT-CATCHUP-WRITES-01` fixes this conservative safety behavior. |
 
-Remaining productization work after phase 6 includes public entry-point review,
-TCP server behavior, backup/restore exclusion, long transaction and slow-disk
-stress tests, user-visible logging rules, and the separate S2 online chunk
-vacuum RFC.
+Remaining productization work after phase 7 includes public entry-point review,
+real incremental catch-up, TCP server behavior, backup/restore exclusion, long
+transaction and slow-disk stress tests, user-visible logging rules, and the
+separate S2 online chunk vacuum RFC.
+After phase 7, writes during copy are no longer silently overwritten. This is a
+safe rejection policy, not true incremental catch-up. A short-blocking online
+compact still needs version-scan catch-up or a dual-write/change-log design.
 
 ## P0: Documents and Review
 
@@ -118,6 +123,7 @@ Test ids:
 | `T-SHADOW-COMPACT-SHRINK-01` | Verify shadow compact shrinks the file and preserves marker data. |
 | `T-ONLINE-COMPACT-BLOCKS-WRITES-01` | Verify maintenance mode blocks new writes. |
 | `T-ONLINE-COMPACT-VERIFY-FAIL-01` | Verify failed validation does not replace the old store. |
+| `T-ONLINE-COMPACT-CATCHUP-WRITES-01` | Before real catch-up exists, verify switching is rejected when the source changes, avoiding silent data loss. |
 | `T-ONLINE-COMPACT-CRASH-BEFORE-SWITCH-01` | Verify crash before switch keeps the old store recoverable. |
 | `T-ONLINE-COMPACT-CRASH-DURING-SWITCH-01` | Verify crash during switch can recover to the old or new store. |
 | `T-ONLINE-COMPACT-DIAGNOSTICS-01` | Verify saved bytes, saved percent, and diagnostic summary output. |

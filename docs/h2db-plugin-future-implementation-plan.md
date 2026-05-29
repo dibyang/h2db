@@ -17,7 +17,7 @@
 | F6 | 插件依赖、版本和冲突治理 | [x] |
 | F7 | 安全边界第一版 | [x] |
 | F8 | S1/S2 maintenance 接入 | [x] |
-| F9 | 自动发现、示例和生态补齐 | [ ] |
+| F9 | 自动发现、示例和生态补齐 | [x] |
 
 ## 统一门禁
 
@@ -143,16 +143,16 @@
 
 ### F9 自动发现、示例和生态补齐
 
-- [ ] `ServiceLoader` 默认关闭。
-- [ ] 显式开启时发现 `H2Plugin`。
-- [ ] 新增最小示例插件或测试内示例。
-- [ ] 补充插件开发说明。
+- [x] `ServiceLoader` 默认关闭。
+- [x] 显式开启时发现 `H2Plugin`。
+- [x] 新增最小示例插件或测试内示例。
+- [x] 补充插件开发说明。
 
 测试编号：
 
-- [ ] `T-PLUGIN-F9-SERVICELOADER-OFF-01`
-- [ ] `T-PLUGIN-F9-SERVICELOADER-ON-01`
-- [ ] `T-PLUGIN-F9-SAMPLE-COMPILE-01`
+- [x] `T-PLUGIN-F9-SERVICELOADER-OFF-01`
+- [x] `T-PLUGIN-F9-SERVICELOADER-ON-01`
+- [x] `T-PLUGIN-F9-SAMPLE-COMPILE-01`
 
 ## 验收命令
 

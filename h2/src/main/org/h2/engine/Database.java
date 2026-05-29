@@ -330,6 +330,7 @@ public final class Database implements DataHandler, CastDataProvider {
             }
             BuiltinPlugins.register(pluginRegistry);
             PluginLoader.loadConfiguredPlugins(pluginRegistry, dbSettings.pluginClasses);
+            PluginLoader.loadServiceLoaderPlugins(pluginRegistry, dbSettings.pluginServiceLoader);
             starting = true;
             if (dbSettings.mvStore) {
                 storageEngineId = StorageEngineResolver.resolveRequested(dbSettings);

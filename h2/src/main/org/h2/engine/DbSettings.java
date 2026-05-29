@@ -282,6 +282,13 @@ public class DbSettings extends SettingsBase {
     public final String pluginClasses = get("PLUGIN_CLASSES", null);
 
     /**
+     * Database setting <code>PLUGIN_SERVICE_LOADER</code>
+     * (default: false).
+     * Whether plugins should be discovered from {@link java.util.ServiceLoader}.
+     */
+    public final boolean pluginServiceLoader = get("PLUGIN_SERVICE_LOADER", false);
+
+    /**
      * Database setting <code>MV_STORE</code>
      * (default: true).
      * Use the MVStore storage engine.

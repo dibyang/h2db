@@ -21,6 +21,9 @@ import org.h2.api.PluginProvider;
 import org.h2.api.TableEngineProvider;
 import org.h2.command.ddl.CreateTableData;
 import org.h2.engine.Database;
+import org.h2.engine.PluginLoader;
+import org.h2.engine.PluginRegistry;
+import org.h2.engine.PluginSource;
 import org.h2.engine.SessionLocal;
 import org.h2.jdbc.JdbcConnection;
 import org.h2.table.Table;
@@ -117,6 +120,43 @@ public class PluginLoaderTest {
 
         assertTrue(e.getMessage().contains("provider type is not allowed"));
         assertTrue(e.getMessage().contains("type=parser"));
+    }
+
+    /**
+     * T-PLUGIN-F9-SERVICELOADER-OFF-01.
+     */
+    @Test
+    public void serviceLoaderDiscoveryIsDisabledByDefault() {
+        PluginRegistry registry = new PluginRegistry();
+        int loaded = PluginLoader.loadDiscoveredPlugins(registry, false,
+                Arrays.asList(new ConfiguredPlugin()), PluginSource.SERVICE_LOADER);
+
+        assertTrue(loaded == 0);
+        assertTrue(registry.findProvider(TableEngineProvider.TYPE, "external_table") == null);
+    }
+
+    /**
+     * T-PLUGIN-F9-SERVICELOADER-ON-01.
+     */
+    @Test
+    public void serviceLoaderDiscoveryCanBeEnabled() {
+        PluginRegistry registry = new PluginRegistry();
+        int loaded = PluginLoader.loadDiscoveredPlugins(registry, true,
+                Arrays.asList(new ConfiguredPlugin()), PluginSource.SERVICE_LOADER);
+
+        assertTrue(loaded == 1);
+        assertNotNull(registry.findProvider(TableEngineProvider.TYPE, "external_table"));
+    }
+
+    /**
+     * T-PLUGIN-F9-SAMPLE-COMPILE-01.
+     */
+    @Test
+    public void samplePluginCompilesAndProvidesTableProvider() {
+        ConfiguredPlugin plugin = new ConfiguredPlugin();
+
+        assertTrue(plugin.getProviders().iterator().hasNext());
+        assertTrue(plugin.getH2VersionRange().equals("*"));
     }
 
     private static String url(String name, String pluginClass) {

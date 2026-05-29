@@ -5,6 +5,8 @@
  */
 package org.h2.engine;
 
+import java.util.ServiceLoader;
+
 import org.h2.api.H2Plugin;
 import org.h2.api.PluginDependency;
 import org.h2.message.DbException;
@@ -40,6 +42,40 @@ public final class PluginLoader {
             validatePlugin(registry, plugin, className);
             registry.registerPlugin(plugin, PluginSource.CONFIGURED_CLASS);
         }
+    }
+
+    /**
+     * 按开关加载 ServiceLoader 发现的插件。
+     *
+     * @param registry 插件注册中心
+     * @param enabled 是否启用
+     * @return 加载插件数量
+     */
+    public static int loadServiceLoaderPlugins(PluginRegistry registry, boolean enabled) {
+        return loadDiscoveredPlugins(registry, enabled, ServiceLoader.load(H2Plugin.class), PluginSource.SERVICE_LOADER);
+    }
+
+    /**
+     * 加载已发现的插件。
+     *
+     * @param registry 插件注册中心
+     * @param enabled 是否启用
+     * @param plugins 已发现插件
+     * @param source 插件来源
+     * @return 加载插件数量
+     */
+    public static int loadDiscoveredPlugins(PluginRegistry registry, boolean enabled, Iterable<H2Plugin> plugins,
+            PluginSource source) {
+        if (!enabled) {
+            return 0;
+        }
+        int count = 0;
+        for (H2Plugin plugin : plugins) {
+            validatePlugin(registry, plugin, plugin.getClass().getName());
+            registry.registerPlugin(plugin, source);
+            count++;
+        }
+        return count;
     }
 
     private static void validatePlugin(PluginRegistry registry, H2Plugin plugin, String className) {

@@ -83,9 +83,29 @@ public final class StorageEngineResolver {
      */
     public static StorageEngineProvider requireStorageProvider(PluginRegistry registry, String storageEngineId,
             boolean readOnly) {
+        return requireStorageProvider(registry, storageEngineId, readOnly, false);
+    }
+
+    /**
+     * 查找并校验 storage provider。
+     *
+     * @param registry 插件注册中心
+     * @param storageEngineId storage engine id
+     * @param readOnly 是否只读打开
+     * @param allowReadOnlyDowngrade 是否允许只读降级
+     * @return storage provider
+     */
+    public static StorageEngineProvider requireStorageProvider(PluginRegistry registry, String storageEngineId,
+            boolean readOnly, boolean allowReadOnlyDowngrade) {
         PluginProvider provider = registry.findProvider(StorageEngineProvider.TYPE, storageEngineId);
         if (!(provider instanceof StorageEngineProvider)) {
-            throw missingStorageProvider(storageEngineId, readOnly);
+            if (isMissingStorageReadOnlyDowngradeAllowed(readOnly, allowReadOnlyDowngrade)) {
+                PluginProvider fallback = registry.findProvider(StorageEngineProvider.TYPE, DEFAULT_STORAGE_ENGINE_ID);
+                if (fallback instanceof StorageEngineProvider) {
+                    return (StorageEngineProvider) fallback;
+                }
+            }
+            throw missingStorageProvider(storageEngineId, readOnly, allowReadOnlyDowngrade);
         }
         return (StorageEngineProvider) provider;
     }
@@ -97,6 +117,17 @@ public final class StorageEngineResolver {
      */
     public static boolean isMissingStorageReadOnlyDowngradeAllowed() {
         return false;
+    }
+
+    /**
+     * 判断当前打开请求是否允许缺失 storage provider 只读降级。
+     *
+     * @param readOnly 是否只读打开
+     * @param allowReadOnlyDowngrade 是否显式允许降级
+     * @return 允许时返回 true
+     */
+    public static boolean isMissingStorageReadOnlyDowngradeAllowed(boolean readOnly, boolean allowReadOnlyDowngrade) {
+        return readOnly && allowReadOnlyDowngrade;
     }
 
     /**
@@ -153,9 +184,11 @@ public final class StorageEngineResolver {
         return databaseName + STORAGE_METADATA_SUFFIX;
     }
 
-    private static DbException missingStorageProvider(String storageEngineId, boolean readOnly) {
+    private static DbException missingStorageProvider(String storageEngineId, boolean readOnly,
+            boolean allowReadOnlyDowngrade) {
         return DbException.getUnsupportedException("Missing storage engine provider: type="
                 + StorageEngineProvider.TYPE + ", id=" + storageEngineId + ", readOnly=" + readOnly
-                + ", readOnlyDowngradeAllowed=" + isMissingStorageReadOnlyDowngradeAllowed());
+                + ", readOnlyDowngradeAllowed="
+                + isMissingStorageReadOnlyDowngradeAllowed(readOnly, allowReadOnlyDowngrade));
     }
 }

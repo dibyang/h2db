@@ -275,6 +275,14 @@ public class DbSettings extends SettingsBase {
     public final String storageEngine = get("STORAGE_ENGINE", StorageEngineResolver.DEFAULT_STORAGE_ENGINE_ID);
 
     /**
+     * Database setting <code>MISSING_STORAGE_READ_ONLY_DOWNGRADE</code>
+     * (default: false).
+     * Whether a missing storage provider may be opened through a safe read-only
+     * downgrade path.
+     */
+    public final boolean missingStorageReadOnlyDowngrade = get("MISSING_STORAGE_READ_ONLY_DOWNGRADE", false);
+
+    /**
      * Database setting <code>PLUGIN_CLASSES</code>
      * (default: null).
      * Comma-separated {@link org.h2.api.H2Plugin} class names to load explicitly.

@@ -116,6 +116,9 @@ public class StorageEngineResolverTest {
     @Test
     public void missingStorageProviderReadOnlyDowngradeIsDisabled() {
         assertFalse(StorageEngineResolver.isMissingStorageReadOnlyDowngradeAllowed());
+        assertFalse(StorageEngineResolver.isMissingStorageReadOnlyDowngradeAllowed(false, true));
+        assertFalse(StorageEngineResolver.isMissingStorageReadOnlyDowngradeAllowed(true, false));
+        assertTrue(StorageEngineResolver.isMissingStorageReadOnlyDowngradeAllowed(true, true));
     }
 
     /**
@@ -128,5 +131,53 @@ public class StorageEngineResolverTest {
 
         assertTrue(e.getMessage().contains("id=other"));
         assertFalse(e.getMessage().contains("opened"));
+    }
+
+    /**
+     * T-PLUGIN-R4-READONLY-DEGRADE-01.
+     */
+    @Test
+    public void missingStorageProviderCanDowngradeToReadOnlyWhenExplicit() throws Exception {
+        String databaseName = baseDir + "/readOnlyDowngrade";
+        FileUtils.deleteRecursive(baseDir, true);
+        try {
+            try (Connection conn = DriverManager.getConnection("jdbc:h2:" + databaseName, "sa", "")) {
+                conn.createStatement().execute("create table test(id int primary key, name varchar)");
+                conn.createStatement().execute("insert into test values(1, 'read-only')");
+            }
+            StorageEngineResolver.writePersistedStorageEngineId(databaseName, "missing");
+
+            try (Connection conn = DriverManager.getConnection("jdbc:h2:" + databaseName
+                    + ";ACCESS_MODE_DATA=r;STORAGE_ENGINE=missing;MISSING_STORAGE_READ_ONLY_DOWNGRADE=TRUE",
+                    "sa", "")) {
+                assertTrue(conn.isReadOnly());
+                assertTrue(conn.createStatement().executeQuery("select name from test where id = 1").next());
+            }
+        } finally {
+            FileUtils.deleteRecursive(baseDir, true);
+        }
+    }
+
+    /**
+     * T-PLUGIN-R4-NO-WRITE-ON-DEGRADE-01.
+     */
+    @Test
+    public void readOnlyDowngradeDoesNotAllowWrites() throws Exception {
+        String databaseName = baseDir + "/readOnlyDowngradeNoWrite";
+        FileUtils.deleteRecursive(baseDir, true);
+        try {
+            try (Connection conn = DriverManager.getConnection("jdbc:h2:" + databaseName, "sa", "")) {
+                conn.createStatement().execute("create table test(id int)");
+            }
+            StorageEngineResolver.writePersistedStorageEngineId(databaseName, "missing");
+
+            try (Connection conn = DriverManager.getConnection("jdbc:h2:" + databaseName
+                    + ";ACCESS_MODE_DATA=r;STORAGE_ENGINE=missing;MISSING_STORAGE_READ_ONLY_DOWNGRADE=TRUE",
+                    "sa", "")) {
+                assertThrows(SQLException.class, () -> conn.createStatement().execute("insert into test values(1)"));
+            }
+        } finally {
+            FileUtils.deleteRecursive(baseDir, true);
+        }
     }
 }

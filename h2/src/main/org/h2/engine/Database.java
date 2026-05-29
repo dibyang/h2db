@@ -338,7 +338,7 @@ public final class Database implements DataHandler, CastDataProvider {
                         ? StorageEngineResolver.readPersistedStorageEngineId(databaseName) : null;
                 StorageEngineResolver.validateMatch(storageEngineId, persistedStorageEngineId);
                 StorageEngineProvider provider = StorageEngineResolver.requireStorageProvider(pluginRegistry,
-                        storageEngineId, readOnly);
+                        storageEngineId, readOnly, dbSettings.missingStorageReadOnlyDowngrade);
                 storageEngine = provider.open(new DatabaseStorageEngineContext(ci.getFileEncryptionKey()));
                 if (!(storageEngine instanceof MVStoreBackedStorageEngine)) {
                     throw DbException.getUnsupportedException("Storage engine is not MVStore-backed: "

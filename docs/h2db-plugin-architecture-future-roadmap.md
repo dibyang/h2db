@@ -328,6 +328,7 @@
 
 后续应为每个阶段单独建立可追踪开发计划，例如：
 
+- `docs/h2db-plugin-future-implementation-plan.md`
 - `docs/h2db-plugin-f1-diagnostics-plan.md`
 - `docs/h2db-plugin-f2-storage-id-plan.md`
 - `docs/h2db-plugin-f4-external-loading-plan.md`

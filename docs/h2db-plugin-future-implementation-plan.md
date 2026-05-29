@@ -12,7 +12,7 @@
 | F1 | 插件诊断与 registry 可观测性 | [x] |
 | F2 | storage engine id 持久化边界 | [x] |
 | F3 | 缺失 storage 插件处理策略 | [x] |
-| F4 | 显式外部插件加载 | [ ] |
+| F4 | 显式外部插件加载 | [x] |
 | F5 | 收敛第三方 Storage SPI 最小面 | [ ] |
 | F6 | 插件依赖、版本和冲突治理 | [ ] |
 | F7 | 安全边界第一版 | [ ] |
@@ -78,16 +78,16 @@
 
 ### F4 显式外部插件加载
 
-- [ ] 选择第一版显式配置入口。
-- [ ] 加载实现 `H2Plugin` 的外部类并注册 provider。
-- [ ] 加载失败时显式报错。
-- [ ] 内置 provider 冲突不可覆盖。
+- [x] 选择第一版显式配置入口：`PLUGIN_CLASSES`。
+- [x] 加载实现 `H2Plugin` 的外部类并注册 provider。
+- [x] 加载失败时显式报错。
+- [x] 内置 provider 冲突不可覆盖。
 
 测试编号：
 
-- [ ] `T-PLUGIN-F4-LOAD-CLASS-01`
-- [ ] `T-PLUGIN-F4-LOAD-FAIL-01`
-- [ ] `T-PLUGIN-F4-BUILTIN-CONFLICT-01`
+- [x] `T-PLUGIN-F4-LOAD-CLASS-01`
+- [x] `T-PLUGIN-F4-LOAD-FAIL-01`
+- [x] `T-PLUGIN-F4-BUILTIN-CONFLICT-01`
 
 ### F5 稳定第三方 Storage SPI 最小面
 

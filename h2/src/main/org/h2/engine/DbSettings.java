@@ -275,6 +275,13 @@ public class DbSettings extends SettingsBase {
     public final String storageEngine = get("STORAGE_ENGINE", StorageEngineResolver.DEFAULT_STORAGE_ENGINE_ID);
 
     /**
+     * Database setting <code>PLUGIN_CLASSES</code>
+     * (default: null).
+     * Comma-separated {@link org.h2.api.H2Plugin} class names to load explicitly.
+     */
+    public final String pluginClasses = get("PLUGIN_CLASSES", null);
+
+    /**
      * Database setting <code>MV_STORE</code>
      * (default: true).
      * Use the MVStore storage engine.

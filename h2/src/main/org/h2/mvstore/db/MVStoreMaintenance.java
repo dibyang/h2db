@@ -5,28 +5,23 @@
  */
 package org.h2.mvstore.db;
 
-import org.h2.api.PluginCapability;
 import org.h2.api.StorageMaintenance;
 import org.h2.api.StorageMaintenanceResult;
 
 /**
  * MVStore 存储维护能力边界。
  * <p>
- * 当前阶段只暴露已存在的关闭态 compact 能力；在线回收和 crash-safe publish
- * 留给 S2 阶段实现，并通过 capability gate 明确返回不支持。
+ * 当前阶段只固定维护入口边界；在线回收和 crash-safe publish 留给 S2
+ * 阶段实现，并通过 capability gate 明确返回不支持。
  */
 final class MVStoreMaintenance implements StorageMaintenance {
 
-    private final MVStoreStorageEngine engine;
-
     MVStoreMaintenance(MVStoreStorageEngine engine) {
-        this.engine = engine;
     }
 
     @Override
     public boolean supports(String capability) {
-        return PluginCapability.STORAGE_COMPACT_CLOSED.equals(capability)
-                && engine.supports(capability);
+        return false;
     }
 
     @Override

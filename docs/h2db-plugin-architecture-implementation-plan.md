@@ -22,7 +22,7 @@
 | P2 MVStore Storage 适配 | 包装现有 `Store`，保留 `Database.getStore()` 过渡 | [x] |
 | P3 MVStore Table Provider | 内置建表 provider 可调用现有 `Store.createTable()` | [x] |
 | P4 默认建表路径切换 | `Schema.createTable()` 走 provider，legacy fallback 兼容 | [x] |
-| P5 Capability 与 Maintenance 边界 | 暴露能力查询和 S2 gate，不迁移 S1 实现 | [ ] |
+| P5 Capability 与 Maintenance 边界 | 暴露能力查询和 S2 gate，不迁移 S1 实现 | [x] |
 | P6 回归与文档收口 | 补齐测试、兼容说明和后续 backlog | [ ] |
 
 ## 执行门禁
@@ -111,17 +111,17 @@
 
 ### P5 Capability 与 Maintenance 边界
 
-- [ ] `StorageEngine.supports(String capability)` 支持阶段一 capability 查询。
-- [ ] `StorageMaintenance` 第一轮提供边界，`vacuumOnline()` 默认返回 `UNSUPPORTED` 或等价结果。
-- [ ] 内置 MVStore storage provider 声明基础能力：persistent、transactional、mvcc、backup 等。
-- [ ] S2 相关能力只作为 gate 保留，不实现 S2：`storage.vacuum.online`、`storage.publish.crashSafe`、`storage.truncate.safe`。
-- [ ] 确保后续 S2 入口必须先检查 storage capability。
-- [ ] 同步新增 JUnit 测试覆盖 unsupported maintenance capability 和 S2 capability gate。
+- [x] `StorageEngine.supports(String capability)` 支持阶段一 capability 查询。
+- [x] `StorageMaintenance` 第一轮提供边界，`vacuumOnline()` 默认返回 `UNSUPPORTED` 或等价结果。
+- [x] 内置 MVStore storage provider 声明基础能力：persistent、transactional、mvcc、backup 等。
+- [x] S2 相关能力只作为 gate 保留，不实现 S2：`storage.vacuum.online`、`storage.publish.crashSafe`、`storage.truncate.safe`。
+- [x] 确保后续 S2 入口必须先检查 storage capability。
+- [x] 同步新增 JUnit 测试覆盖 unsupported maintenance capability 和 S2 capability gate。
 
 验收：
 
-- [ ] `T-PLUGIN-CAPABILITY-UNSUPPORTED-01`
-- [ ] `T-PLUGIN-S2-CAPABILITY-GATE-01`
+- [x] `T-PLUGIN-CAPABILITY-UNSUPPORTED-01`
+- [x] `T-PLUGIN-S2-CAPABILITY-GATE-01`
 
 ### P6 回归与文档收口
 

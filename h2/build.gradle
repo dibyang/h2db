@@ -200,6 +200,9 @@ task runPluginArchitectureCheck(type: Test) {
     description = 'Runs the plugin architecture JUnit checks.'
     testClassesDirs = sourceSets.pluginTest.output.classesDirs
     classpath = sourceSets.pluginTest.runtimeClasspath
+    scanForTestClasses = false
+    include '**/*Test.class'
+    exclude '**/*$*.class'
     useJUnitPlatform()
     dependsOn pluginTestClasses
 }

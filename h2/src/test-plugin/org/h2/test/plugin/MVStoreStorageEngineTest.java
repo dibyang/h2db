@@ -16,6 +16,7 @@ import java.sql.ResultSet;
 import java.sql.Statement;
 
 import org.h2.api.PluginCapability;
+import org.h2.api.StorageEngineProvider;
 import org.h2.engine.Constants;
 import org.h2.engine.Database;
 import org.h2.engine.SessionLocal;
@@ -114,6 +115,39 @@ public class MVStoreStorageEngineTest {
             Database db = database(conn);
             assertFalse(db.getStore().getMvStore().isPersistent());
             assertTrue(db.getStorageEngine().supports(PluginCapability.STORAGE_PERSISTENT));
+        }
+    }
+
+    /**
+     * T-PLUGIN-CAPABILITY-UNSUPPORTED-01.
+     */
+    @Test
+    public void reportsUnsupportedMaintenanceCapabilities() throws Exception {
+        try (Connection conn = DriverManager.getConnection("jdbc:h2:mem:pluginUnsupportedMaintenance", "sa", "")) {
+            Database db = database(conn);
+
+            assertFalse(db.getStorageEngine().supports(PluginCapability.STORAGE_VACUUM_ONLINE));
+            assertFalse(db.getStorageEngine().getMaintenance().supports(PluginCapability.STORAGE_VACUUM_ONLINE));
+            assertTrue(db.getStorageEngine().getMaintenance().compactOnline().isUnsupported());
+            assertTrue(db.getStorageEngine().getMaintenance().vacuumOnline().isUnsupported());
+        }
+    }
+
+    /**
+     * T-PLUGIN-S2-CAPABILITY-GATE-01.
+     */
+    @Test
+    public void keepsS2CapabilitiesBehindGate() throws Exception {
+        try (Connection conn = DriverManager.getConnection("jdbc:h2:mem:pluginS2Gate", "sa", "")) {
+            Database db = database(conn);
+
+            assertFalse(db.getPluginRegistry().supports(StorageEngineProvider.TYPE,
+                    MVStoreStorageEngineProvider.ID, PluginCapability.STORAGE_VACUUM_ONLINE));
+            assertFalse(db.getPluginRegistry().supports(StorageEngineProvider.TYPE,
+                    MVStoreStorageEngineProvider.ID, PluginCapability.STORAGE_PUBLISH_CRASH_SAFE));
+            assertFalse(db.getPluginRegistry().supports(StorageEngineProvider.TYPE,
+                    MVStoreStorageEngineProvider.ID, PluginCapability.STORAGE_TRUNCATE_SAFE));
+            assertTrue(db.getStorageEngine().getMaintenance().vacuumOnline().isUnsupported());
         }
     }
 

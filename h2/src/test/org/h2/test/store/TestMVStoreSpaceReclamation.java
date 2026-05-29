@@ -49,6 +49,7 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         runScenario("T-MAINTENANCE-COMPACT-REPLACE-01", this::testMaintenanceCompactReplacesClosedStore);
         runScenario("T-SHADOW-COMPACT-SHRINK-01", this::testShadowCompactShrinksBloatedStore);
         runScenario("T-SHADOW-COMPACT-PREPARE-01", this::testShadowCompactPrepareDoesNotReplaceSource);
+        runScenario("T-ONLINE-COMPACT-MANIFEST-RECOVER-01", this::testManifestRecoveryRestoresSource);
         runScenario("T-ONLINE-COMPACT-BLOCKS-WRITES-01", this::testMaintenanceGateBlocksWrites);
         runScenario("T-ONLINE-COMPACT-VERIFY-FAIL-01", this::testVerifyFailureKeepsSource);
         runScenario("T-ONLINE-COMPACT-CRASH-BEFORE-SWITCH-01", this::testCrashBeforeSwitchKeepsSource);
@@ -125,9 +126,31 @@ public class TestMVStoreSpaceReclamation extends TestBase {
             assertFalse(result.isReplaced());
             assertEquals(stats.afterDeleteSize, result.getSourceSize());
             assertTrue(FileUtils.exists(result.getShadowFileName()));
+            assertTrue(FileUtils.exists(base + ".reclaim.manifest"));
             assertTrue(result.getCompactedSize() < stats.afterDeleteSize / 4);
             assertOnlyMarkerReadable(base);
             assertOnlyMarkerReadable(result.getShadowFileName());
+        } finally {
+            deleteFilesUnlessKept(base);
+        }
+    }
+
+    private void testManifestRecoveryRestoresSource() {
+        String base = mvStoreFile("manifestRecovery");
+        try {
+            createBloatedStore(base);
+            MVStoreSpaceReclamationResult result = MVStoreSpaceReclamation.compactToShadow(base,
+                    MVStoreSpaceReclamationOptions.DEFAULT);
+            assertTrue(FileUtils.exists(base + ".reclaim.manifest"));
+            copyFile(base, base + ".reclaim.backup");
+            FileUtils.delete(base);
+            MVStoreSpaceReclamation.recover(base);
+            assertFalse(FileUtils.exists(result.getShadowFileName()));
+            assertFalse(FileUtils.exists(base + ".reclaim.backup"));
+            assertFalse(FileUtils.exists(base + ".reclaim.manifest"));
+            assertOnlyMarkerReadable(base);
+        } catch (IOException e) {
+            throw new AssertionError(e);
         } finally {
             deleteFilesUnlessKept(base);
         }
@@ -362,6 +385,9 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         FileUtils.delete(shadowFile(base) + ".copy");
         FileUtils.delete(manifestFile(base));
         FileUtils.delete(backupFile(base));
+        FileUtils.delete(base + ".reclaim.shadow");
+        FileUtils.delete(base + ".reclaim.backup");
+        FileUtils.delete(base + ".reclaim.manifest");
     }
 
     private static String rootMessage(Throwable throwable) {

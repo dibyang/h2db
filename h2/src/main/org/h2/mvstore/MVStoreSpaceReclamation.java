@@ -50,12 +50,15 @@ public final class MVStoreSpaceReclamation {
 
         long sourceSize = FileUtils.size(fileName);
         try {
+            writeManifest(fileName, "PREPARING", shadowFileName, backupFileName);
             MVStoreTool.compact(fileName, shadowFileName, options.compress);
+            writeManifest(fileName, "VERIFYING", shadowFileName, backupFileName);
             if (options.verifyAfterCompact) {
                 verifyStore(shadowFileName);
             }
             long compactedSize = FileUtils.size(shadowFileName);
             copyFile(fileName, backupFileName);
+            writeManifest(fileName, "SWITCHING", shadowFileName, backupFileName);
             try {
                 MVStoreTool.moveAtomicReplace(shadowFileName, fileName);
             } catch (RuntimeException e) {
@@ -65,6 +68,7 @@ public final class MVStoreSpaceReclamation {
             if (!options.keepBackup) {
                 FileUtils.delete(backupFileName);
             }
+            FileUtils.delete(manifestFileName(fileName));
             return new MVStoreSpaceReclamationResult(fileName, shadowFileName, backupFileName,
                     sourceSize, compactedSize, true);
         } catch (IOException e) {
@@ -97,12 +101,18 @@ public final class MVStoreSpaceReclamation {
         FileUtils.delete(shadowFileName);
         long sourceSize = FileUtils.size(fileName);
         try {
+            writeManifest(fileName, "PREPARING", shadowFileName, fileName + BACKUP_SUFFIX);
             MVStoreTool.compact(fileName, shadowFileName, options.compress);
+            writeManifest(fileName, "VERIFYING", shadowFileName, fileName + BACKUP_SUFFIX);
             if (options.verifyAfterCompact) {
                 verifyStore(shadowFileName);
             }
+            writeManifest(fileName, "SHADOW_READY", shadowFileName, fileName + BACKUP_SUFFIX);
             return new MVStoreSpaceReclamationResult(fileName, shadowFileName, fileName + BACKUP_SUFFIX,
                     sourceSize, FileUtils.size(shadowFileName), false);
+        } catch (IOException e) {
+            FileUtils.delete(shadowFileName);
+            throw DbException.convertIOException(e, fileName);
         } catch (RuntimeException e) {
             FileUtils.delete(shadowFileName);
             throw e;
@@ -116,8 +126,29 @@ public final class MVStoreSpaceReclamation {
      */
     public static void cleanUp(String fileName) {
         FileUtils.delete(fileName + SHADOW_SUFFIX);
+        FileUtils.delete(manifestFileName(fileName));
         if (FileUtils.exists(fileName + BACKUP_SUFFIX) && FileUtils.exists(fileName)) {
             FileUtils.delete(fileName + BACKUP_SUFFIX);
+        }
+    }
+
+    /**
+     * 恢复上一次未完成的维护态空间回收。
+     *
+     * @param fileName MVStore 文件名
+     */
+    public static void recover(String fileName) {
+        String shadowFileName = fileName + SHADOW_SUFFIX;
+        String backupFileName = fileName + BACKUP_SUFFIX;
+        if (!FileUtils.exists(fileName) && FileUtils.exists(backupFileName)) {
+            MVStoreTool.moveAtomicReplace(backupFileName, fileName);
+        } else if (!FileUtils.exists(fileName) && FileUtils.exists(shadowFileName)) {
+            MVStoreTool.moveAtomicReplace(shadowFileName, fileName);
+        }
+        if (FileUtils.exists(fileName)) {
+            FileUtils.delete(shadowFileName);
+            FileUtils.delete(backupFileName);
+            FileUtils.delete(manifestFileName(fileName));
         }
     }
 
@@ -132,6 +163,24 @@ public final class MVStoreSpaceReclamation {
                 OutputStream out = FileUtils.newOutputStream(target, false)) {
             IOUtils.copy(in, out);
         }
+    }
+
+    private static void writeManifest(String fileName, String phase, String shadowFileName,
+            String backupFileName) throws IOException {
+        String text = "magic=H2_MVSTORE_SPACE_RECLAMATION\n" +
+                "manifestVersion=1\n" +
+                "phase=" + phase + "\n" +
+                "sourceFile=" + fileName + "\n" +
+                "shadowFile=" + shadowFileName + "\n" +
+                "backupFile=" + backupFileName + "\n" +
+                "updatedAt=" + System.currentTimeMillis() + "\n";
+        try (OutputStream out = FileUtils.newOutputStream(manifestFileName(fileName), false)) {
+            out.write(text.getBytes("UTF-8"));
+        }
+    }
+
+    private static String manifestFileName(String fileName) {
+        return fileName + ".reclaim.manifest";
     }
 
     private static void restoreBackup(String fileName, String backupFileName) {

@@ -15,6 +15,7 @@ import java.sql.SQLException;
 import java.util.Arrays;
 
 import org.h2.api.H2Plugin;
+import org.h2.api.PluginDependency;
 import org.h2.api.PluginCapability;
 import org.h2.api.PluginProvider;
 import org.h2.api.TableEngineProvider;
@@ -67,6 +68,44 @@ public class PluginLoaderTest {
         assertTrue(e.getMessage().contains("id=mvstore"));
     }
 
+    /**
+     * T-PLUGIN-F6-H2-VERSION-RANGE-01.
+     */
+    @Test
+    public void rejectsUnsupportedH2VersionRange() {
+        SQLException e = assertThrows(SQLException.class, () ->
+                DriverManager.getConnection(url("pluginVersion", VersionMismatchPlugin.class.getName()), "sa", ""));
+
+        assertTrue(e.getMessage().contains("does not support this H2 version"));
+        assertTrue(e.getMessage().contains("required=0.0"));
+    }
+
+    /**
+     * T-PLUGIN-F6-DEPENDENCY-MISSING-01.
+     */
+    @Test
+    public void rejectsMissingPluginDependency() {
+        SQLException e = assertThrows(SQLException.class, () ->
+                DriverManager.getConnection(url("pluginDependency", MissingDependencyPlugin.class.getName()),
+                        "sa", ""));
+
+        assertTrue(e.getMessage().contains("Configured plugin dependency is missing"));
+        assertTrue(e.getMessage().contains("dependency=missing.plugin"));
+    }
+
+    /**
+     * T-PLUGIN-F6-PROVIDER-CONFLICT-01.
+     */
+    @Test
+    public void providerConflictIncludesPluginDiagnostics() {
+        SQLException e = assertThrows(SQLException.class, () ->
+                DriverManager.getConnection(url("pluginConflictDiagnostics", ConflictingPlugin.class.getName()),
+                        "sa", ""));
+
+        assertTrue(e.getMessage().contains("existingPlugin=h2.mvstore"));
+        assertTrue(e.getMessage().contains("newSource=CONFIGURED_CLASS"));
+    }
+
     private static String url(String name, String pluginClass) {
         return "jdbc:h2:mem:" + name + ";PLUGIN_CLASSES=" + pluginClass;
     }
@@ -109,6 +148,26 @@ public class PluginLoaderTest {
         @Override
         public Iterable<? extends PluginProvider> getProviders() {
             return Arrays.asList(new TestTableProvider("mvstore"));
+        }
+    }
+
+    /**
+     * 测试用 H2 版本不匹配插件。
+     */
+    public static final class VersionMismatchPlugin extends ConfiguredPlugin {
+        @Override
+        public String getH2VersionRange() {
+            return "0.0";
+        }
+    }
+
+    /**
+     * 测试用缺失依赖插件。
+     */
+    public static final class MissingDependencyPlugin extends ConfiguredPlugin {
+        @Override
+        public Iterable<PluginDependency> getDependencies() {
+            return Arrays.asList(new PluginDependency("missing.plugin", "1"));
         }
     }
 

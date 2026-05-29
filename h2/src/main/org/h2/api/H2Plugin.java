@@ -5,6 +5,8 @@
  */
 package org.h2.api;
 
+import java.util.Collections;
+
 /**
  * H2 插件描述入口。
  * <p>
@@ -39,4 +41,24 @@ public interface H2Plugin {
      * @return provider 集合
      */
     Iterable<? extends PluginProvider> getProviders();
+
+    /**
+     * 获取插件支持的 H2 版本范围。
+     * <p>
+     * 第一版支持 {@code *} 或精确版本号；更复杂范围留给后续版本。
+     *
+     * @return H2 版本范围
+     */
+    default String getH2VersionRange() {
+        return "*";
+    }
+
+    /**
+     * 获取插件依赖。
+     *
+     * @return 插件依赖列表
+     */
+    default Iterable<PluginDependency> getDependencies() {
+        return Collections.emptyList();
+    }
 }

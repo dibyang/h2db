@@ -6,6 +6,7 @@
 package org.h2.engine;
 
 import org.h2.api.H2Plugin;
+import org.h2.api.PluginDependency;
 import org.h2.message.DbException;
 import org.h2.util.JdbcUtils;
 import org.h2.util.StringUtils;
@@ -36,7 +37,23 @@ public final class PluginLoader {
                 continue;
             }
             H2Plugin plugin = newPlugin(className);
+            validatePlugin(registry, plugin, className);
             registry.registerPlugin(plugin, PluginSource.CONFIGURED_CLASS);
+        }
+    }
+
+    private static void validatePlugin(PluginRegistry registry, H2Plugin plugin, String className) {
+        String range = plugin.getH2VersionRange();
+        if (range != null && !range.isEmpty() && !"*".equals(range) && !Constants.VERSION.equals(range)) {
+            throw DbException.getUnsupportedException("Configured plugin class " + className
+                    + " does not support this H2 version: required=" + range + ", actual=" + Constants.VERSION);
+        }
+        for (PluginDependency dependency : plugin.getDependencies()) {
+            if (!registry.hasPlugin(dependency.getPluginId())) {
+                throw DbException.getUnsupportedException("Configured plugin dependency is missing: plugin="
+                        + plugin.getId() + ", dependency=" + dependency.getPluginId()
+                        + ", version=" + dependency.getVersion());
+            }
         }
     }
 

@@ -14,7 +14,7 @@
 | F3 | 缺失 storage 插件处理策略 | [x] |
 | F4 | 显式外部插件加载 | [x] |
 | F5 | 收敛第三方 Storage SPI 最小面 | [x] |
-| F6 | 插件依赖、版本和冲突治理 | [ ] |
+| F6 | 插件依赖、版本和冲突治理 | [x] |
 | F7 | 安全边界第一版 | [ ] |
 | F8 | S1/S2 maintenance 接入 | [ ] |
 | F9 | 自动发现、示例和生态补齐 | [ ] |
@@ -104,16 +104,16 @@
 
 ### F6 插件依赖、版本和冲突治理
 
-- [ ] 增加插件描述元数据：H2 版本范围、依赖、允许 provider type。
-- [ ] 加载时校验版本范围和依赖。
-- [ ] 冲突错误包含 plugin id、provider type/id。
-- [ ] 增加 JUnit 覆盖版本不匹配、依赖缺失、冲突治理。
+- [x] 增加插件描述元数据：H2 版本范围、依赖。
+- [x] 加载时校验版本范围和依赖。
+- [x] 冲突错误包含 plugin id、provider type/id。
+- [x] 增加 JUnit 覆盖版本不匹配、依赖缺失、冲突治理。
 
 测试编号：
 
-- [ ] `T-PLUGIN-F6-H2-VERSION-RANGE-01`
-- [ ] `T-PLUGIN-F6-DEPENDENCY-MISSING-01`
-- [ ] `T-PLUGIN-F6-PROVIDER-CONFLICT-01`
+- [x] `T-PLUGIN-F6-H2-VERSION-RANGE-01`
+- [x] `T-PLUGIN-F6-DEPENDENCY-MISSING-01`
+- [x] `T-PLUGIN-F6-PROVIDER-CONFLICT-01`
 
 ### F7 安全边界第一版
 

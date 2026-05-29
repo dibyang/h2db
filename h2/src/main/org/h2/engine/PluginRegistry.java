@@ -96,6 +96,23 @@ public final class PluginRegistry {
     }
 
     /**
+     * 判断插件是否已经注册 provider。
+     *
+     * @param pluginId 插件标识
+     * @return 已注册时返回 true
+     */
+    public boolean hasPlugin(String pluginId) {
+        for (HashMap<String, RegisteredProvider> byId : providers.values()) {
+            for (RegisteredProvider registered : byId.values()) {
+                if (registered.pluginId.equals(pluginId)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
      * 获取 provider 诊断快照。
      *
      * @return provider 诊断快照列表

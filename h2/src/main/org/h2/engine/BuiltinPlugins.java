@@ -6,6 +6,7 @@
 package org.h2.engine;
 
 import org.h2.mvstore.db.MVStoreStorageEngineProvider;
+import org.h2.mvstore.db.MVStoreTableEngineProvider;
 
 /**
  * H2 内置插件注册入口。
@@ -23,5 +24,7 @@ public final class BuiltinPlugins {
     public static void register(PluginRegistry registry) {
         registry.registerProvider("h2.mvstore", Constants.VERSION,
                 new MVStoreStorageEngineProvider(), PluginSource.BUILTIN);
+        registry.registerProvider("h2.mvstore", Constants.VERSION,
+                new MVStoreTableEngineProvider(), PluginSource.BUILTIN);
     }
 }

@@ -20,7 +20,7 @@
 | P0 文档与门禁 | 固定阶段一范围、测试编号、回滚边界 | [x] |
 | P1 SPI 与 Registry 骨架 | 新增接口和内部注册中心，不接业务路径 | [x] |
 | P2 MVStore Storage 适配 | 包装现有 `Store`，保留 `Database.getStore()` 过渡 | [x] |
-| P3 MVStore Table Provider | 内置建表 provider 可调用现有 `Store.createTable()` | [ ] |
+| P3 MVStore Table Provider | 内置建表 provider 可调用现有 `Store.createTable()` | [x] |
 | P4 默认建表路径切换 | `Schema.createTable()` 走 provider，legacy fallback 兼容 | [ ] |
 | P5 Capability 与 Maintenance 边界 | 暴露能力查询和 S2 gate，不迁移 S1 实现 | [ ] |
 | P6 回归与文档收口 | 补齐测试、兼容说明和后续 backlog | [ ] |
@@ -81,17 +81,17 @@
 
 ### P3 MVStore Table Provider
 
-- [ ] 新增 `org.h2.mvstore.db.MVStoreTableEngineProvider`。
-- [ ] provider 校验当前 storage engine 为内置 MVStore 兼容实现。
-- [ ] provider 调用现有 `Store.createTable(CreateTableData)` 创建 `MVTable`。
-- [ ] 保持 `MVTable` 不直接感知插件 registry。
-- [ ] 增加测试验证 provider 创建表与旧 `Store.createTable()` 行为一致。
-- [ ] 同步新增 JUnit 测试覆盖 provider 建表和默认 MVStore 行为。
+- [x] 新增 `org.h2.mvstore.db.MVStoreTableEngineProvider`。
+- [x] provider 校验当前 storage engine 为内置 MVStore 兼容实现。
+- [x] provider 调用现有 `Store.createTable(CreateTableData)` 创建 `MVTable`。
+- [x] 保持 `MVTable` 不直接感知插件 registry。
+- [x] 增加测试验证 provider 创建表与旧 `Store.createTable()` 行为一致。
+- [x] 同步新增 JUnit 测试覆盖 provider 建表和默认 MVStore 行为。
 
 验收：
 
-- [ ] `T-PLUGIN-BUILTIN-MVSTORE-PROVIDER-01`
-- [ ] `T-PLUGIN-DEFAULT-TABLE-ENGINE-01`
+- [x] `T-PLUGIN-BUILTIN-MVSTORE-PROVIDER-01`
+- [x] `T-PLUGIN-DEFAULT-TABLE-ENGINE-01`
 
 ### P4 默认建表路径切换
 

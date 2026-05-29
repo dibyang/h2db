@@ -326,13 +326,13 @@
 
 ## 开发计划文档建议
 
-后续应为每个阶段单独建立可追踪开发计划，例如：
+F0-F9 第一轮骨架已落地，后续 R1-R9 继续在 [h2db-plugin-future-implementation-plan.md](h2db-plugin-future-implementation-plan.md) 中追踪。后续应为高风险阶段单独建立可追踪开发计划，例如：
 
 - `docs/h2db-plugin-future-implementation-plan.md`
-- `docs/h2db-plugin-f1-diagnostics-plan.md`
-- `docs/h2db-plugin-f2-storage-id-plan.md`
-- `docs/h2db-plugin-f4-external-loading-plan.md`
-- `docs/h2db-plugin-f8-maintenance-plan.md`
+- `docs/h2db-plugin-r1-sql-metadata-plan.md`
+- `docs/h2db-plugin-r2-storage-id-persistence-plan.md`
+- `docs/h2db-plugin-r5-maintenance-plan.md`
+- `docs/h2db-plugin-r6-isolation-plan.md`
 
 每份计划至少包含：
 
@@ -345,11 +345,11 @@
 
 ## 下一步建议
 
-建议下一轮先做 F1，再做 F2/F3。
+建议下一轮先做 R1，再做 R2/R4，R5 与空间在线回收设计并行评审。
 
 理由：
 
-- F1 不改变磁盘格式，也不加载外部代码，风险最低。
-- F1 会让后续外部插件加载、冲突、capability、S2 gate 都有可观察入口。
-- F2/F3 是第二 storage engine 和外部 storage plugin 的硬前置。
-- F4 之后才真正进入外部插件加载，届时错误和诊断基础已经具备。
+- R1 把已完成的 registry 诊断产品化到 SQL 元数据，风险低，也便于后续调试。
+- R2/R4 是第二 storage engine 和外部 storage plugin 的硬前置，必须先定持久化 id 与缺失插件语义。
+- R5 会直接影响 S2 在线空间回收，需要和空间回收设计一起确认测试入口、crash-safe publish 和回滚边界。
+- R6-R9 可以在真实外部插件需求出现后继续推进，但测试和非 JUnit 入口已经纳入实施计划。

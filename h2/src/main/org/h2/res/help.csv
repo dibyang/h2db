@@ -7703,3 +7703,20 @@ Contains all values from start to end (this is a dynamic table).
 ","
 SYSTEM_RANGE(0, 100)
 "
+
+"Advanced","Plugins","
+PLUGIN_CLASSES = pluginClassName [,...]
+PLUGIN_PATHS = jarOrDirectory [,...]
+PLUGIN_SERVICE_LOADER = { TRUE | FALSE }
+STORAGE_ENGINE = storageEngineId
+","
+Plugins can extend H2 with table engines and storage engines.
+
+Configured plugin classes must implement org.h2.api.H2Plugin. PLUGIN_CLASSES loads explicit class names.
+PLUGIN_PATHS adds isolated jar or directory locations for configured plugins.
+PLUGIN_SERVICE_LOADER is disabled by default; set it to TRUE to discover META-INF/services/org.h2.api.H2Plugin.
+STORAGE_ENGINE selects the database storage provider. Missing storage providers fail by default; read-only downgrade
+requires MISSING_STORAGE_READ_ONLY_DOWNGRADE=TRUE and a read-only database open.
+","
+jdbc:h2:./test;PLUGIN_CLASSES=com.acme.MyPlugin;PLUGIN_PATHS=./plugins/acme.jar
+"

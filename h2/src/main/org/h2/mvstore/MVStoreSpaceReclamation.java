@@ -79,6 +79,37 @@ public final class MVStoreSpaceReclamation {
     }
 
     /**
+     * 基于已经关闭的 MVStore 文件生成 shadow compact 文件，但不替换源文件。
+     *
+     * @param fileName MVStore 文件名
+     * @param options 回收配置，null 时使用默认配置
+     * @return shadow compact 结果
+     */
+    public static MVStoreSpaceReclamationResult compactToShadow(String fileName,
+            MVStoreSpaceReclamationOptions options) {
+        if (options == null) {
+            options = MVStoreSpaceReclamationOptions.DEFAULT;
+        }
+        if (!FileUtils.exists(fileName)) {
+            throw DataUtils.newMVStoreException(DataUtils.ERROR_FILE_CORRUPT, "File not found: {0}", fileName);
+        }
+        String shadowFileName = fileName + SHADOW_SUFFIX;
+        FileUtils.delete(shadowFileName);
+        long sourceSize = FileUtils.size(fileName);
+        try {
+            MVStoreTool.compact(fileName, shadowFileName, options.compress);
+            if (options.verifyAfterCompact) {
+                verifyStore(shadowFileName);
+            }
+            return new MVStoreSpaceReclamationResult(fileName, shadowFileName, fileName + BACKUP_SUFFIX,
+                    sourceSize, FileUtils.size(shadowFileName), false);
+        } catch (RuntimeException e) {
+            FileUtils.delete(shadowFileName);
+            throw e;
+        }
+    }
+
+    /**
      * 清理维护态空间回收残留文件。
      *
      * @param fileName MVStore 文件名

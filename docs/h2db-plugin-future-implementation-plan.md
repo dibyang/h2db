@@ -9,7 +9,7 @@
 | 阶段 | 目标 | 状态 |
 | --- | --- | --- |
 | F0 | 建立后续阶段可追踪计划 | [x] |
-| F1 | 插件诊断与 registry 可观测性 | [ ] |
+| F1 | 插件诊断与 registry 可观测性 | [x] |
 | F2 | storage engine id 持久化边界 | [ ] |
 | F3 | 缺失 storage 插件处理策略 | [ ] |
 | F4 | 显式外部插件加载 | [ ] |
@@ -39,16 +39,16 @@
 
 ### F1 插件诊断与 Registry 可观测性
 
-- [ ] 新增 registry 快照 API，避免 SQL/测试直接依赖内部 `HashMap`。
-- [ ] 提供 provider/capability 诊断数据结构。
-- [ ] 增加 JUnit 覆盖 provider 来源、capability 展示、冲突诊断。
-- [ ] 视实现复杂度接入 `INFORMATION_SCHEMA` 或先提供内部诊断入口。
+- [x] 新增 registry 快照 API，避免 SQL/测试直接依赖内部 `HashMap`。
+- [x] 提供 provider/capability 诊断数据结构。
+- [x] 增加 JUnit 覆盖 provider 来源、capability 展示、冲突诊断。
+- [x] 本阶段先提供内部诊断入口，`INFORMATION_SCHEMA` 接入保留给后续 SQL 元数据阶段。
 
 测试编号：
 
-- [ ] `T-PLUGIN-F1-INFO-SCHEMA-01`
-- [ ] `T-PLUGIN-F1-CAPABILITY-LIST-01`
-- [ ] `T-PLUGIN-F1-CONFLICT-DIAGNOSTIC-01`
+- [x] `T-PLUGIN-F1-INFO-SCHEMA-01`
+- [x] `T-PLUGIN-F1-CAPABILITY-LIST-01`
+- [x] `T-PLUGIN-F1-CONFLICT-DIAGNOSTIC-01`
 
 ### F2 Storage Engine Id 持久化边界
 

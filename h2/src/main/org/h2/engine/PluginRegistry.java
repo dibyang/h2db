@@ -7,8 +7,11 @@ package org.h2.engine;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import org.h2.api.H2Plugin;
+import org.h2.api.PluginCapability;
 import org.h2.api.PluginProvider;
 
 /**
@@ -49,9 +52,9 @@ public final class PluginRegistry {
         RegisteredProvider existing = byId.get(id);
         if (existing != null) {
             if (existing.source == PluginSource.BUILTIN || source == PluginSource.BUILTIN) {
-                throw new IllegalArgumentException("Duplicate built-in plugin provider: " + type + '/' + id);
+                throw duplicateProviderException("Duplicate built-in plugin provider", type, id, existing, source);
             }
-            throw new IllegalArgumentException("Duplicate plugin provider: " + type + '/' + id);
+            throw duplicateProviderException("Duplicate plugin provider", type, id, existing, source);
         }
         byId.put(id, new RegisteredProvider(pluginId, pluginVersion, provider, source));
     }
@@ -92,9 +95,115 @@ public final class PluginRegistry {
         return byId == null ? Collections.emptyMap() : Collections.unmodifiableMap(byId);
     }
 
+    /**
+     * 获取 provider 诊断快照。
+     *
+     * @return provider 诊断快照列表
+     */
+    public List<ProviderDiagnostic> getProviderDiagnostics() {
+        ArrayList<ProviderDiagnostic> diagnostics = new ArrayList<>();
+        for (Map.Entry<String, HashMap<String, RegisteredProvider>> byType : providers.entrySet()) {
+            String type = byType.getKey();
+            for (RegisteredProvider registered : byType.getValue().values()) {
+                PluginProvider provider = registered.provider;
+                ArrayList<String> capabilities = new ArrayList<>();
+                for (String capability : PluginCapability.all()) {
+                    if (provider.supports(capability)) {
+                        capabilities.add(capability);
+                    }
+                }
+                diagnostics.add(new ProviderDiagnostic(type, provider.getId(), registered.pluginId,
+                        registered.pluginVersion, registered.source, capabilities));
+            }
+        }
+        return Collections.unmodifiableList(diagnostics);
+    }
+
     private RegisteredProvider findRegisteredProvider(String type, String id) {
         HashMap<String, RegisteredProvider> byId = providers.get(type);
         return byId == null ? null : byId.get(id);
+    }
+
+    private static IllegalArgumentException duplicateProviderException(String prefix, String type, String id,
+            RegisteredProvider existing, PluginSource newSource) {
+        return new IllegalArgumentException(prefix + ": type=" + type + ", id=" + id + ", existingPlugin="
+                + existing.pluginId + ", existingSource=" + existing.source + ", newSource=" + newSource);
+    }
+
+    /**
+     * provider 诊断快照。
+     */
+    public static final class ProviderDiagnostic {
+        private final String type;
+        private final String id;
+        private final String pluginId;
+        private final String pluginVersion;
+        private final PluginSource source;
+        private final List<String> capabilities;
+
+        ProviderDiagnostic(String type, String id, String pluginId, String pluginVersion, PluginSource source,
+                List<String> capabilities) {
+            this.type = type;
+            this.id = id;
+            this.pluginId = pluginId;
+            this.pluginVersion = pluginVersion;
+            this.source = source;
+            this.capabilities = Collections.unmodifiableList(new ArrayList<>(capabilities));
+        }
+
+        /**
+         * 获取 provider 类型。
+         *
+         * @return provider 类型
+         */
+        public String getType() {
+            return type;
+        }
+
+        /**
+         * 获取 provider 标识。
+         *
+         * @return provider 标识
+         */
+        public String getId() {
+            return id;
+        }
+
+        /**
+         * 获取插件标识。
+         *
+         * @return 插件标识
+         */
+        public String getPluginId() {
+            return pluginId;
+        }
+
+        /**
+         * 获取插件版本。
+         *
+         * @return 插件版本
+         */
+        public String getPluginVersion() {
+            return pluginVersion;
+        }
+
+        /**
+         * 获取注册来源。
+         *
+         * @return 注册来源
+         */
+        public PluginSource getSource() {
+            return source;
+        }
+
+        /**
+         * 获取支持的 capability。
+         *
+         * @return 支持的 capability 只读列表
+         */
+        public List<String> getCapabilities() {
+            return capabilities;
+        }
     }
 
     /**

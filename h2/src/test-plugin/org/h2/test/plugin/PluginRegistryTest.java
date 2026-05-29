@@ -13,6 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Arrays;
+import java.util.List;
 import org.h2.api.H2Plugin;
 import org.h2.api.PluginCapability;
 import org.h2.api.PluginProvider;
@@ -91,6 +92,64 @@ public class PluginRegistryTest {
         registry.registerPlugin(plugin, PluginSource.BUILTIN);
 
         assertSame(provider, registry.findProvider(TableEngineProvider.TYPE, "sample"));
+    }
+
+    /**
+     * T-PLUGIN-F1-INFO-SCHEMA-01.
+     */
+    @Test
+    public void returnsProviderDiagnostics() {
+        PluginRegistry registry = new PluginRegistry();
+        PluginProvider provider = new TestProvider(TableEngineProvider.TYPE, "sample",
+                PluginCapability.TABLE_CREATE);
+
+        registry.registerProvider("test.plugin", "1", provider, PluginSource.BUILTIN);
+
+        List<PluginRegistry.ProviderDiagnostic> diagnostics = registry.getProviderDiagnostics();
+        assertEquals(1, diagnostics.size());
+        assertEquals(TableEngineProvider.TYPE, diagnostics.get(0).getType());
+        assertEquals("sample", diagnostics.get(0).getId());
+        assertEquals("test.plugin", diagnostics.get(0).getPluginId());
+        assertEquals("1", diagnostics.get(0).getPluginVersion());
+        assertEquals(PluginSource.BUILTIN, diagnostics.get(0).getSource());
+    }
+
+    /**
+     * T-PLUGIN-F1-CAPABILITY-LIST-01.
+     */
+    @Test
+    public void returnsSupportedCapabilityDiagnostics() {
+        PluginRegistry registry = new PluginRegistry();
+        PluginProvider provider = new TestProvider(TableEngineProvider.TYPE, "sample",
+                PluginCapability.TABLE_CREATE);
+
+        registry.registerProvider("test.plugin", "1", provider, PluginSource.BUILTIN);
+
+        List<String> capabilities = registry.getProviderDiagnostics().get(0).getCapabilities();
+        assertEquals(1, capabilities.size());
+        assertEquals(PluginCapability.TABLE_CREATE, capabilities.get(0));
+    }
+
+    /**
+     * T-PLUGIN-F1-CONFLICT-DIAGNOSTIC-01.
+     */
+    @Test
+    public void duplicateProviderErrorContainsDiagnostics() {
+        PluginRegistry registry = new PluginRegistry();
+        PluginProvider first = new TestProvider(TableEngineProvider.TYPE, "sample",
+                PluginCapability.TABLE_CREATE);
+        PluginProvider second = new TestProvider(TableEngineProvider.TYPE, "sample",
+                PluginCapability.TABLE_CREATE);
+
+        registry.registerProvider("test.plugin", "1", first, PluginSource.BUILTIN);
+
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () ->
+                registry.registerProvider("other.plugin", "1", second, PluginSource.CONFIGURED_CLASS));
+        assertTrue(e.getMessage().contains("type=table"));
+        assertTrue(e.getMessage().contains("id=sample"));
+        assertTrue(e.getMessage().contains("existingPlugin=test.plugin"));
+        assertTrue(e.getMessage().contains("existingSource=BUILTIN"));
+        assertTrue(e.getMessage().contains("newSource=CONFIGURED_CLASS"));
     }
 
     private static final class TestPlugin implements H2Plugin {

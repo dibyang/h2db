@@ -5,6 +5,10 @@
  */
 package org.h2.api;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+
 /**
  * 插件能力名称常量。
  */
@@ -59,6 +63,27 @@ public final class PluginCapability {
      * 支持安全物理截断。
      */
     public static final String STORAGE_TRUNCATE_SAFE = "storage.truncate.safe";
+
+    private static final List<String> ALL = Collections.unmodifiableList(Arrays.asList(
+            TABLE_CREATE,
+            STORAGE_PERSISTENT,
+            STORAGE_TRANSACTIONAL,
+            STORAGE_MVCC,
+            STORAGE_BACKUP,
+            STORAGE_COMPACT_CLOSED,
+            STORAGE_COMPACT_ONLINE_MAINTENANCE,
+            STORAGE_VACUUM_ONLINE,
+            STORAGE_PUBLISH_CRASH_SAFE,
+            STORAGE_TRUNCATE_SAFE));
+
+    /**
+     * 获取当前版本已知的 capability 名称。
+     *
+     * @return 已知 capability 名称的只读列表
+     */
+    public static List<String> all() {
+        return ALL;
+    }
 
     private PluginCapability() {
     }

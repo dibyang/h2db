@@ -90,4 +90,33 @@ public final class MVStoreSpaceReclamationMaintenance {
     public boolean isSwitchBlockedByActiveTransactions() {
         return activeReads > 0 || activeWrites > 0;
     }
+
+    /**
+     * TCP/远程读请求在当前维护态下的准入决策。
+     *
+     * @return 请求决策
+     */
+    public MVStoreSpaceReclamationRequestDecision readDecision() {
+        return MVStoreSpaceReclamationRequestDecision.ALLOW;
+    }
+
+    /**
+     * TCP/远程写请求在当前维护态下的准入决策。
+     *
+     * @return 请求决策
+     */
+    public MVStoreSpaceReclamationRequestDecision writeDecision() {
+        return active ? MVStoreSpaceReclamationRequestDecision.BUSY :
+                MVStoreSpaceReclamationRequestDecision.ALLOW;
+    }
+
+    /**
+     * 最终切换窗口在当前维护态下的准入决策。
+     *
+     * @return 请求决策
+     */
+    public MVStoreSpaceReclamationRequestDecision switchDecision() {
+        return isSwitchBlockedByActiveTransactions() ? MVStoreSpaceReclamationRequestDecision.WAIT :
+                MVStoreSpaceReclamationRequestDecision.ALLOW;
+    }
 }

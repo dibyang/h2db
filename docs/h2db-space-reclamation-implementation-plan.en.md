@@ -63,7 +63,7 @@ production-grade implementation.
 
 ## Current Implementation Status
 
-This branch has completed internal phases 1 through 11. The scope is still a
+This branch has completed internal phases 1 through 12. The scope is still a
 controlled maintenance entry point: no SQL exposure, no automatic scheduling,
 and no `.mv.db` format change.
 
@@ -80,10 +80,10 @@ and no `.mv.db` format change.
 | Phase 9 | Done | `analyzePreparedShadow()` reports whether a prepared shadow can be switched, whether version-scan catch-up is available, and whether full-copy fallback is required. Conclusion: version-scan catch-up is not available in this file-level shadow compact stage. |
 | Phase 10 | Done | Added the explicit `refreshShadowIfSourceChanged` fallback option; when a prepared shadow is stale, the code can rebuild it and run maintenance full copy without losing new data. |
 | Phase 11 | Done | Added `MVStoreSpaceReclamationMaintenance` to fix maintenance rules: reads are allowed, writes are rejected in maintenance mode, and active transactions block the final switch. |
+| Phase 12 | Done | Added TCP/remote request decisions and a backup/space-reclamation operation gate to fix busy, wait, and mutual-exclusion semantics. |
 
-Remaining productization work after phase 11 includes public entry-point review,
-TCP server behavior, backup/restore exclusion, slow-disk and large-store stress
-tests, user-visible logging rules, and the
+Remaining productization work after phase 12 includes public entry-point review,
+slow-disk and large-store stress tests, user-visible logging rules, and the
 separate S2 online chunk vacuum RFC.
 After phase 10, writes during copy are no longer silently overwritten; version-scan
 incremental catch-up is explicitly unavailable in the current stage, so S1
@@ -127,6 +127,8 @@ Test ids:
 | `T-SHADOW-COMPACT-SHRINK-01` | Verify shadow compact shrinks the file and preserves marker data. |
 | `T-ONLINE-COMPACT-BLOCKS-WRITES-01` | Verify maintenance mode blocks new writes. |
 | `T-ONLINE-COMPACT-LONG-TRANSACTION-01` | Verify active transactions block the final switch and new writes are rejected in maintenance mode. |
+| `T-ONLINE-COMPACT-TCP-BEHAVIOR-01` | Verify TCP/remote requests receive clear allow, busy, and wait decisions in maintenance mode. |
+| `T-ONLINE-COMPACT-BACKUP-INTERACTION-01` | Verify backup and space reclamation are mutually exclusive and cannot observe partial files. |
 | `T-ONLINE-COMPACT-VERIFY-FAIL-01` | Verify failed validation does not replace the old store. |
 | `T-ONLINE-COMPACT-CATCHUP-WRITES-01` | Before real catch-up exists, verify switching is rejected when the source changes, avoiding silent data loss. |
 | `T-ONLINE-COMPACT-CATCHUP-FEASIBILITY-01` | Verify changed sources analyze to full-copy fallback instead of unavailable version-scan catch-up. |

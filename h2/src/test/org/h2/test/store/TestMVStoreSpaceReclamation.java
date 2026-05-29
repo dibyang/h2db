@@ -16,7 +16,9 @@ import org.h2.mvstore.MVStoreException;
 import org.h2.mvstore.MVStoreSpaceReclamationAnalysis;
 import org.h2.mvstore.MVStoreSpaceReclamation;
 import org.h2.mvstore.MVStoreSpaceReclamationMaintenance;
+import org.h2.mvstore.MVStoreSpaceReclamationOperationGate;
 import org.h2.mvstore.MVStoreSpaceReclamationOptions;
+import org.h2.mvstore.MVStoreSpaceReclamationRequestDecision;
 import org.h2.mvstore.MVStoreSpaceReclamationResult;
 import org.h2.mvstore.MVStoreTool;
 import org.h2.store.fs.FileUtils;
@@ -60,6 +62,8 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         runScenario("T-ONLINE-COMPACT-MANIFEST-RECOVER-01", this::testManifestRecoveryRestoresSource);
         runScenario("T-ONLINE-COMPACT-BLOCKS-WRITES-01", this::testMaintenanceGateBlocksWrites);
         runScenario("T-ONLINE-COMPACT-LONG-TRANSACTION-01", this::testLongTransactionBlocksSwitch);
+        runScenario("T-ONLINE-COMPACT-TCP-BEHAVIOR-01", this::testTcpBehaviorDecisions);
+        runScenario("T-ONLINE-COMPACT-BACKUP-INTERACTION-01", this::testBackupInteractionGate);
         runScenario("T-ONLINE-COMPACT-VERIFY-FAIL-01", this::testVerifyFailureKeepsSource);
         runScenario("T-ONLINE-COMPACT-CRASH-BEFORE-SWITCH-01", this::testCrashBeforeSwitchKeepsSource);
         runScenario("T-ONLINE-COMPACT-CRASH-DURING-SWITCH-01", this::testCrashDuringSwitchRecoversSource);
@@ -307,6 +311,35 @@ public class TestMVStoreSpaceReclamation extends TestBase {
             gate.exit();
         }
         assertFalse(gate.isSwitchBlockedByActiveTransactions());
+    }
+
+    private void testTcpBehaviorDecisions() {
+        MVStoreSpaceReclamationMaintenance gate = new MVStoreSpaceReclamationMaintenance();
+        assertEquals(MVStoreSpaceReclamationRequestDecision.ALLOW, gate.readDecision());
+        assertEquals(MVStoreSpaceReclamationRequestDecision.ALLOW, gate.writeDecision());
+        assertTrue(gate.tryEnterRead());
+        gate.enter();
+        try {
+            assertEquals(MVStoreSpaceReclamationRequestDecision.ALLOW, gate.readDecision());
+            assertEquals(MVStoreSpaceReclamationRequestDecision.BUSY, gate.writeDecision());
+            assertEquals(MVStoreSpaceReclamationRequestDecision.WAIT, gate.switchDecision());
+        } finally {
+            gate.exitRead();
+            gate.exit();
+        }
+        assertEquals(MVStoreSpaceReclamationRequestDecision.ALLOW, gate.switchDecision());
+    }
+
+    private void testBackupInteractionGate() {
+        MVStoreSpaceReclamationOperationGate gate = new MVStoreSpaceReclamationOperationGate();
+        assertTrue(gate.tryEnterBackup());
+        assertFalse(gate.tryEnterSpaceReclamation());
+        gate.exitBackup();
+        assertTrue(gate.tryEnterSpaceReclamation());
+        assertFalse(gate.tryEnterBackup());
+        gate.exitSpaceReclamation();
+        assertTrue(gate.tryEnterBackup());
+        gate.exitBackup();
     }
 
     private void testVerifyFailureKeepsSource() {

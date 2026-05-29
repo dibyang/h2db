@@ -333,8 +333,8 @@ public final class Database implements DataHandler, CastDataProvider {
             if (dbSettings.mvStore) {
                 storageEngineId = StorageEngineResolver.resolveRequested(dbSettings);
                 StorageEngineResolver.validateMatch(storageEngineId, null);
-                StorageEngineProvider provider = (StorageEngineProvider) pluginRegistry.findProvider(
-                        StorageEngineProvider.TYPE, storageEngineId);
+                StorageEngineProvider provider = StorageEngineResolver.requireStorageProvider(pluginRegistry,
+                        storageEngineId, readOnly);
                 storageEngine = provider.open(new DatabaseStorageEngineContext(ci.getFileEncryptionKey()));
                 store = ((MVStoreStorageEngine) storageEngine).getStore();
             } else {

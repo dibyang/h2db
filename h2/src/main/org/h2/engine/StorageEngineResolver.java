@@ -5,6 +5,8 @@
  */
 package org.h2.engine;
 
+import org.h2.api.PluginProvider;
+import org.h2.api.StorageEngineProvider;
 import org.h2.message.DbException;
 import org.h2.mvstore.db.MVStoreStorageEngineProvider;
 
@@ -54,10 +56,45 @@ public final class StorageEngineResolver {
      * @param persistedStorageEngineId 持久化 id
      */
     public static void validateMatch(String requestedStorageEngineId, String persistedStorageEngineId) {
+        if (persistedStorageEngineId == null || persistedStorageEngineId.trim().isEmpty()) {
+            return;
+        }
         String persisted = resolvePersisted(persistedStorageEngineId);
         if (!persisted.equals(requestedStorageEngineId)) {
             throw DbException.getUnsupportedException("Storage engine mismatch: requested="
                     + requestedStorageEngineId + ", persisted=" + persisted);
         }
+    }
+
+    /**
+     * 查找并校验 storage provider。
+     *
+     * @param registry 插件注册中心
+     * @param storageEngineId storage engine id
+     * @param readOnly 是否只读打开
+     * @return storage provider
+     */
+    public static StorageEngineProvider requireStorageProvider(PluginRegistry registry, String storageEngineId,
+            boolean readOnly) {
+        PluginProvider provider = registry.findProvider(StorageEngineProvider.TYPE, storageEngineId);
+        if (!(provider instanceof StorageEngineProvider)) {
+            throw missingStorageProvider(storageEngineId, readOnly);
+        }
+        return (StorageEngineProvider) provider;
+    }
+
+    /**
+     * 判断缺失 storage 插件时是否允许只读降级。
+     *
+     * @return 当前阶段固定返回 false
+     */
+    public static boolean isMissingStorageReadOnlyDowngradeAllowed() {
+        return false;
+    }
+
+    private static DbException missingStorageProvider(String storageEngineId, boolean readOnly) {
+        return DbException.getUnsupportedException("Missing storage engine provider: type="
+                + StorageEngineProvider.TYPE + ", id=" + storageEngineId + ", readOnly=" + readOnly
+                + ", readOnlyDowngradeAllowed=" + isMissingStorageReadOnlyDowngradeAllowed());
     }
 }

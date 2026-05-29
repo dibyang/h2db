@@ -6,8 +6,12 @@
 package org.h2.test.plugin;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.sql.DriverManager;
+import java.sql.SQLException;
 import org.h2.engine.StorageEngineResolver;
 import org.h2.message.DbException;
 import org.h2.mvstore.db.MVStoreStorageEngineProvider;
@@ -35,8 +39,8 @@ public class StorageEngineResolverTest {
         DbException e = assertThrows(DbException.class, () ->
                 StorageEngineResolver.validateMatch("other", MVStoreStorageEngineProvider.ID));
 
-        assertEquals(true, e.getMessage().contains("requested=other"));
-        assertEquals(true, e.getMessage().contains("persisted=mvstore"));
+        assertTrue(e.getMessage().contains("requested=other"));
+        assertTrue(e.getMessage().contains("persisted=mvstore"));
     }
 
     /**
@@ -45,5 +49,38 @@ public class StorageEngineResolverTest {
     @Test
     public void validatesDefaultMvStoreForRollbackPath() {
         StorageEngineResolver.validateMatch(MVStoreStorageEngineProvider.ID, null);
+    }
+
+    /**
+     * T-PLUGIN-F3-MISSING-STORAGE-FAIL-01.
+     */
+    @Test
+    public void missingStorageProviderFailsOpen() {
+        SQLException e = assertThrows(SQLException.class, () ->
+                DriverManager.getConnection("jdbc:h2:mem:missingStorage;STORAGE_ENGINE=missing", "sa", ""));
+
+        assertTrue(e.getMessage().contains("Missing storage engine provider"));
+        assertTrue(e.getMessage().contains("type=storage"));
+        assertTrue(e.getMessage().contains("id=missing"));
+    }
+
+    /**
+     * T-PLUGIN-F3-MISSING-STORAGE-READONLY-01.
+     */
+    @Test
+    public void missingStorageProviderReadOnlyDowngradeIsDisabled() {
+        assertFalse(StorageEngineResolver.isMissingStorageReadOnlyDowngradeAllowed());
+    }
+
+    /**
+     * T-PLUGIN-F3-NO-MVSTORE-FALLBACK-01.
+     */
+    @Test
+    public void missingStorageProviderDoesNotFallbackToMvStore() {
+        SQLException e = assertThrows(SQLException.class, () ->
+                DriverManager.getConnection("jdbc:h2:mem:noFallback;STORAGE_ENGINE=other", "sa", ""));
+
+        assertTrue(e.getMessage().contains("id=other"));
+        assertFalse(e.getMessage().contains("opened"));
     }
 }

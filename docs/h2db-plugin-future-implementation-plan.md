@@ -11,7 +11,7 @@
 | F0 | 建立后续阶段可追踪计划 | [x] |
 | F1 | 插件诊断与 registry 可观测性 | [x] |
 | F2 | storage engine id 持久化边界 | [x] |
-| F3 | 缺失 storage 插件处理策略 | [ ] |
+| F3 | 缺失 storage 插件处理策略 | [x] |
 | F4 | 显式外部插件加载 | [ ] |
 | F5 | 收敛第三方 Storage SPI 最小面 | [ ] |
 | F6 | 插件依赖、版本和冲突治理 | [ ] |
@@ -65,16 +65,16 @@
 
 ### F3 缺失 Storage 插件处理策略
 
-- [ ] 明确缺失 storage provider 默认拒绝打开。
-- [ ] 错误消息包含 storage engine id 和 provider type。
-- [ ] 不自动 fallback 到 `mvstore`。
-- [ ] 增加 JUnit 覆盖缺失、只读降级占位、无隐式 fallback。
+- [x] 明确缺失 storage provider 默认拒绝打开。
+- [x] 错误消息包含 storage engine id 和 provider type。
+- [x] 不自动 fallback 到 `mvstore`。
+- [x] 增加 JUnit 覆盖缺失、只读降级占位、无隐式 fallback。
 
 测试编号：
 
-- [ ] `T-PLUGIN-F3-MISSING-STORAGE-FAIL-01`
-- [ ] `T-PLUGIN-F3-MISSING-STORAGE-READONLY-01`
-- [ ] `T-PLUGIN-F3-NO-MVSTORE-FALLBACK-01`
+- [x] `T-PLUGIN-F3-MISSING-STORAGE-FAIL-01`
+- [x] `T-PLUGIN-F3-MISSING-STORAGE-READONLY-01`
+- [x] `T-PLUGIN-F3-NO-MVSTORE-FALLBACK-01`
 
 ### F4 显式外部插件加载
 

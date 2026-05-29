@@ -37,12 +37,13 @@ Before release, verify these items against the generated artifacts:
 * The POM has valid coordinates, project name, description, URL, licenses, developer information, and SCM information.
 * The namespace for the selected `groupId` is verified in Sonatype Central Portal.
 
-Official references:
+Official references (re-check these pages before publishing):
 
 * https://central.sonatype.org/publish/requirements/
 * https://central.sonatype.org/register/central-portal/
 * https://central.sonatype.org/publish/requirements/gpg/
 * https://central.sonatype.org/publish/requirements/immutability/
+* https://central.sonatype.org/publish/publish-portal-api/
 
 ## One-Time Maintainer Setup
 
@@ -59,8 +60,11 @@ Do not commit signing keys, passphrases, Central tokens, or repository credentia
 `h2/signing.properties` is intentionally ignored by Git. Keep it local and use placeholder documentation instead of committing real values.
 
 ```properties
-releasesRepository=https://ossrh-staging-api.central.sonatype.com/service/local/staging/deploy/maven2/
-snapshotsRepository=https://ossrh-staging-api.central.sonatype.com/content/repositories/snapshots/
+# Fill these with your Central Portal / compatible publishing endpoints.
+# If you use the Portal Publisher API, first generate a local staging bundle
+# with maven-publish, then upload it with the Central Portal API.
+releasesRepository=https://YOUR_RELEASE_REPOSITORY_URL/
+snapshotsRepository=https://YOUR_SNAPSHOT_REPOSITORY_URL/
 
 signing.keyId=YOUR_KEY_ID
 signing.password=YOUR_GPG_PASSPHRASE
@@ -124,13 +128,13 @@ The build reads repository URLs and credentials from properties:
 
 Snapshot builds do not attach signing artifacts by default to avoid stale local or Gradle 6 module metadata signing issues. Final release versions attach and generate signatures. If a snapshot repository requires signatures, run with `-PsignSnapshots`.
 
-Typical release command from `h2/`:
+If the maintainer has a release repository endpoint compatible with `maven-publish`, use this command from `h2/`:
 
 ```sh
 ./gradlew clean publish "-Pversion=2.2.10"
 ```
 
-Use this command only after the local dry run confirms the generated repository layout, signatures, and POM metadata pass validation.
+If using the Central Portal Publisher API, first generate a local Maven repository layout or staging bundle, confirm signatures and checksum files, and upload it with the Portal API. Use the external publish step only after the local dry run confirms the generated repository layout, signatures, and POM metadata pass validation.
 
 ## Post-Publish Verification
 

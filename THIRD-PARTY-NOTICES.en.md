@@ -6,7 +6,7 @@ This inventory is derived from `h2/build.gradle` and is intended for release rev
 
 ## Runtime and Optional Dependencies
 
-| Component | Version | Scope | License to verify |
+| Component | Version | Scope | License |
 | --- | --- | --- | --- |
 | `javax.servlet:javax.servlet-api` | 4.0.1 | implementation / optional servlet integration | CDDL-1.1 OR GPL-2.0 with Classpath exception |
 | `jakarta.servlet:jakarta.servlet-api` | 5.0.0 | implementation / optional servlet integration | EPL-2.0 OR GPL-2.0 with Classpath exception |
@@ -20,7 +20,7 @@ This inventory is derived from `h2/build.gradle` and is intended for release rev
 
 ## Test Dependencies
 
-| Component | Version | Scope | License to verify |
+| Component | Version | Scope | License |
 | --- | --- | --- | --- |
 | `org.slf4j:slf4j-nop` | 1.7.30 | testImplementation | MIT |
 | `org.postgresql:postgresql` | 42.4.0 | testImplementation | BSD-2-Clause |
@@ -29,7 +29,7 @@ This inventory is derived from `h2/build.gradle` and is intended for release rev
 
 ## Build Plugins
 
-| Component | Version | Purpose | License to verify |
+| Component | Version | Purpose | License |
 | --- | --- | --- | --- |
 | `net.researchgate:gradle-release` | 2.6.0 | release automation | Apache-2.0 |
 
@@ -41,3 +41,5 @@ Before distributing source or binary artifacts:
 * Confirm each dependency license from its published POM or upstream release.
 * Ensure license texts required by redistributed binaries are included in the release artifact or distribution bundle.
 * Confirm no checked-in generated artifact or binary has an undocumented origin.
+
+This table is a release-review checklist, not legal advice. Re-check dependency licenses and binary redistribution obligations before the first public distribution and whenever dependency versions change.

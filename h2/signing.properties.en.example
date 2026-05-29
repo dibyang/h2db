@@ -2,8 +2,8 @@
 # Copy this file to h2/signing.properties and replace the placeholders with your own Maven Central and GPG settings.
 # Do not commit h2/signing.properties, GPG private keys, passphrases, or Central tokens.
 
-releasesRepository=https://ossrh-staging-api.central.sonatype.com/service/local/staging/deploy/maven2/
-snapshotsRepository=https://ossrh-staging-api.central.sonatype.com/content/repositories/snapshots/
+releasesRepository=https://YOUR_RELEASE_REPOSITORY_URL/
+snapshotsRepository=https://YOUR_SNAPSHOT_REPOSITORY_URL/
 
 signing.keyId=YOUR_KEY_ID
 signing.password=YOUR_GPG_PASSPHRASE

@@ -189,11 +189,23 @@ task runMvStoreSpaceReclamationCheck(type: JavaExec) {
 task javadocJar(type: Jar) {
     classifier = 'javadoc'
     from javadoc
+    from("$rootDir/../LICENSE.txt") {
+        into 'META-INF'
+    }
+    from("$rootDir/../NOTICE.txt") {
+        into 'META-INF'
+    }
 }
 
 task sourceJar(type: Jar) {
     classifier = 'sources'
     from sourceSets.main.allSource
+    from("$rootDir/../LICENSE.txt") {
+        into 'META-INF'
+    }
+    from("$rootDir/../NOTICE.txt") {
+        into 'META-INF'
+    }
 }
 // javadoc 配置，这里是自定义了 java doc 的一些配置
 javadoc {
@@ -216,6 +228,15 @@ javadoc {
 // 并将它们与项目 jar 本身一起连接到 artifacts 集合中：
 artifacts {
     archives javadocJar, sourceJar
+}
+
+jar {
+    from("$rootDir/../LICENSE.txt") {
+        into 'META-INF'
+    }
+    from("$rootDir/../NOTICE.txt") {
+        into 'META-INF'
+    }
 }
 
 tasks.withType(GenerateModuleMetadata) {

@@ -37,12 +37,13 @@ cd h2
 * POM 包含有效坐标、项目名、描述、URL、许可证、developer 信息和 SCM 信息。
 * 所选 `groupId` 的 namespace 已在 Sonatype Central Portal 验证。
 
-官方参考：
+官方参考（发布前以这些页面为准复核）：
 
 * https://central.sonatype.org/publish/requirements/
 * https://central.sonatype.org/register/central-portal/
 * https://central.sonatype.org/publish/requirements/gpg/
 * https://central.sonatype.org/publish/requirements/immutability/
+* https://central.sonatype.org/publish/publish-portal-api/
 
 ## 维护者一次性准备
 
@@ -59,8 +60,11 @@ cd h2
 `h2/signing.properties` 已被 Git 忽略。请只保留在本地，文档中使用占位值。
 
 ```properties
-releasesRepository=https://ossrh-staging-api.central.sonatype.com/service/local/staging/deploy/maven2/
-snapshotsRepository=https://ossrh-staging-api.central.sonatype.com/content/repositories/snapshots/
+# 依据你的 Central Portal / 兼容发布入口填写。
+# 如使用 Portal Publisher API，需要先用 maven-publish 生成本地 staging bundle，
+# 再按 Central Portal API 上传；不要把 token 写入仓库。
+releasesRepository=https://YOUR_RELEASE_REPOSITORY_URL/
+snapshotsRepository=https://YOUR_SNAPSHOT_REPOSITORY_URL/
 
 signing.keyId=YOUR_KEY_ID
 signing.password=YOUR_GPG_PASSPHRASE
@@ -124,13 +128,13 @@ ossrhPassword=YOUR_CENTRAL_TOKEN_PASSWORD
 
 snapshot 构建默认不挂载签名产物，以避免旧本地产物或 Gradle 6 module metadata 签名问题。正式 release 版本会挂载并生成签名。如果 snapshot 仓库要求签名，可使用 `-PsignSnapshots`。
 
-正式发布命令：
+如果维护者已经有兼容 `maven-publish` 的 release 仓库入口，正式发布命令：
 
 ```sh
 ./gradlew clean publish "-Pversion=2.2.10"
 ```
 
-只有在本地 dry run 已确认仓库布局、签名和 POM 元数据都通过检查后，才执行外部发布。
+如果使用 Central Portal Publisher API，则先生成本地 Maven 仓库布局或 staging bundle，确认签名和校验文件齐全后，通过 Portal API 上传。只有在本地 dry run 已确认仓库布局、签名和 POM 元数据都通过检查后，才执行外部发布。
 
 ## 发布后验证
 

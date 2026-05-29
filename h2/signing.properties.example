@@ -2,8 +2,8 @@
 # 复制本文件为 h2/signing.properties，并替换为你自己的 Maven Central 和 GPG 配置。
 # 不要提交 h2/signing.properties、GPG 私钥、passphrase 或 Central token。
 
-releasesRepository=https://ossrh-staging-api.central.sonatype.com/service/local/staging/deploy/maven2/
-snapshotsRepository=https://ossrh-staging-api.central.sonatype.com/content/repositories/snapshots/
+releasesRepository=https://YOUR_RELEASE_REPOSITORY_URL/
+snapshotsRepository=https://YOUR_SNAPSHOT_REPOSITORY_URL/
 
 signing.keyId=YOUR_KEY_ID
 signing.password=YOUR_GPG_PASSPHRASE

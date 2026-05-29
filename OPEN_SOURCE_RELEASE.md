@@ -11,11 +11,13 @@
 * `LICENSE.txt`：包含 H2 的 MPL 2.0 / EPL 1.0 双许可证文本。
 * `NOTICE.txt`：说明上游 H2 来源。
 * `README.md`：说明项目身份、构建方式、Maven 坐标、许可证、支持方式和发布材料入口。
+* `CHANGELOG.md`：记录面向外部用户的 release 变更。
 * `CONTRIBUTING.md`：说明开发、测试、兼容性和许可证要求。
 * `SECURITY.md`：说明私密漏洞报告路径。
 * `CODE_OF_CONDUCT.md` 和 `SUPPORT.md`。
 * `THIRD-PARTY-NOTICES.md`：提供依赖许可证审查清单。
 * GitHub issue、PR 和 release 模板。
+* `RELEASE_READINESS.md`：记录本次本地发布产物检查结果。
 
 ## 公开发布前阻塞项
 
@@ -23,7 +25,7 @@
 
 * 确认 h2db 展示为独立维护的 fork，而不是官方 H2 发布。
 * 确认最终仓库 URL、维护者身份和 POM 中的联系邮箱。
-* 确认发布版本和 Maven 坐标在 `README.md`、`h2/gradle.properties` 和生成 POM 中一致。
+* 确认发布版本和 Maven 坐标在 `README.md`、`CHANGELOG.md`、Release Notes、`h2/gradle.properties` 和生成 POM 中一致。
 * 启用或明确说明私密安全漏洞报告渠道。
 * 对精确发布构建执行已解析依赖的许可证审查。
 * 确认签名密钥和发布仓库凭据只通过本地安全文件或 CI secrets 提供。
@@ -43,7 +45,7 @@
 
 5. 运行本次发布选定的项目测试命令。
 6. 检查生成 POM 的许可证、SCM、developer 和依赖元数据。
-7. 检查源码和二进制归档中是否包含必要许可证和 notice 文件。
+7. 检查源码和二进制归档中是否包含必要许可证和 notice 文件；当前 Gradle 产物会在 `META-INF/` 下包含 `LICENSE.txt` 与 `NOTICE.txt`。
 8. 签名 release 产物。
 9. 使用 Maven Central 发布流程发布。
 10. 在新工作区下载已发布产物并进行 smoke test。

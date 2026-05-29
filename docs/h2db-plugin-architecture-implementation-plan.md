@@ -17,9 +17,9 @@
 
 | 阶段 | 目标 | 状态 |
 | --- | --- | --- |
-| P0 文档与门禁 | 固定阶段一范围、测试编号、回滚边界 | [ ] |
+| P0 文档与门禁 | 固定阶段一范围、测试编号、回滚边界 | [x] |
 | P1 SPI 与 Registry 骨架 | 新增接口和内部注册中心，不接业务路径 | [x] |
-| P2 MVStore Storage 适配 | 包装现有 `Store`，保留 `Database.getStore()` 过渡 | [ ] |
+| P2 MVStore Storage 适配 | 包装现有 `Store`，保留 `Database.getStore()` 过渡 | [x] |
 | P3 MVStore Table Provider | 内置建表 provider 可调用现有 `Store.createTable()` | [ ] |
 | P4 默认建表路径切换 | `Schema.createTable()` 走 provider，legacy fallback 兼容 | [ ] |
 | P5 Capability 与 Maintenance 边界 | 暴露能力查询和 S2 gate，不迁移 S1 实现 | [ ] |
@@ -41,9 +41,9 @@
 
 ### P0 文档与门禁
 
-- [ ] 确认 [h2db-plugin-architecture-rfc.md](h2db-plugin-architecture-rfc.md) 中“阶段一已确认决策”无需再调整。
-- [ ] 确认本计划只覆盖阶段一，不把外部插件加载、S1 迁移、S2 实现混入本轮。
-- [ ] 在测试登记中保留所有 `T-PLUGIN-*` 编号，新增风险必须先补测试编号。
+- [x] 确认 [h2db-plugin-architecture-rfc.md](h2db-plugin-architecture-rfc.md) 中“阶段一已确认决策”无需再调整。
+- [x] 确认本计划只覆盖阶段一，不把外部插件加载、S1 迁移、S2 实现混入本轮。
+- [x] 在测试登记中保留所有 `T-PLUGIN-*` 编号，新增风险必须先补测试编号。
 
 ### P1 SPI 与 Registry 骨架
 
@@ -64,20 +64,20 @@
 
 ### P2 MVStore Storage 适配
 
-- [ ] 新增 `org.h2.mvstore.db.MVStoreStorageEngineProvider`。
-- [ ] 新增 `org.h2.mvstore.db.MVStoreStorageEngine`，内部持有现有 `Store`。
-- [ ] `MVStoreStorageEngine` 委托现有 `Store.flush()`、`Store.closeImmediately()` 等生命周期方法。
-- [ ] `Database` 初始化时创建 `PluginRegistry` 和 `StorageEngine`。
-- [ ] `Database` 过渡期保留 `private Store store` 和 `getStore()`，由 `MVStoreStorageEngine` 暴露现有 `Store`。
-- [ ] 保证只读、加密、内存库、持久库打开路径与当前行为一致。
-- [ ] 同步新增 JUnit 测试覆盖 MVStore storage provider 打开路径和基础 capability。
+- [x] 新增 `org.h2.mvstore.db.MVStoreStorageEngineProvider`。
+- [x] 新增 `org.h2.mvstore.db.MVStoreStorageEngine`，内部持有现有 `Store`。
+- [x] `MVStoreStorageEngine` 委托现有 `Store.flush()`、`Store.closeImmediately()` 等生命周期方法。
+- [x] `Database` 初始化时创建 `PluginRegistry` 和 `StorageEngine`。
+- [x] `Database` 过渡期保留 `private Store store` 和 `getStore()`，由 `MVStoreStorageEngine` 暴露现有 `Store`。
+- [x] 保证只读、加密、内存库、持久库打开路径与当前行为一致。
+- [x] 同步新增 JUnit 测试覆盖 MVStore storage provider 打开路径和基础 capability。
 
 验收：
 
-- [ ] `T-PLUGIN-OLD-DATABASE-MVSTORE-01`
-- [ ] `T-PLUGIN-READONLY-OPEN-01`
-- [ ] `T-PLUGIN-ENCRYPTED-OPEN-01`
-- [ ] `T-PLUGIN-PERSISTENT-FLAG-01`
+- [x] `T-PLUGIN-OLD-DATABASE-MVSTORE-01`
+- [x] `T-PLUGIN-READONLY-OPEN-01`
+- [x] `T-PLUGIN-ENCRYPTED-OPEN-01`
+- [x] `T-PLUGIN-PERSISTENT-FLAG-01`
 
 ### P3 MVStore Table Provider
 

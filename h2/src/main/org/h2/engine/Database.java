@@ -21,6 +21,9 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.h2.api.DatabaseEventListener;
 import org.h2.api.ErrorCode;
 import org.h2.api.JavaObjectSerializer;
+import org.h2.api.StorageEngine;
+import org.h2.api.StorageEngineContext;
+import org.h2.api.StorageEngineProvider;
 import org.h2.api.TableEngine;
 import org.h2.command.CommandInterface;
 import org.h2.command.Prepared;
@@ -38,6 +41,8 @@ import org.h2.message.TraceSystem;
 import org.h2.mode.DefaultNullOrdering;
 import org.h2.mode.PgCatalogSchema;
 import org.h2.mvstore.MVStoreException;
+import org.h2.mvstore.db.MVStoreStorageEngine;
+import org.h2.mvstore.db.MVStoreStorageEngineProvider;
 import org.h2.mvstore.db.LobStorageMap;
 import org.h2.mvstore.db.Store;
 import org.h2.result.Row;
@@ -201,6 +206,8 @@ public final class Database implements DataHandler, CastDataProvider {
     private final int pageSize;
     private int defaultTableType = Table.TYPE_CACHED;
     private final DbSettings dbSettings;
+    private final PluginRegistry pluginRegistry = new PluginRegistry();
+    private final StorageEngine storageEngine;
     private final Store store;
     private boolean allowBuiltinAliasOverride;
     private final AtomicReference<DbException> backgroundException = new AtomicReference<>();
@@ -320,9 +327,13 @@ public final class Database implements DataHandler, CastDataProvider {
                 }
                 deleteOldTempFiles();
             }
+            BuiltinPlugins.register(pluginRegistry);
             starting = true;
             if (dbSettings.mvStore) {
-                store = new Store(this, ci.getFileEncryptionKey());
+                StorageEngineProvider provider = (StorageEngineProvider) pluginRegistry.findProvider(
+                        StorageEngineProvider.TYPE, MVStoreStorageEngineProvider.ID);
+                storageEngine = provider.open(new DatabaseStorageEngineContext(ci.getFileEncryptionKey()));
+                store = ((MVStoreStorageEngine) storageEngine).getStore();
             } else {
                 throw new UnsupportedOperationException();
             }
@@ -431,6 +442,24 @@ public final class Database implements DataHandler, CastDataProvider {
 
     public Store getStore() {
         return store;
+    }
+
+    /**
+     * 获取当前数据库使用的存储引擎。
+     *
+     * @return 存储引擎
+     */
+    public StorageEngine getStorageEngine() {
+        return storageEngine;
+    }
+
+    /**
+     * 获取数据库级插件注册中心。
+     *
+     * @return 插件注册中心
+     */
+    public PluginRegistry getPluginRegistry() {
+        return pluginRegistry;
     }
 
     public long getModificationDataId() {
@@ -2454,5 +2483,43 @@ public final class Database implements DataHandler, CastDataProvider {
     @Override
     public boolean zeroBasedEnums() {
         return dbSettings.zeroBasedEnums;
+    }
+
+    private final class DatabaseStorageEngineContext implements StorageEngineContext {
+        private final byte[] fileEncryptionKey;
+
+        DatabaseStorageEngineContext(byte[] fileEncryptionKey) {
+            this.fileEncryptionKey = fileEncryptionKey;
+        }
+
+        @Override
+        public Database getDatabase() {
+            return Database.this;
+        }
+
+        @Override
+        public String getDatabasePath() {
+            return databaseName;
+        }
+
+        @Override
+        public byte[] getFilePasswordHash() {
+            return fileEncryptionKey;
+        }
+
+        @Override
+        public DbSettings getSettings() {
+            return dbSettings;
+        }
+
+        @Override
+        public boolean isReadOnly() {
+            return readOnly;
+        }
+
+        @Override
+        public Trace getTrace() {
+            return trace;
+        }
     }
 }

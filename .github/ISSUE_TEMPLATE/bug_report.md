@@ -1,31 +1,30 @@
 ---
-name: Bug report
-about: Report a reproducible h2db problem
+name: Bug 报告
+about: 报告可复现的 h2db 问题
 title: ""
 labels: bug
 assignees: ""
 ---
 
-## Problem
+## 问题
 
-Describe the bug.
+描述 bug。
 
-## Reproduction
+## 复现步骤
 
-Provide the smallest SQL, Java, MVStore, server, or console example that
-reproduces the issue.
+提供能够复现问题的最小 SQL、Java、MVStore、服务端或 Console 示例。
 
-## Environment
+## 环境
 
-* h2db version:
-* Java version:
-* Operating system:
-* Database URL and options:
+* h2db 版本：
+* Java 版本：
+* 操作系统：
+* 数据库 URL 和选项：
 
-## Expected Behavior
+## 预期行为
 
-Describe what you expected to happen.
+说明你期望发生什么。
 
-## Actual Behavior
+## 实际行为
 
-Describe what happened instead, including stack traces if available.
+说明实际发生了什么；如有 stack trace，请一并提供。

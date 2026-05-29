@@ -1,0 +1,23 @@
+changelog:
+  exclude:
+    labels:
+      - ignore-for-release
+  categories:
+    - title: 安全 / Security
+      labels:
+        - security
+    - title: 破坏性变更 / Breaking Changes
+      labels:
+        - breaking-change
+    - title: 修复 / Fixes
+      labels:
+        - bug
+    - title: 增强 / Enhancements
+      labels:
+        - enhancement
+    - title: 文档 / Documentation
+      labels:
+        - documentation
+    - title: 其他变更 / Other Changes
+      labels:
+        - "*"

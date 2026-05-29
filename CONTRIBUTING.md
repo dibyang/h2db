@@ -1,58 +1,48 @@
-# Contributing
+# 贡献指南
 
-Thank you for contributing to h2db. This project is a database engine, so small
-changes can have compatibility, durability, and security impact. Please keep
-changes narrow and include enough verification for reviewers to reproduce your
-result.
+[English](CONTRIBUTING.en.md)
 
-## Development Setup
+感谢你为 h2db 贡献。h2db 是数据库引擎，较小的改动也可能影响兼容性、数据可靠性和安全性。请保持改动聚焦，并提供足够的验证信息，方便维护者复现。
 
-The main Gradle project is in `h2/`.
+## 开发环境
+
+主 Gradle 工程位于 `h2/`。
 
 ```sh
 cd h2
 ./gradlew compileJava
 ```
 
-On Windows:
+Windows:
 
 ```bat
 cd h2
 gradlew.bat compileJava
 ```
 
-The project targets Java 8 compatibility for main sources. Do not use newer
-Java language features or APIs in main code unless the affected source set is
-explicitly version-specific.
+主源码保持 Java 8 兼容。除非目标 source set 明确是特定 Java 版本代码，否则不要在主源码中使用更高版本的 Java 语法或 API。
 
-## Pull Requests
+## Pull Request 要求
 
-Before opening a pull request:
+提交 PR 前请确认：
 
-* Search for related code, documentation, and tests.
-* Add or update tests for behavior changes.
-* Update documentation when SQL behavior, JDBC behavior, configuration, tools,
-  storage format, recovery behavior, or public APIs change.
-* Keep unrelated formatting and refactoring out of the pull request.
-* Describe compatibility impact and migration notes for user-visible changes.
+* 搜索相关代码、文档和测试。
+* 行为变更需要新增或更新测试。
+* SQL 行为、JDBC 行为、配置、工具、存储格式、恢复行为或公开 API 变更需要同步文档。
+* 避免把无关格式化和重构混入 PR。
+* 对用户可见变更说明兼容性影响和迁移建议。
 
-## Testing
+## 测试
 
-Use the narrowest useful verification for your change. At minimum, production
-code changes should compile:
+请为变更选择最小但有效的验证方式。生产代码变更至少应能编译通过。
 
 ```sh
 cd h2
 ./gradlew compileJava
 ```
 
-Some historical H2 tests are driven by H2's own test launcher rather than plain
-Gradle test tasks. If you cannot run a full suite locally, state exactly which
-commands you ran and what remains unverified.
+部分历史 H2 测试通过 H2 自己的测试启动器运行，而不是普通 Gradle test task。如果无法在本地运行完整测试，请准确说明你运行了哪些命令，以及仍未验证的范围。
 
-## Licensing
+## 许可证
 
-By contributing, you agree that your contribution is provided under this
-project's license choices: MPL 2.0 or EPL 1.0, unless a file explicitly states
-otherwise. Do not add third-party source, generated code, datasets, or binary
-artifacts unless their license is compatible and their origin is documented.
+提交贡献即表示你同意你的贡献按本项目许可证选择提供：MPL 2.0 或 EPL 1.0，除非文件另有明确声明。不要加入许可证不兼容或来源未记录的第三方源码、生成代码、数据集或二进制文件。

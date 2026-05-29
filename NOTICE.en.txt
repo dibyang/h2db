@@ -1,0 +1,9 @@
+h2db
+
+This project is based on H2 Database Engine.
+
+Upstream H2 source files and resources are copyright 2004-2023 H2 Group and are multiple-licensed under the MPL 2.0 and the EPL 1.0. See LICENSE.txt for the full license texts.
+
+Project-specific modifications are distributed under the same license choices unless a file explicitly states otherwise.
+
+This distribution may include optional integrations and test dependencies from third parties. See THIRD-PARTY-NOTICES.md for the dependency inventory used for open source release review.

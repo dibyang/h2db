@@ -1,71 +1,62 @@
-# Maven Central Release Guide
+# Maven Central 发布指南
 
-This guide is for publishing h2db to Maven Central for external users.
+[English](MAVEN_CENTRAL_RELEASE.en.md)
 
-Maven Central releases are effectively immutable. If a bad version is published,
-the normal recovery path is to publish a new fixed version rather than modify or
-delete the old one.
+本文用于指导 h2db 通过 Gradle `maven-publish` 发布到 Maven Central，供外部用户使用。
 
-## Current Project State
+Maven Central release 基本不可变。如果发布了有问题的版本，通常只能发布新的修复版本，而不是修改或删除旧版本。
 
-This repository publishes to Maven Central with Gradle's standard
-`maven-publish` plugin. The Gradle project already creates the required main,
-sources, javadoc, and POM artifacts:
+## 当前项目状态
+
+本仓库使用 Gradle 标准 `maven-publish` 插件发布。Gradle 工程已经能生成 Maven Central 通常要求的 main jar、sources jar、javadoc jar 和 POM。
 
 ```sh
 cd h2
 ./gradlew clean jar sourceJar javadocJar generatePomFileForMavenPublication
 ```
 
-The generated POM currently declares:
+当前生成的 POM 声明：
 
 * `groupId`: `net.xdob.h2db`
 * `artifactId`: `h2db`
-* `version`: from `h2/gradle.properties`
-* licenses: `MPL 2.0` and `EPL 1.0`
+* `version`: 来自 `h2/gradle.properties`
+* licenses: `MPL 2.0` 和 `EPL 1.0`
 * SCM URL: `https://github.com/dibyang/h2db`
 * developer: `dib.yang`
 
-Confirm these values before the first public release.
+首次公开发布前请确认这些值。
 
-## Maven Central Requirements
+## Maven Central 要求
 
-Before release, verify these items against the generated artifacts:
+发布前请对生成产物确认：
 
-* The version is a final release version, not `-SNAPSHOT`.
-* Every binary artifact has matching sources and javadoc jars.
-* Every deployed file has required checksums.
-* Every deployed file is signed with GPG/PGP and has a matching `.asc` file.
-* The POM has valid coordinates, project name, description, URL, licenses,
-  developer information, and SCM information.
-* The namespace for the selected `groupId` is verified in Sonatype Central
-  Portal.
+* 版本是正式 release 版本，不是 `-SNAPSHOT`。
+* 每个 binary artifact 都有对应 sources jar 和 javadoc jar。
+* 每个部署文件都有所需 checksums。
+* 每个部署文件都用 GPG/PGP 签名，并有对应 `.asc` 文件。
+* POM 包含有效坐标、项目名、描述、URL、许可证、developer 信息和 SCM 信息。
+* 所选 `groupId` 的 namespace 已在 Sonatype Central Portal 验证。
 
-Official references:
+官方参考：
 
 * https://central.sonatype.org/publish/requirements/
 * https://central.sonatype.org/register/central-portal/
 * https://central.sonatype.org/publish/requirements/gpg/
-* https://central.sonatype.org/publish/publish-portal-guide/
 * https://central.sonatype.org/publish/requirements/immutability/
 
-## One-Time Maintainer Setup
+## 维护者一次性准备
 
-1. Create or select the public GitHub repository for h2db.
-2. Verify the Maven Central namespace that matches the planned `groupId`.
-3. Create a GPG/PGP signing key for release signing.
-4. Publish the public key so Central users can verify signatures.
-5. Create Maven Central user tokens or repository credentials.
-6. Configure local publication properties in `h2/signing.properties`.
-7. Store credentials only in local protected files or CI secrets.
+1. 创建或确认 h2db 的公开 GitHub 仓库。
+2. 验证计划使用的 `groupId` 对应 Maven Central namespace。
+3. 创建用于发布签名的 GPG/PGP key。
+4. 发布 public key，方便 Central 用户验证签名。
+5. 创建 Maven Central user token 或 repository credentials。
+6. 在本地配置 `h2/signing.properties`。
+7. 凭据只放在本地受保护文件或 CI secrets 中。
 
-Do not commit signing keys, passphrases, Central tokens, or repository
-credentials.
+不要提交 signing key、passphrase、Central token 或 repository credentials。
 
-`h2/signing.properties` is intentionally ignored by Git. Keep it local and use
-placeholder documentation instead of committing real values.
-
-Expected local properties:
+`h2/signing.properties` 已被 Git 忽略。请只保留在本地，文档中使用占位值。
 
 ```properties
 releasesRepository=https://ossrh-staging-api.central.sonatype.com/service/local/staging/deploy/maven2/
@@ -79,88 +70,79 @@ ossrhUsername=YOUR_CENTRAL_TOKEN_USERNAME
 ossrhPassword=YOUR_CENTRAL_TOKEN_PASSWORD
 ```
 
-## Pre-Release Checks
+## 发布前检查
 
-From `h2/`:
+在 `h2/` 下执行：
 
 ```sh
 ./gradlew clean compileJava jar sourceJar javadocJar generatePomFileForMavenPublication
 ```
 
-Then inspect:
+然后检查：
 
 * `build/publications/maven/pom-default.xml`
 * `build/libs/*`
-* generated source and javadoc jars
+* 生成的 source 和 javadoc jar
 
-Confirm:
+确认：
 
-* POM license metadata matches `LICENSE.txt`.
-* POM SCM URL points to this fork.
-* POM developer contact is correct for external users.
-* README dependency snippet matches the released version.
-* `THIRD-PARTY-NOTICES.md` matches the resolved dependency graph.
-* No release credential, signing key, or passphrase is tracked by Git.
+* POM 许可证元数据与 `LICENSE.txt` 一致。
+* POM SCM URL 指向本 fork。
+* POM developer 联系方式适合外部用户。
+* README dependency snippet 与 release version 一致。
+* `THIRD-PARTY-NOTICES.md` 与已解析依赖图一致。
+* 没有 release credential、signing key 或 passphrase 被 Git 跟踪。
 
-## Local Dry Run
+## 本地 Dry Run
 
-Before publishing externally, publish to the local Maven repository:
+发布到外部仓库前，先发布到本地 Maven 仓库。
 
 ```sh
-./gradlew publishToMavenLocal
+./gradlew clean publishToMavenLocal "-Pversion=2.2.10" "-Dmaven.repo.local=build/test-m2-release-clean"
 ```
 
-Then inspect the generated files under the local Maven repository for:
+检查本地 Maven 仓库中的文件：
 
 * `h2db-<version>.jar`
 * `h2db-<version>-sources.jar`
 * `h2db-<version>-javadoc.jar`
 * `h2db-<version>.pom`
-* `.asc` signatures for published artifacts, when signing is enabled.
+* 正式版本应有对应 `.asc` 签名。
 
-The build disables Gradle Module Metadata generation because this release path
-publishes standard Maven artifacts to Maven Central.
+本构建禁用 Gradle Module Metadata 生成，因为当前发布路径面向 Maven Central 的标准 Maven 产物。
 
-## Publish With Maven Publish
+## 使用 maven-publish 发布
 
-The build reads repository URLs and credentials from properties:
+构建会从 properties 读取仓库 URL 和凭据：
 
 * `releasesRepository`
 * `snapshotsRepository`
 * `ossrhUsername`
 * `ossrhPassword`
 
-`-SNAPSHOT` versions publish to `snapshotsRepository`; final versions publish
-to `releasesRepository`.
+`-SNAPSHOT` 版本发布到 `snapshotsRepository`；正式版本发布到 `releasesRepository`。
 
-Snapshot builds do not attach signing artifacts by default to avoid stale local
-or Gradle 6 module metadata signing issues. Final release versions attach and
-generate signatures. If a snapshot repository requires signatures, run with
-`-PsignSnapshots`.
+snapshot 构建默认不挂载签名产物，以避免旧本地产物或 Gradle 6 module metadata 签名问题。正式 release 版本会挂载并生成签名。如果 snapshot 仓库要求签名，可使用 `-PsignSnapshots`。
 
-Typical release command from `h2/`:
+正式发布命令：
 
 ```sh
-./gradlew publish
+./gradlew clean publish "-Pversion=2.2.10"
 ```
 
-Use this command only after the local dry run confirms the generated repository
-layout, signatures, and POM metadata pass Central validation.
+只有在本地 dry run 已确认仓库布局、签名和 POM 元数据都通过检查后，才执行外部发布。
 
-## Post-Publish Verification
+## 发布后验证
 
-After Central validates and publishes the release:
+Maven Central 校验并发布后：
 
-1. Create a fresh temporary project.
-2. Depend on the released coordinate and version from Maven Central.
-3. Run a small JDBC smoke test against an in-memory database.
-4. Verify the downloaded POM has the expected license, SCM, and developer
-   metadata.
-5. Create the matching Git tag.
-6. Publish the GitHub Release.
+1. 创建一个全新的临时项目。
+2. 从 Maven Central 依赖已发布坐标和版本。
+3. 使用内存数据库运行一个 JDBC smoke test。
+4. 检查下载到的 POM 是否包含预期 license、SCM 和 developer 元数据。
+5. 创建匹配的 Git tag。
+6. 发布 GitHub Release。
 
-## Rollback Policy
+## 回滚策略
 
-Do not attempt to overwrite a released Maven Central version. If a release is
-bad, publish a new patch version and document the issue in the GitHub Release
-notes.
+不要尝试覆盖已经发布到 Maven Central 的版本。如果 release 有问题，请发布新的 patch 版本，并在 GitHub Release notes 中说明。

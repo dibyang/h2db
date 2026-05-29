@@ -1,23 +1,20 @@
-# Code of Conduct
+# 行为准则
 
-This project expects professional, respectful collaboration in issues, pull
-requests, reviews, and other project spaces.
+[English](CODE_OF_CONDUCT.en.md)
 
-## Expected Behavior
+本项目期望所有人在 issue、PR、评审和其他项目空间中保持专业、尊重和可协作。
 
-* Be respectful of different experience levels and backgrounds.
-* Focus criticism on code, design, tests, and documentation.
-* Assume good intent, but be clear when something is unsafe or incorrect.
-* Give maintainers and contributors enough context to reproduce technical
-  claims.
+## 期望行为
 
-## Unacceptable Behavior
+* 尊重不同经验水平和背景。
+* 批评应聚焦于代码、设计、测试和文档。
+* 默认善意，但在不安全或不正确时要清楚指出。
+* 技术主张应提供足够上下文，便于维护者和贡献者复现。
 
-Harassment, threats, personal attacks, discriminatory language, doxxing, spam,
-and sustained disruption are not acceptable.
+## 不可接受行为
 
-## Enforcement
+骚扰、威胁、人身攻击、歧视性语言、公开他人隐私、垃圾信息和持续破坏讨论秩序的行为都不可接受。
 
-Maintainers may edit or delete comments, close threads, block users, or take
-other reasonable moderation actions to keep project spaces usable and safe.
-Report conduct concerns through the repository maintainer contact path.
+## 执行
+
+维护者可以编辑或删除评论、关闭讨论、屏蔽用户，或采取其他合理的管理措施，以保持项目空间可用和安全。行为问题请通过仓库维护者联系路径报告。

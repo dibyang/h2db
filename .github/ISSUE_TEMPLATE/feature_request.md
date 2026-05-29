@@ -1,19 +1,19 @@
 ---
-name: Feature request
-about: Suggest a h2db enhancement
+name: 功能请求
+about: 建议 h2db 增强
 title: ""
 labels: enhancement
 assignees: ""
 ---
 
-## Use Case
+## 使用场景
 
-Describe the problem this feature would solve.
+描述这个功能要解决的问题。
 
-## Proposal
+## 方案建议
 
-Describe the behavior or API you want.
+描述你希望看到的行为或 API。
 
-## Compatibility
+## 兼容性
 
-Note any expected SQL, JDBC, storage, server, tool, or configuration impact.
+说明预期是否影响 SQL、JDBC、存储、服务端、工具或配置。

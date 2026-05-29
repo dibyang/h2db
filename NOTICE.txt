@@ -1,14 +1,9 @@
 h2db
 
-This project is based on H2 Database Engine.
+本项目基于 H2 Database Engine。
 
-Upstream H2 source files and resources are copyright 2004-2023 H2 Group and
-are multiple-licensed under the MPL 2.0 and the EPL 1.0. See LICENSE.txt for
-the full license texts.
+上游 H2 源文件和资源的版权归 H2 Group 所有，版权年份为 2004-2023，并在 MPL 2.0 和 EPL 1.0 下多重授权。完整许可证文本见 LICENSE.txt。
 
-Project-specific modifications are distributed under the same license choices
-unless a file explicitly states otherwise.
+除非文件另有明确声明，本项目特定修改也按相同许可证选择分发。
 
-This distribution may include optional integrations and test dependencies from
-third parties. See THIRD-PARTY-NOTICES.md for the dependency inventory used for
-open source release review.
+本发行版可能包含来自第三方的可选集成和测试依赖。开源发布审查使用的依赖清单见 THIRD-PARTY-NOTICES.md。

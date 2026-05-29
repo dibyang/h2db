@@ -1,16 +1,15 @@
-## Summary
+## 摘要
 
-Describe the change and why it is needed.
+说明本次变更内容以及为什么需要这个变更。
 
-## Compatibility
+## 兼容性
 
-Note any SQL, JDBC, storage, MVStore, server, tool, configuration, or public API
-compatibility impact.
+说明是否影响 SQL、JDBC、存储、MVStore、服务端、工具、配置或公开 API 兼容性。
 
-## Verification
+## 验证
 
-List the commands you ran and any important output or failures.
+列出你运行的命令，以及重要输出或失败信息。
 
 ## Release Notes
 
-State whether release notes are needed and provide draft wording if yes.
+说明是否需要 release notes；如果需要，请提供草稿。

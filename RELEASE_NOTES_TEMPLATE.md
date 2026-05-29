@@ -1,32 +1,30 @@
 # h2db VERSION
 
-## Summary
+[English](RELEASE_NOTES_TEMPLATE.en.md)
 
-Briefly describe why this release exists.
+## 摘要
 
-## Compatibility
+简要说明本次 release 的目的。
 
-State whether this release is intended to be compatible with the previous h2db
-release and with the upstream H2 version it is based on.
+## 兼容性
 
-## Changes
+说明本 release 是否预期兼容上一版 h2db，以及是否兼容其基于的上游 H2 版本。
+
+## 变更
 
 * 
 
-## Security
+## 安全
 
-State whether this release contains security fixes. If disclosure is coordinated
-separately, link to the advisory after publication.
+说明本 release 是否包含安全修复。如果披露流程单独协调，请在发布后链接 advisory。
 
-## Storage and Recovery Notes
+## 存储与恢复说明
 
-State whether there are MVStore, file format, backup, restore, recovery, or
-corruption-handling changes.
+说明是否存在 MVStore、文件格式、备份、恢复、recovery 或 corruption-handling 变更。
 
-## SQL and JDBC Notes
+## SQL 与 JDBC 说明
 
-State whether SQL parsing, execution, compatibility modes, JDBC behavior,
-errors, or public APIs changed.
+说明 SQL 解析、执行、兼容模式、JDBC 行为、错误或公开 API 是否变化。
 
 ## Maven
 
@@ -38,10 +36,10 @@ errors, or public APIs changed.
 </dependency>
 ```
 
-## Verification
+## 验证
 
-List release verification commands and smoke tests.
+列出 release 验证命令和 smoke tests。
 
-## Known Issues
+## 已知问题
 
-List known issues or write "None known".
+列出已知问题；如果没有，写“暂无已知问题”。

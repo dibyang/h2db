@@ -51,6 +51,7 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         runScenario("T-SHADOW-COMPACT-PREPARE-01", this::testShadowCompactPrepareDoesNotReplaceSource);
         runScenario("T-ONLINE-COMPACT-SWITCH-SHADOW-01", this::testSwitchToPreparedShadow);
         runScenario("T-ONLINE-COMPACT-CATCHUP-WRITES-01", this::testSwitchRejectsChangedSource);
+        runScenario("T-ONLINE-COMPACT-SOURCE-FINGERPRINT-01", this::testManifestRecordsSourceFingerprint);
         runScenario("T-ONLINE-COMPACT-DIAGNOSTICS-01", this::testReclamationDiagnostics);
         runScenario("T-ONLINE-COMPACT-MANIFEST-RECOVER-01", this::testManifestRecoveryRestoresSource);
         runScenario("T-ONLINE-COMPACT-BLOCKS-WRITES-01", this::testMaintenanceGateBlocksWrites);
@@ -193,6 +194,22 @@ public class TestMVStoreSpaceReclamation extends TestBase {
             assertMarkerAndExtraReadable(base);
             assertFalse(FileUtils.exists(base + ".reclaim.backup"));
             assertTrue(FileUtils.exists(base + ".reclaim.shadow"));
+        } finally {
+            deleteFilesUnlessKept(base);
+        }
+    }
+
+    private void testManifestRecordsSourceFingerprint() {
+        String base = mvStoreFile("manifestRecordsSourceFingerprint");
+        try {
+            BloatStats stats = createBloatedStore(base);
+            MVStoreSpaceReclamation.compactToShadow(base, MVStoreSpaceReclamationOptions.DEFAULT);
+            String manifest = readText(base + ".reclaim.manifest");
+            assertTrue(manifest.contains("sourceSize=" + stats.afterDeleteSize));
+            assertTrue(manifest.contains("sourceLastModified="));
+            assertTrue(manifest.contains("sourceDigest=SHA-256:"));
+        } catch (IOException e) {
+            throw new AssertionError(e);
         } finally {
             deleteFilesUnlessKept(base);
         }
@@ -444,6 +461,12 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         createParentDirectories(fileName);
         try (OutputStream out = FileUtils.newOutputStream(fileName, false)) {
             out.write(text.getBytes("UTF-8"));
+        }
+    }
+
+    private static String readText(String fileName) throws IOException {
+        try (InputStream in = FileUtils.newInputStream(fileName)) {
+            return new String(IOUtils.readBytesAndClose(in, -1), "UTF-8");
         }
     }
 

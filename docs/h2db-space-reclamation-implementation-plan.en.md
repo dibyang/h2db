@@ -63,7 +63,7 @@ production-grade implementation.
 
 ## Current Implementation Status
 
-This branch has completed internal phases 1 through 7. The scope is still a
+This branch has completed internal phases 1 through 8. The scope is still a
 controlled maintenance entry point: no SQL exposure, no automatic scheduling,
 and no `.mv.db` format change.
 
@@ -76,12 +76,13 @@ and no `.mv.db` format change.
 | Phase 5 | Done | `switchToShadow()` promotes a prepared shadow file and restores from backup on failure when possible. |
 | Phase 6 | Done | `MVStoreSpaceReclamationResult` exposes saved bytes, saved percent, and a diagnostic summary; rollout diagnostics are covered by tests. |
 | Phase 7 | Done | The manifest records source size and last-modified time; `switchToShadow()` rejects switching when the source file changed; `T-ONLINE-COMPACT-CATCHUP-WRITES-01` fixes this conservative safety behavior. |
+| Phase 8 | Done | The manifest adds a SHA-256 source-content fingerprint; `switchToShadow()` validates size, last-modified time, and digest to reduce false switches from same-size changes or timestamp granularity. |
 
-Remaining productization work after phase 7 includes public entry-point review,
+Remaining productization work after phase 8 includes public entry-point review,
 real incremental catch-up, TCP server behavior, backup/restore exclusion, long
 transaction and slow-disk stress tests, user-visible logging rules, and the
 separate S2 online chunk vacuum RFC.
-After phase 7, writes during copy are no longer silently overwritten. This is a
+After phase 8, writes during copy are no longer silently overwritten. This is a
 safe rejection policy, not true incremental catch-up. A short-blocking online
 compact still needs version-scan catch-up or a dual-write/change-log design.
 
@@ -124,6 +125,7 @@ Test ids:
 | `T-ONLINE-COMPACT-BLOCKS-WRITES-01` | Verify maintenance mode blocks new writes. |
 | `T-ONLINE-COMPACT-VERIFY-FAIL-01` | Verify failed validation does not replace the old store. |
 | `T-ONLINE-COMPACT-CATCHUP-WRITES-01` | Before real catch-up exists, verify switching is rejected when the source changes, avoiding silent data loss. |
+| `T-ONLINE-COMPACT-SOURCE-FINGERPRINT-01` | Verify the manifest records source size, last-modified time, and a SHA-256 content fingerprint. |
 | `T-ONLINE-COMPACT-CRASH-BEFORE-SWITCH-01` | Verify crash before switch keeps the old store recoverable. |
 | `T-ONLINE-COMPACT-CRASH-DURING-SWITCH-01` | Verify crash during switch can recover to the old or new store. |
 | `T-ONLINE-COMPACT-DIAGNOSTICS-01` | Verify saved bytes, saved percent, and diagnostic summary output. |

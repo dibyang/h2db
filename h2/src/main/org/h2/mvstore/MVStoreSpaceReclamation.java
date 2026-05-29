@@ -9,10 +9,14 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 
+import org.h2.engine.Constants;
 import org.h2.message.DbException;
 import org.h2.store.fs.FileUtils;
 import org.h2.util.IOUtils;
+import org.h2.util.StringUtils;
 
 /**
  * MVStore 空间回收维护工具。
@@ -25,6 +29,7 @@ public final class MVStoreSpaceReclamation {
 
     private static final String SHADOW_SUFFIX = ".reclaim.shadow";
     private static final String BACKUP_SUFFIX = ".reclaim.backup";
+    private static final String SOURCE_DIGEST_ALGORITHM = "SHA-256";
 
     private MVStoreSpaceReclamation() {
     }
@@ -49,18 +54,17 @@ public final class MVStoreSpaceReclamation {
         FileUtils.delete(shadowFileName);
         FileUtils.delete(backupFileName);
 
-        long sourceSize = FileUtils.size(fileName);
-        long sourceLastModified = FileUtils.lastModified(fileName);
         try {
-            writeManifest(fileName, "PREPARING", shadowFileName, backupFileName, sourceSize, sourceLastModified);
+            SourceFingerprint sourceFingerprint = sourceFingerprint(fileName);
+            writeManifest(fileName, "PREPARING", shadowFileName, backupFileName, sourceFingerprint);
             MVStoreTool.compact(fileName, shadowFileName, options.compress);
-            writeManifest(fileName, "VERIFYING", shadowFileName, backupFileName, sourceSize, sourceLastModified);
+            writeManifest(fileName, "VERIFYING", shadowFileName, backupFileName, sourceFingerprint);
             if (options.verifyAfterCompact) {
                 verifyStore(shadowFileName);
             }
             long compactedSize = FileUtils.size(shadowFileName);
             copyFile(fileName, backupFileName);
-            writeManifest(fileName, "SWITCHING", shadowFileName, backupFileName, sourceSize, sourceLastModified);
+            writeManifest(fileName, "SWITCHING", shadowFileName, backupFileName, sourceFingerprint);
             try {
                 MVStoreTool.moveAtomicReplace(shadowFileName, fileName);
             } catch (RuntimeException e) {
@@ -72,7 +76,7 @@ public final class MVStoreSpaceReclamation {
             }
             FileUtils.delete(manifestFileName(fileName));
             return new MVStoreSpaceReclamationResult(fileName, shadowFileName, backupFileName,
-                    sourceSize, compactedSize, true);
+                    sourceFingerprint.size, compactedSize, true);
         } catch (IOException e) {
             FileUtils.delete(shadowFileName);
             restoreBackup(fileName, backupFileName);
@@ -101,21 +105,17 @@ public final class MVStoreSpaceReclamation {
         }
         String shadowFileName = fileName + SHADOW_SUFFIX;
         FileUtils.delete(shadowFileName);
-        long sourceSize = FileUtils.size(fileName);
-        long sourceLastModified = FileUtils.lastModified(fileName);
         try {
-            writeManifest(fileName, "PREPARING", shadowFileName, fileName + BACKUP_SUFFIX, sourceSize,
-                    sourceLastModified);
+            SourceFingerprint sourceFingerprint = sourceFingerprint(fileName);
+            writeManifest(fileName, "PREPARING", shadowFileName, fileName + BACKUP_SUFFIX, sourceFingerprint);
             MVStoreTool.compact(fileName, shadowFileName, options.compress);
-            writeManifest(fileName, "VERIFYING", shadowFileName, fileName + BACKUP_SUFFIX, sourceSize,
-                    sourceLastModified);
+            writeManifest(fileName, "VERIFYING", shadowFileName, fileName + BACKUP_SUFFIX, sourceFingerprint);
             if (options.verifyAfterCompact) {
                 verifyStore(shadowFileName);
             }
-            writeManifest(fileName, "SHADOW_READY", shadowFileName, fileName + BACKUP_SUFFIX, sourceSize,
-                    sourceLastModified);
+            writeManifest(fileName, "SHADOW_READY", shadowFileName, fileName + BACKUP_SUFFIX, sourceFingerprint);
             return new MVStoreSpaceReclamationResult(fileName, shadowFileName, fileName + BACKUP_SUFFIX,
-                    sourceSize, FileUtils.size(shadowFileName), false);
+                    sourceFingerprint.size, FileUtils.size(shadowFileName), false);
         } catch (IOException e) {
             FileUtils.delete(shadowFileName);
             throw DbException.convertIOException(e, fileName);
@@ -146,16 +146,14 @@ public final class MVStoreSpaceReclamation {
             throw DataUtils.newMVStoreException(DataUtils.ERROR_FILE_CORRUPT,
                     "Shadow file not found: {0}", shadowFileName);
         }
-        long sourceSize = FileUtils.size(fileName);
         long compactedSize = FileUtils.size(shadowFileName);
         try {
-            assertSourceUnchanged(fileName);
+            SourceFingerprint sourceFingerprint = assertSourceUnchanged(fileName);
             if (options.verifyAfterCompact) {
                 verifyStore(shadowFileName);
             }
             copyFile(fileName, backupFileName);
-            writeManifest(fileName, "SWITCHING", shadowFileName, backupFileName, sourceSize,
-                    FileUtils.lastModified(fileName));
+            writeManifest(fileName, "SWITCHING", shadowFileName, backupFileName, sourceFingerprint);
             try {
                 MVStoreTool.moveAtomicReplace(shadowFileName, fileName);
             } catch (RuntimeException e) {
@@ -167,7 +165,7 @@ public final class MVStoreSpaceReclamation {
             }
             FileUtils.delete(manifestFileName(fileName));
             return new MVStoreSpaceReclamationResult(fileName, shadowFileName, backupFileName,
-                    sourceSize, compactedSize, true);
+                    sourceFingerprint.size, compactedSize, true);
         } catch (IOException e) {
             restoreBackup(fileName, backupFileName);
             throw DbException.convertIOException(e, fileName);
@@ -224,22 +222,23 @@ public final class MVStoreSpaceReclamation {
     }
 
     private static void writeManifest(String fileName, String phase, String shadowFileName,
-            String backupFileName, long sourceSize, long sourceLastModified) throws IOException {
+            String backupFileName, SourceFingerprint sourceFingerprint) throws IOException {
         String text = "magic=H2_MVSTORE_SPACE_RECLAMATION\n" +
                 "manifestVersion=1\n" +
                 "phase=" + phase + "\n" +
                 "sourceFile=" + fileName + "\n" +
                 "shadowFile=" + shadowFileName + "\n" +
                 "backupFile=" + backupFileName + "\n" +
-                "sourceSize=" + sourceSize + "\n" +
-                "sourceLastModified=" + sourceLastModified + "\n" +
+                "sourceSize=" + sourceFingerprint.size + "\n" +
+                "sourceLastModified=" + sourceFingerprint.lastModified + "\n" +
+                "sourceDigest=" + sourceFingerprint.digest + "\n" +
                 "updatedAt=" + System.currentTimeMillis() + "\n";
         try (OutputStream out = FileUtils.newOutputStream(manifestFileName(fileName), false)) {
             out.write(text.getBytes("UTF-8"));
         }
     }
 
-    private static void assertSourceUnchanged(String fileName) throws IOException {
+    private static SourceFingerprint assertSourceUnchanged(String fileName) throws IOException {
         String manifestFileName = manifestFileName(fileName);
         if (!FileUtils.exists(manifestFileName)) {
             throw DataUtils.newMVStoreException(DataUtils.ERROR_FILE_CORRUPT,
@@ -247,15 +246,40 @@ public final class MVStoreSpaceReclamation {
         }
         String sourceSize = readManifestValue(manifestFileName, "sourceSize");
         String sourceLastModified = readManifestValue(manifestFileName, "sourceLastModified");
-        if (sourceSize == null || sourceLastModified == null) {
+        String sourceDigest = readManifestValue(manifestFileName, "sourceDigest");
+        if (sourceSize == null || sourceLastModified == null || sourceDigest == null) {
             throw DataUtils.newMVStoreException(DataUtils.ERROR_FILE_CORRUPT,
                     "Space reclamation manifest misses source fingerprint: {0}", manifestFileName);
         }
-        if (Long.parseLong(sourceSize) != FileUtils.size(fileName) ||
-                Long.parseLong(sourceLastModified) != FileUtils.lastModified(fileName)) {
+        SourceFingerprint current = sourceFingerprint(fileName);
+        if (Long.parseLong(sourceSize) != current.size ||
+                Long.parseLong(sourceLastModified) != current.lastModified ||
+                !sourceDigest.equals(current.digest)) {
             throw DataUtils.newMVStoreException(DataUtils.ERROR_TRANSACTION_ILLEGAL_STATE,
                     "Source file changed after shadow compact: {0}", fileName);
         }
+        return current;
+    }
+
+    private static SourceFingerprint sourceFingerprint(String fileName) throws IOException {
+        MessageDigest digest;
+        try {
+            digest = MessageDigest.getInstance(SOURCE_DIGEST_ALGORITHM);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+        try (InputStream in = FileUtils.newInputStream(fileName)) {
+            byte[] buffer = new byte[Constants.IO_BUFFER_SIZE];
+            while (true) {
+                int len = in.read(buffer);
+                if (len < 0) {
+                    break;
+                }
+                digest.update(buffer, 0, len);
+            }
+        }
+        return new SourceFingerprint(FileUtils.size(fileName), FileUtils.lastModified(fileName),
+                SOURCE_DIGEST_ALGORITHM + ':' + StringUtils.convertBytesToHex(digest.digest()));
     }
 
     private static String readManifestValue(String fileName, String key) throws IOException {
@@ -289,5 +313,17 @@ public final class MVStoreSpaceReclamation {
             FileUtils.delete(fileName);
         }
         MVStoreTool.moveAtomicReplace(backupFileName, fileName);
+    }
+
+    private static final class SourceFingerprint {
+        final long size;
+        final long lastModified;
+        final String digest;
+
+        SourceFingerprint(long size, long lastModified, String digest) {
+            this.size = size;
+            this.lastModified = lastModified;
+            this.digest = digest;
+        }
     }
 }

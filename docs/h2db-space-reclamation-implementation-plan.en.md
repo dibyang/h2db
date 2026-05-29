@@ -58,12 +58,12 @@ production-grade implementation.
 - [x] Add the conservative safety gate for writes during copy: reject switching if the source file changes after shadow creation.
 - [ ] Complete the real write catch-up strategy during copy, preferably by validating version-scan catch-up.
 - [ ] Add TCP server, backup, long transaction, slow disk, and large file tests.
-- [x] Add internal diagnostics and this English companion plan before rollout; public settings and user-visible failure logging still require API review.
+- [x] Add internal diagnostics, Chinese/English implementation plans, Chinese/English user guides, limitation notes, and release guidance before rollout.
 - [ ] Start the detailed S2 `online chunk vacuum` design and invariant tests after S1 stabilizes.
 
 ## Current Implementation Status
 
-This branch has completed internal phases 1 through 13. The scope is still a
+This branch has completed internal phases 1 through 14. The scope is still a
 controlled maintenance entry point: no SQL exposure, no automatic scheduling,
 and no `.mv.db` format change.
 
@@ -82,10 +82,11 @@ and no `.mv.db` format change.
 | Phase 11 | Done | Added `MVStoreSpaceReclamationMaintenance` to fix maintenance rules: reads are allowed, writes are rejected in maintenance mode, and active transactions block the final switch. |
 | Phase 12 | Done | Added TCP/remote request decisions and a backup/space-reclamation operation gate to fix busy, wait, and mutual-exclusion semantics. |
 | Phase 13 | Done | Added larger-store, slow-IO simulation, and leftover cleanup coverage; `ioDelayMillis` is only for controlled slow-disk path testing. |
+| Phase 14 | Done | Added the public maintenance API user guide and English companion, including Maven Central/GitHub Release limitations, rollback, leftover cleanup, and diagnostics. |
 
-Remaining productization work after phase 13 includes public entry-point review,
-user-visible logging rules, and the
-separate S2 online chunk vacuum RFC.
+After phase 14, S1 can enter controlled external trial as an experimental
+maintenance API. SQL exposure, automatic scheduling, and real online
+short-blocking compact require a separate public API / S2 RFC.
 After phase 10, writes during copy are no longer silently overwritten; version-scan
 incremental catch-up is explicitly unavailable in the current stage, so S1
 continues with an explicit full-copy fallback path.
@@ -99,6 +100,7 @@ Deliverables:
 
 - `docs/h2db-space-reclamation-optimization-rfc.md`
 - `docs/h2db-space-reclamation-implementation-plan.md`
+- `docs/h2db-space-reclamation-user-guide.md`
 - S1/S2 trade-off conclusion.
 - Initial test ids.
 

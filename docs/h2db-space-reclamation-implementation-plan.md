@@ -47,12 +47,12 @@
 - [x] 补齐 copy 期间写入的保守安全闸门：shadow 生成后源文件变化时拒绝切换，避免静默丢增量。
 - [ ] 补齐真正的 copy 期间写入追平策略，优先验证版本扫描增量追平是否可行。
 - [ ] 补齐 TCP server、backup、长事务、慢盘、大文件场景测试。
-- [x] 灰度前补齐内部诊断输出和中英文实施计划；用户可见配置开关和失败日志仍需在公开 API 评审后落地。
+- [x] 灰度前补齐内部诊断输出、中英文实施计划、中英文用户指南、限制说明和发布注意事项。
 - [ ] S1 稳定后，启动 S2 `online chunk vacuum` 的详细设计和不变量测试。
 
 ## 当前实现状态
 
-本分支已经完成阶段 1 到阶段 13 的内部闭环，范围仍限定为受控维护入口，不暴露 SQL，不自动调度，也不改变 `.mv.db` 磁盘格式。
+本分支已经完成阶段 1 到阶段 14 的内部闭环，范围仍限定为受控维护入口，不暴露 SQL，不自动调度，也不改变 `.mv.db` 磁盘格式。
 
 | 阶段 | 状态 | 交付内容 |
 | --- | --- | --- |
@@ -69,8 +69,9 @@
 | 阶段 11 | 已完成 | 新增 `MVStoreSpaceReclamationMaintenance` 固定维护态规则：读请求允许进入，写请求在维护态被拒绝，活跃读写事务会阻止最终切换。 |
 | 阶段 12 | 已完成 | 新增 TCP/远程请求准入决策和 backup/space reclamation 互斥门禁，固定 busy、wait 和互斥语义。 |
 | 阶段 13 | 已完成 | 补齐大库样本、慢 IO 模拟和残留清理验证；`ioDelayMillis` 仅用于受控慢盘路径测试。 |
+| 阶段 14 | 已完成 | 补齐公开维护 API 用户指南及英文副本，明确 Maven Central/GitHub Release 发布限制、回滚、残留清理和诊断信息。 |
 
-阶段 13 之后仍保留的产品化工作包括：公开入口形态评审、用户可见日志规范、以及 S2 `online chunk vacuum` 的单独 RFC。
+阶段 14 之后，S1 可以作为实验性维护 API 进入受控外部试用；后续若要暴露 SQL、自动调度或真正在线短阻塞 compact，需要另起公开 API / S2 RFC。
 阶段 10 之后，copy 期间写入已经不会被静默覆盖；版本扫描增量追平已明确为当前阶段不可用，S1 采用显式 full-copy 降级路线。
 
 ## P0：文档和方案评审
@@ -81,6 +82,7 @@
 
 - `docs/h2db-space-reclamation-optimization-rfc.md`
 - `docs/h2db-space-reclamation-implementation-plan.md`
+- `docs/h2db-space-reclamation-user-guide.md`
 - S1/S2 方案取舍结论。
 - 第一批测试编号。
 

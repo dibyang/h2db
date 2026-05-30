@@ -127,6 +127,16 @@ public class TestScript extends TestDb {
     public void test() throws Exception {
         reconnectOften = !config.memory && config.big;
 
+        String script = System.getProperty("h2.testScript");
+        if (script != null && !script.isEmpty()) {
+            testScript(script);
+            deleteDb("script");
+            System.out.flush();
+            if (foundErrors) {
+                throw new Exception("errors in script found");
+            }
+            return;
+        }
         testScript("testScript.sql");
         if (!config.memory && !config.big && !config.networked) {
             testScript("testSimple.sql");

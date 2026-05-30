@@ -136,7 +136,10 @@ SELECT C AND C, NOT(C AND C) FROM (VALUES 'F') T(C);
 > rows: 1
 
 SELECT C != 2 AND C, NOT (C != 2 AND C) FROM (VALUES TRUE) T(C);
-> exception TYPES_ARE_NOT_COMPARABLE_2
+> C AND (C <> 2) C IN(2, FALSE)
+> -------------- --------------
+> TRUE           FALSE
+> rows: 1
 
 SELECT ROW(1) = ROW(ROW(1));
 >> TRUE

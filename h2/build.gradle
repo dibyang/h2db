@@ -268,6 +268,7 @@ def legacySmokeTests = [
         'org.h2.test.jdbc.TestStatement',
         'org.h2.test.jdbc.TestUpdatableResultSet',
         'org.h2.test.jdbc.TestZloty',
+        'org.h2.test.scripts.TestScript',
         'org.h2.test.store.TestDataUtils',
         'org.h2.test.store.TestFreeSpace',
         'org.h2.test.unit.TestStringUtils',
@@ -275,7 +276,6 @@ def legacySmokeTests = [
 ]
 
 def legacyBaselineIssueTests = [
-        'org.h2.test.scripts.TestScript',
         'org.h2.test.jdbc.TestMetaData'
 ]
 
@@ -295,6 +295,9 @@ task runH2LegacyBaselineReport(type: JavaExec) {
     args legacyBaselineIssueTests
     classpath = sourceSets.legacyTest.runtimeClasspath
     systemProperty 'file.encoding', 'UTF-8'
+    if (project.hasProperty('h2TestScript')) {
+        systemProperty 'h2.testScript', project.property('h2TestScript')
+    }
     ignoreExitValue = true
 }
 

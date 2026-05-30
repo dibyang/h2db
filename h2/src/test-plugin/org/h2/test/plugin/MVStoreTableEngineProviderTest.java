@@ -9,11 +9,13 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.lang.reflect.Field;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 import org.h2.api.PluginCapability;
 import org.h2.api.PluginProvider;
@@ -93,6 +95,23 @@ public class MVStoreTableEngineProviderTest {
     }
 
     /**
+     * T-PLUGIN-P4-BUILTIN-PROVIDER-PATH-01.
+     */
+    @Test
+    public void defaultCreateTableDoesNotUseLegacyTableEngineCache() throws Exception {
+        try (Connection conn = DriverManager.getConnection("jdbc:h2:mem:pluginDefaultProviderPath", "sa", "");
+                Statement stat = conn.createStatement()) {
+            Database db = database(conn);
+
+            stat.execute("create table test(id int primary key)");
+
+            assertTrue(legacyTableEngines(db).isEmpty());
+            assertNotNull(db.getPluginRegistry().findProvider(TableEngineProvider.TYPE,
+                    MVStoreTableEngineProvider.ID));
+        }
+    }
+
+    /**
      * T-PLUGIN-LEGACY-TABLE-ENGINE-01.
      */
     @Test
@@ -140,6 +159,13 @@ public class MVStoreTableEngineProviderTest {
     private static Database database(Connection conn) {
         SessionLocal session = (SessionLocal) ((JdbcConnection) conn).getSession();
         return session.getDatabase();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, TableEngine> legacyTableEngines(Database db) throws Exception {
+        Field field = Database.class.getDeclaredField("tableEngines");
+        field.setAccessible(true);
+        return (Map<String, TableEngine>) field.get(db);
     }
 
     private static final class Context implements TableEngineContext {

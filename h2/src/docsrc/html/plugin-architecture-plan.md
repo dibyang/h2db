@@ -54,7 +54,7 @@
 | P1 | 已完成 | 固化后续推进计划 | 建立中英文阶段计划、绑定测试门禁、列出暂不纳入能力 | `runPluginArchitectureCheck` |
 | P2 | 已完成 | 补齐 SPI 契约边界 | 检查 `H2Plugin`、provider 的 null、空 id/version、空 provider 集合和 source 契约；补 JUnit | `runPluginArchitectureCheck`、日常门禁 |
 | P3 | 已完成 | 加固插件加载诊断 | 覆盖显式 class、ServiceLoader 开关、版本范围、无效描述符、依赖缺失、循环依赖、非法 provider type | `runPluginArchitectureCheck`、日常门禁 |
-| P4 | 未开始 | 收敛内置插件路径 | 确认 MVStore storage/table engine 通过 builtin provider 注册和解析；减少直接 legacy fallback | `runPluginArchitectureCheck`、`runH2LegacySmoke` |
+| P4 | 已完成 | 收敛内置插件路径 | 确认 MVStore storage/table engine 通过 builtin provider 注册和解析；默认建表不走 legacy `TableEngine` 缓存 | `runPluginArchitectureCheck`、`runH2LegacySmoke` |
 | P5 | 未开始 | 完善表引擎插件化 | 覆盖外部 `TableEngineProvider` 建表、schema default params、错误信息和兼容语法 | `runPluginArchitectureCheck`、相关 `TestTableEngines` |
 | P6 | 未开始 | 完善存储引擎插件化 | 覆盖 storage id 持久化、请求/持久化不匹配、缺失 provider、只读降级、维护能力 | `runPluginArchitectureCheck`、storage 相关专项 |
 | P7 | 未开始 | 完善可观测性 | 确认 `INFORMATION_SCHEMA.PLUGINS`、`PLUGIN_PROVIDERS`、`PLUGIN_CAPABILITIES` 输出稳定，补文档 | `runPluginArchitectureCheck` |

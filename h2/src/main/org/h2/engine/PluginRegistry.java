@@ -28,8 +28,25 @@ public final class PluginRegistry {
      * @param source 来源
      */
     public void registerPlugin(H2Plugin plugin, PluginSource source) {
-        for (PluginProvider provider : plugin.getProviders()) {
-            registerProvider(plugin.getId(), plugin.getVersion(), provider, source);
+        if (plugin == null) {
+            throw new IllegalArgumentException("Plugin must not be null");
+        }
+        String pluginId = requireNonBlank(plugin.getId(), "Plugin id");
+        String pluginVersion = requireNonBlank(plugin.getVersion(), "Plugin version");
+        if (source == null) {
+            throw new IllegalArgumentException("Plugin source must not be null");
+        }
+        Iterable<? extends PluginProvider> pluginProviders = plugin.getProviders();
+        if (pluginProviders == null) {
+            throw new IllegalArgumentException("Plugin providers must not be null: plugin=" + pluginId);
+        }
+        boolean registered = false;
+        for (PluginProvider provider : pluginProviders) {
+            registerProvider(pluginId, pluginVersion, provider, source);
+            registered = true;
+        }
+        if (!registered) {
+            throw new IllegalArgumentException("Plugin must provide at least one provider: plugin=" + pluginId);
         }
     }
 
@@ -42,8 +59,16 @@ public final class PluginRegistry {
      * @param source 来源
      */
     public void registerProvider(String pluginId, String pluginVersion, PluginProvider provider, PluginSource source) {
-        String type = provider.getType();
-        String id = provider.getId();
+        pluginId = requireNonBlank(pluginId, "Plugin id");
+        pluginVersion = requireNonBlank(pluginVersion, "Plugin version");
+        if (provider == null) {
+            throw new IllegalArgumentException("Plugin provider must not be null: plugin=" + pluginId);
+        }
+        if (source == null) {
+            throw new IllegalArgumentException("Plugin source must not be null: plugin=" + pluginId);
+        }
+        String type = requireNonBlank(provider.getType(), "Provider type");
+        String id = requireNonBlank(provider.getId(), "Provider id");
         HashMap<String, RegisteredProvider> byId = providers.get(type);
         if (byId == null) {
             byId = new HashMap<>();
@@ -139,6 +164,13 @@ public final class PluginRegistry {
     private RegisteredProvider findRegisteredProvider(String type, String id) {
         HashMap<String, RegisteredProvider> byId = providers.get(type);
         return byId == null ? null : byId.get(id);
+    }
+
+    private static String requireNonBlank(String value, String name) {
+        if (value == null || value.trim().isEmpty()) {
+            throw new IllegalArgumentException(name + " must not be empty");
+        }
+        return value;
     }
 
     private static IllegalArgumentException duplicateProviderException(String prefix, String type, String id,

@@ -13,6 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import org.h2.api.H2Plugin;
 import org.h2.api.PluginCapability;
@@ -21,6 +22,7 @@ import org.h2.api.TableEngineProvider;
 import org.h2.engine.PluginRegistry;
 import org.h2.engine.PluginSource;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 
 /**
  * 插件注册中心的 JUnit 测试。
@@ -77,6 +79,56 @@ public class PluginRegistryTest {
 
         assertThrows(IllegalArgumentException.class, () ->
                 registry.registerProvider("other.plugin", "1", second, PluginSource.CONFIGURED_CLASS));
+    }
+
+    /**
+     * T-PLUGIN-P2-INVALID-PLUGIN-01.
+     */
+    @Test
+    public void rejectsInvalidPluginDescriptors() {
+        PluginRegistry registry = new PluginRegistry();
+        PluginProvider provider = new TestProvider(TableEngineProvider.TYPE, "sample",
+                PluginCapability.TABLE_CREATE);
+
+        assertIllegalArgumentContains(() -> registry.registerPlugin(null, PluginSource.BUILTIN),
+                "Plugin must not be null");
+        assertIllegalArgumentContains(() -> registry.registerPlugin(new TestPlugin("", "1",
+                Arrays.asList(provider)), PluginSource.BUILTIN), "Plugin id must not be empty");
+        assertIllegalArgumentContains(() -> registry.registerPlugin(new TestPlugin("test.plugin", "",
+                Arrays.asList(provider)), PluginSource.BUILTIN), "Plugin version must not be empty");
+        assertIllegalArgumentContains(() -> registry.registerPlugin(new TestPlugin("test.plugin", "1",
+                null), PluginSource.BUILTIN), "Plugin providers must not be null");
+        assertIllegalArgumentContains(() -> registry.registerPlugin(new TestPlugin("test.plugin", "1",
+                Collections.<PluginProvider>emptyList()), PluginSource.BUILTIN),
+                "Plugin must provide at least one provider");
+        assertIllegalArgumentContains(() -> registry.registerPlugin(new TestPlugin("test.plugin", "1",
+                Arrays.asList(provider)), null), "Plugin source must not be null");
+    }
+
+    /**
+     * T-PLUGIN-P2-INVALID-PROVIDER-01.
+     */
+    @Test
+    public void rejectsInvalidProviderDescriptors() {
+        PluginRegistry registry = new PluginRegistry();
+
+        assertIllegalArgumentContains(() -> registry.registerProvider("", "1",
+                new TestProvider(TableEngineProvider.TYPE, "sample", PluginCapability.TABLE_CREATE),
+                PluginSource.BUILTIN), "Plugin id must not be empty");
+        assertIllegalArgumentContains(() -> registry.registerProvider("test.plugin", "",
+                new TestProvider(TableEngineProvider.TYPE, "sample", PluginCapability.TABLE_CREATE),
+                PluginSource.BUILTIN), "Plugin version must not be empty");
+        assertIllegalArgumentContains(() -> registry.registerProvider("test.plugin", "1",
+                null, PluginSource.BUILTIN), "Plugin provider must not be null");
+        assertIllegalArgumentContains(() -> registry.registerProvider("test.plugin", "1",
+                new TestProvider("", "sample", PluginCapability.TABLE_CREATE), PluginSource.BUILTIN),
+                "Provider type must not be empty");
+        assertIllegalArgumentContains(() -> registry.registerProvider("test.plugin", "1",
+                new TestProvider(TableEngineProvider.TYPE, "", PluginCapability.TABLE_CREATE),
+                PluginSource.BUILTIN), "Provider id must not be empty");
+        assertIllegalArgumentContains(() -> registry.registerProvider("test.plugin", "1",
+                new TestProvider(TableEngineProvider.TYPE, "sample", PluginCapability.TABLE_CREATE),
+                null), "Plugin source must not be null");
     }
 
     /**
@@ -153,20 +205,28 @@ public class PluginRegistryTest {
     }
 
     private static final class TestPlugin implements H2Plugin {
-        private final PluginProvider provider;
+        private final String id;
+        private final String version;
+        private final Iterable<? extends PluginProvider> providers;
 
         TestPlugin(PluginProvider provider) {
-            this.provider = provider;
+            this("test.plugin", "1", Arrays.asList(provider));
+        }
+
+        TestPlugin(String id, String version, Iterable<? extends PluginProvider> providers) {
+            this.id = id;
+            this.version = version;
+            this.providers = providers;
         }
 
         @Override
         public String getId() {
-            return "test.plugin";
+            return id;
         }
 
         @Override
         public String getVersion() {
-            return "1";
+            return version;
         }
 
         @Override
@@ -176,7 +236,7 @@ public class PluginRegistryTest {
 
         @Override
         public Iterable<? extends PluginProvider> getProviders() {
-            return Arrays.asList(provider);
+            return providers;
         }
     }
 
@@ -205,5 +265,10 @@ public class PluginRegistryTest {
         public boolean supports(String capability) {
             return this.capability.equals(capability);
         }
+    }
+
+    private static void assertIllegalArgumentContains(Executable executable, String message) {
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, executable);
+        assertTrue(e.getMessage().contains(message));
     }
 }

@@ -52,7 +52,7 @@ If full acceptance fails in a network phase with a connection timeout, rerun the
 | Phase | Status | Goal | Main tasks | Verification |
 | --- | --- | --- | --- | --- |
 | P1 | Done | Stabilize the implementation plan | Create Chinese and English phase plans, bind test gates, list deferred capabilities | `runPluginArchitectureCheck` |
-| P2 | Not started | Fill SPI contract boundaries | Check null/empty ids, capability declarations, and read-only contracts for `H2Plugin`, providers, storage/table contexts; add JUnit coverage | `runPluginArchitectureCheck` |
+| P2 | Done | Fill SPI contract boundaries | Check null/empty ids and versions, empty provider sets, and source contracts for `H2Plugin` and providers; add JUnit coverage | `runPluginArchitectureCheck`, daily gate |
 | P3 | Not started | Harden plugin loading diagnostics | Cover explicit class loading, `PLUGIN_PATHS`, ServiceLoader switch, version ranges, missing dependencies, dependency cycles, and forbidden provider types | `runPluginArchitectureCheck` |
 | P4 | Not started | Consolidate built-in plugin paths | Ensure MVStore storage/table engines are registered and resolved through built-in providers; reduce direct legacy fallback | `runPluginArchitectureCheck`, `runH2LegacySmoke` |
 | P5 | Not started | Complete table-engine pluginization | Cover external `TableEngineProvider` table creation, schema default params, error messages, and compatibility syntax | `runPluginArchitectureCheck`, relevant `TestTableEngines` |

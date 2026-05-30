@@ -52,7 +52,7 @@
 | 阶段 | 状态 | 目标 | 主要任务 | 验证 |
 | --- | --- | --- | --- | --- |
 | P1 | 已完成 | 固化后续推进计划 | 建立中英文阶段计划、绑定测试门禁、列出暂不纳入能力 | `runPluginArchitectureCheck` |
-| P2 | 未开始 | 补齐 SPI 契约边界 | 检查 `H2Plugin`、provider、storage/table context 的 null、空 id、能力声明和只读契约；补 JUnit | `runPluginArchitectureCheck` |
+| P2 | 已完成 | 补齐 SPI 契约边界 | 检查 `H2Plugin`、provider 的 null、空 id/version、空 provider 集合和 source 契约；补 JUnit | `runPluginArchitectureCheck`、日常门禁 |
 | P3 | 未开始 | 加固插件加载诊断 | 覆盖显式 class、`PLUGIN_PATHS`、ServiceLoader 开关、版本范围、依赖缺失、循环依赖、非法 provider type | `runPluginArchitectureCheck` |
 | P4 | 未开始 | 收敛内置插件路径 | 确认 MVStore storage/table engine 通过 builtin provider 注册和解析；减少直接 legacy fallback | `runPluginArchitectureCheck`、`runH2LegacySmoke` |
 | P5 | 未开始 | 完善表引擎插件化 | 覆盖外部 `TableEngineProvider` 建表、schema default params、错误信息和兼容语法 | `runPluginArchitectureCheck`、相关 `TestTableEngines` |

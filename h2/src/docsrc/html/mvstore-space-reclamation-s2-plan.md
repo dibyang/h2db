@@ -85,3 +85,31 @@
 ```
 
 完整验收按需运行 `runH2TestAllCi`，若出现已知 localhost 网络偶发，按 phase report 复跑并记录。
+
+## 当前落地状态
+
+| 阶段 | 状态 | 已落地内容 |
+| --- | --- | --- |
+| S2.1 | Done | `MVStoreReclamationAnalyzer`、chunk liveness snapshot、候选评分、dry-run 分析结果。 |
+| S2.2 | Done | `MVStoreReclamationCoordinator`、request/result/status、`vacuumOnline()` 维护入口接入。 |
+| S2.3 | Done | 基于现有 `MVMap.rewritePage()` 的在线 page relocation 主路径诊断，输出估算回收收益。 |
+| S2.4 | Done | opt-in evacuation journal scaffold、phase 记录、完成清理、recovery 入口。 |
+| S2.5 | Done | relocation map feature gate 与 result 诊断字段；默认不启用读路径重定向。 |
+| S2.6 | Done | 显式预算控制的 tail compaction 调用与诊断字段。 |
+| S2.7 | Done | 默认关闭的 scheduler facade；启用后复用同一 coordinator。 |
+| S2.8 | Done | 中英文设计、计划和运维诊断说明同步。 |
+
+## 当前默认策略
+
+S2 默认保持保守：后台调度关闭；journal 默认关闭；relocation map 默认关闭且当前不会改写读路径；tail compaction 只有显式设置时间预算才执行。手动 `vacuumOnline()` 走 coordinator，先做候选分析，再按预算执行在线 partial relocation，并返回结构化诊断。
+
+## 后续深化项
+
+以下能力已通过 request/result、feature gate 或 journal scaffold 预留入口，但仍需在后续演进中继续深化：
+
+| 能力 | 当前状态 | 后续工作 |
+| --- | --- | --- |
+| 真正的 relocation map 读路径 | 已有 feature gate，默认 unused | 增加 old page position 到 new page position 的安全读路径和兼容拒写策略。 |
+| crash-safe publish 完整语义 | 已有 journal scaffold | 增加 publish marker、崩溃注入、重放/回滚和旧版本打开保护。 |
+| unknown map 精准诊断 | 现有 MVStore 可 lazy-open map 完成 rewrite | 在 ownership 解析失败时输出专门 skip reason。 |
+| 后台 idle 调度 | scheduler facade 默认关闭 | 接入 idle budget、限速和全局互斥，不影响前台延迟。 |

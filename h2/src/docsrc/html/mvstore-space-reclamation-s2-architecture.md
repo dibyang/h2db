@@ -219,3 +219,17 @@ stateDiagram-v2
 ## 设计结论
 
 S2 长期方案是 MVStore 内部的在线 chunk/page 级回收系统。实现可以从现有 `compact()`、`compactFile()`、`rewriteChunks()`、`compactMoveChunks()` 出发，但最终交付不是包装这些方法，而是形成 coordinator、liveness analyzer、candidate selector、page relocator、evacuation journal、relocation map、tail compactor 的闭环。
+
+## 已落地 API 面
+
+当前实现提供以下内部 API 锚点：
+
+| API | 角色 |
+| --- | --- |
+| `MVStoreReclamationAnalyzer` | 生成只读 chunk liveness 和候选分析。 |
+| `MVStoreReclamationCoordinator` | 执行单轮有界在线回收，并提供 recovery 入口。 |
+| `MVStoreReclamationRequest` | 控制 dry-run、目标填充率、rewrite 预算、journal、relocation map gate 和 tail 预算。 |
+| `MVStoreOnlineReclamationResult` | 输出状态、前后 fill rate / 文件大小、候选 chunk、估算回收字节、relocation map 标志和 tail compaction 标志。 |
+| `MVStoreReclamationScheduler` | 提供默认关闭的 scheduler facade，后续用于后台调度。 |
+
+影响持久化格式的能力仍然保持 gate：journal 需要显式启用，relocation map 不启用读路径重定向，scheduler 不会自动后台执行。

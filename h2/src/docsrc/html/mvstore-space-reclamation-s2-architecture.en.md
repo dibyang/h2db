@@ -219,3 +219,17 @@ stateDiagram-v2
 ## Design Conclusion
 
 S2 is an online chunk/page-level reclamation system inside MVStore. Implementation can start from existing `compact()`, `compactFile()`, `rewriteChunks()`, and `compactMoveChunks()`, but the final deliverable is not a wrapper around them. The final deliverable is a closed loop of coordinator, liveness analyzer, candidate selector, page relocator, evacuation journal, relocation map, and tail compactor.
+
+## Implemented API Surface
+
+The current implementation provides these internal API anchors:
+
+| API | Role |
+| --- | --- |
+| `MVStoreReclamationAnalyzer` | Builds a read-only chunk liveness and candidate analysis. |
+| `MVStoreReclamationCoordinator` | Runs one bounded online reclamation round and exposes recovery. |
+| `MVStoreReclamationRequest` | Controls dry-run, target fill rate, rewrite budget, journal, relocation-map gate, and tail budget. |
+| `MVStoreOnlineReclamationResult` | Reports status, before/after fill rates and file size, candidates, estimated reclaimed bytes, relocation-map flags, and tail-compaction flags. |
+| `MVStoreReclamationScheduler` | Provides a disabled-by-default scheduler facade for future background operation. |
+
+The durable-format-affecting features remain gated. Journaling is opt-in, relocation-map read redirection is not enabled, and scheduler execution is not automatic.

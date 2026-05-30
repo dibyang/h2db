@@ -85,3 +85,31 @@ Higher-risk phases:
 ```
 
 Run `runH2TestAllCi` when full acceptance is needed. If a known localhost network flake appears, rerun the matching phase report and record it.
+
+## Current Implementation Status
+
+| Phase | Status | Implemented |
+| --- | --- | --- |
+| S2.1 | Done | `MVStoreReclamationAnalyzer`, chunk liveness snapshots, candidate scoring, and dry-run analysis. |
+| S2.2 | Done | `MVStoreReclamationCoordinator`, request/result/status objects, and `vacuumOnline()` maintenance integration. |
+| S2.3 | Done | Online page relocation diagnostics over the existing `MVMap.rewritePage()` path, including estimated reclaimed bytes. |
+| S2.4 | Done | Opt-in evacuation journal scaffold, phase recording, completion cleanup, and recovery entry point. |
+| S2.5 | Done | Relocation-map feature gate and result diagnostics; read-path redirection remains disabled by default. |
+| S2.6 | Done | Explicit-budget tail compaction invocation and diagnostics. |
+| S2.7 | Done | Scheduler facade that is disabled by default and reuses the same coordinator when enabled. |
+| S2.8 | Done | Chinese and English design, plan, and operational diagnostics documentation updated. |
+
+## Current Defaults
+
+S2 stays conservative by default: background scheduling is disabled, journaling is disabled, relocation maps are disabled and do not change the read path, and tail compaction runs only when an explicit time budget is provided. Manual `vacuumOnline()` goes through the coordinator, analyzes candidates, runs bounded online partial relocation, and returns structured diagnostics.
+
+## Follow-up Deepening
+
+The following capabilities now have request/result, feature-gate, or journal-scaffold entry points, but still need deeper follow-up work:
+
+| Capability | Current State | Follow-up |
+| --- | --- | --- |
+| Real relocation-map read path | Feature-gated and currently unused | Add safe old-page-position to new-page-position reads and write-open compatibility rejection. |
+| Full crash-safe publish semantics | Journal scaffold exists | Add publish markers, fault injection, replay/rollback, and old-version open protection. |
+| Precise unknown-map diagnostics | MVStore can lazy-open maps for rewrite today | Emit a dedicated skip reason when ownership cannot be resolved. |
+| Background idle scheduling | Scheduler facade is disabled by default | Add idle budgets, rate limiting, and global mutual exclusion without affecting foreground latency. |

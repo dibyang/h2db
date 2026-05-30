@@ -10,11 +10,14 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
 
+import org.h2.mvstore.ChunkLivenessSnapshot;
 import org.h2.mvstore.MVMap;
 import org.h2.mvstore.MVStore;
 import org.h2.mvstore.MVStoreException;
-import org.h2.mvstore.MVStoreSpaceReclamationAnalysis;
+import org.h2.mvstore.MVStoreReclamationAnalysis;
+import org.h2.mvstore.MVStoreReclamationAnalyzer;
 import org.h2.mvstore.MVStoreSpaceReclamation;
+import org.h2.mvstore.MVStoreSpaceReclamationAnalysis;
 import org.h2.mvstore.MVStoreSpaceReclamationMaintenance;
 import org.h2.mvstore.MVStoreSpaceReclamationOperationGate;
 import org.h2.mvstore.MVStoreSpaceReclamationOptions;
@@ -78,6 +81,9 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         runScenario("T-ONLINE-COMPACT-CRASH-BEFORE-SWITCH-01", this::testCrashBeforeSwitchKeepsSource);
         runScenario("T-ONLINE-COMPACT-CRASH-DURING-SWITCH-01", this::testCrashDuringSwitchRecoversSource);
         runScenario("T-ONLINE-COMPACT-FAULT-MATRIX-01", this::testFaultInjectionMatrixKeepsReadableStore);
+        runScenario("T-S2-RECLAMATION-ANALYSIS-CANDIDATES-01", this::testReclamationAnalysisFindsCandidates);
+        runScenario("T-S2-RECLAMATION-ANALYSIS-LOW-VALUE-01", this::testReclamationAnalysisRejectsLowValueStore);
+        runScenario("T-S2-RECLAMATION-ANALYSIS-VALIDATION-01", this::testReclamationAnalysisValidation);
 
         if (!failures.isEmpty()) {
             fail("MVStore space reclamation scenario failures: " + failures);
@@ -508,12 +514,95 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         }
     }
 
+    private void testReclamationAnalysisFindsCandidates() {
+        String base = mvStoreFile("reclamationAnalysisCandidates");
+        MVStore store = null;
+        try {
+            BloatStats stats = createBloatedStore(base);
+            assertBloated(stats);
+            store = new MVStore.Builder().fileName(base).autoCommitDisabled().autoCompactFillRate(0).open();
+            MVStoreReclamationAnalysis analysis = MVStoreReclamationAnalyzer.analyze(store, 100);
+            assertTrue(analysis.getChunks().size() > 0);
+            assertTrue(analysis.hasCandidates());
+            assertTrue(analysis.getEstimatedReclaimableBytes() > 0L);
+            assertEquals(100, analysis.getTargetFillRate());
+            assertEquals(store.getFileStore().size(), analysis.getFileSize());
+            assertTrue(analysis.getDiagnosticSummary().contains("candidates=" + analysis.getCandidates().size()));
+
+            ChunkLivenessSnapshot best = analysis.getCandidates().get(0);
+            assertTrue(best.isCandidate());
+            assertEquals(ChunkLivenessSnapshot.PinnedReason.NONE, best.getPinnedReason());
+            assertTrue(best.getDeadBytes() > 0L);
+            assertTrue(best.getPageCount() > best.getLivePageCount());
+            assertTrue(best.getScore() > 0);
+            closeStore(store);
+            store = null;
+        } finally {
+            closeStoreImmediately(store);
+            deleteFilesUnlessKept(base);
+        }
+    }
+
+    private void testReclamationAnalysisRejectsLowValueStore() {
+        String base = mvStoreFile("reclamationAnalysisLowValue");
+        MVStore store = null;
+        try {
+            deleteFiles(base);
+            createParentDirectories(base);
+            store = new MVStore.Builder().fileName(base).autoCommitDisabled().autoCompactFillRate(0).open();
+            MVMap<Integer, byte[]> data = store.openMap("data");
+            data.put(1, new byte[] { MARKER });
+            store.commit();
+            store.getFileStore().sync();
+
+            MVStoreReclamationAnalysis analysis = MVStoreReclamationAnalyzer.analyze(store, 10);
+            assertTrue(analysis.getChunks().size() > 0);
+            assertFalse(analysis.hasCandidates());
+            assertEquals(0L, analysis.getEstimatedReclaimableBytes());
+            closeStore(store);
+            store = null;
+        } finally {
+            closeStoreImmediately(store);
+            deleteFilesUnlessKept(base);
+        }
+    }
+
+    private void testReclamationAnalysisValidation() {
+        expectIllegalArgument(() -> MVStoreReclamationAnalyzer.analyze(null));
+        MVStore store = null;
+        try {
+            store = new MVStore.Builder().open();
+            MVStoreReclamationAnalysis analysis = MVStoreReclamationAnalyzer.analyze(store);
+            assertFalse(analysis.hasCandidates());
+            assertEquals(0L, analysis.getFileSize());
+            assertEquals(100, analysis.getFillRate());
+            final MVStore openStore = store;
+            expectIllegalArgument(() -> MVStoreReclamationAnalyzer.analyze(openStore, -1));
+            expectIllegalArgument(() -> MVStoreReclamationAnalyzer.analyze(openStore, 101));
+            closeStore(store);
+            store = null;
+        } finally {
+            closeStoreImmediately(store);
+        }
+    }
+
     private void expectFault(FaultPoint point, Scenario scenario) {
         try {
             scenario.run();
             fail("Fault was not injected: " + point);
         } catch (FaultInjectedException expected) {
             assertTrue(expected.getMessage().contains(point.name()));
+        } catch (Exception e) {
+            throw new AssertionError(e);
+        }
+    }
+
+    private void expectIllegalArgument(Scenario scenario) {
+        try {
+            scenario.run();
+            fail("Expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
         } catch (Exception e) {
             throw new AssertionError(e);
         }

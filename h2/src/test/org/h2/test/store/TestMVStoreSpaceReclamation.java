@@ -111,6 +111,7 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         runScenario("T-S2-TAIL-MOVER-BUDGET-01", this::testTailMoverRunsOnlyWithExplicitBudget);
         runScenario("T-S2-SCHEDULER-DISABLED-01", this::testSchedulerIsDisabledByDefault);
         runScenario("T-S2-SCHEDULER-ENABLED-01", this::testSchedulerRunsWhenEnabled);
+        runScenario("T-S2-SCHEDULER-BACKOFF-01", this::testSchedulerBackoffAfterRun);
 
         if (!failures.isEmpty()) {
             fail("MVStore space reclamation scenario failures: " + failures);
@@ -977,6 +978,33 @@ public class TestMVStoreSpaceReclamation extends TestBase {
             MVStoreOnlineReclamationResult result = scheduler.runIfEnabled(store);
             assertEquals(MVStoreReclamationStatus.SUCCESS, result.getStatus());
             assertTrue(result.isRewritten());
+            closeStore(store);
+            store = null;
+        } finally {
+            closeStoreImmediately(store);
+            deleteFilesUnlessKept(base);
+        }
+    }
+
+    private void testSchedulerBackoffAfterRun() {
+        String base = mvStoreFile("schedulerBackoff");
+        MVStore store = null;
+        try {
+            createBloatedStore(base);
+            store = new MVStore.Builder().fileName(base).autoCommitDisabled().autoCompactFillRate(0).open();
+            store.setRetentionTime(0);
+            store.openMap("data");
+
+            MVStoreReclamationScheduler scheduler = MVStoreReclamationScheduler.builder()
+                    .enabled(true)
+                    .minIntervalMillis(60_000L)
+                    .request(new MVStoreReclamationRequest.Builder().targetFillRate(100).build())
+                    .build();
+            MVStoreOnlineReclamationResult first = scheduler.runIfEnabled(store);
+            assertEquals(MVStoreReclamationStatus.SUCCESS, first.getStatus());
+            MVStoreOnlineReclamationResult second = scheduler.runIfEnabled(store);
+            assertEquals(MVStoreReclamationStatus.SKIPPED, second.getStatus());
+            assertEquals("RECLAMATION_SCHEDULER_BACKOFF", second.getMessage());
             closeStore(store);
             store = null;
         } finally {

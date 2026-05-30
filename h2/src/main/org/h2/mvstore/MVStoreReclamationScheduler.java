@@ -12,10 +12,15 @@ public final class MVStoreReclamationScheduler {
 
     private final boolean enabled;
     private final MVStoreReclamationRequest request;
+    private final long minIntervalMillis;
+    private final long failureBackoffMillis;
+    private long nextAllowedRunMillis;
 
     private MVStoreReclamationScheduler(Builder builder) {
         enabled = builder.enabled;
         request = builder.request;
+        minIntervalMillis = builder.minIntervalMillis;
+        failureBackoffMillis = builder.failureBackoffMillis;
     }
 
     public static Builder builder() {
@@ -33,7 +38,17 @@ public final class MVStoreReclamationScheduler {
                     "RECLAMATION_SCHEDULER_DISABLED", analysis, analysis, false,
                     false, false, request.isTailCompactionAllowed(), false, new java.util.ArrayList<Integer>());
         }
-        return MVStoreReclamationCoordinator.run(store, request);
+        long now = System.currentTimeMillis();
+        if (now < nextAllowedRunMillis) {
+            MVStoreReclamationAnalysis analysis = MVStoreReclamationAnalyzer.analyze(store);
+            return new MVStoreOnlineReclamationResult(MVStoreReclamationStatus.SKIPPED,
+                    "RECLAMATION_SCHEDULER_BACKOFF", analysis, analysis, false,
+                    request.isRelocationMapAllowed(), false, request.isTailCompactionAllowed(), false,
+                    new java.util.ArrayList<Integer>());
+        }
+        MVStoreOnlineReclamationResult result = MVStoreReclamationCoordinator.run(store, request);
+        nextAllowedRunMillis = now + (result.isSuccess() ? minIntervalMillis : failureBackoffMillis);
+        return result;
     }
 
     /**
@@ -42,6 +57,8 @@ public final class MVStoreReclamationScheduler {
     public static final class Builder {
         private boolean enabled;
         private MVStoreReclamationRequest request = MVStoreReclamationRequest.DEFAULT;
+        private long minIntervalMillis = 60_000L;
+        private long failureBackoffMillis = 300_000L;
 
         public Builder enabled(boolean enabled) {
             this.enabled = enabled;
@@ -53,6 +70,22 @@ public final class MVStoreReclamationScheduler {
                 throw new IllegalArgumentException("request");
             }
             this.request = request;
+            return this;
+        }
+
+        public Builder minIntervalMillis(long minIntervalMillis) {
+            if (minIntervalMillis < 0L) {
+                throw new IllegalArgumentException("minIntervalMillis");
+            }
+            this.minIntervalMillis = minIntervalMillis;
+            return this;
+        }
+
+        public Builder failureBackoffMillis(long failureBackoffMillis) {
+            if (failureBackoffMillis < 0L) {
+                throw new IllegalArgumentException("failureBackoffMillis");
+            }
+            this.failureBackoffMillis = failureBackoffMillis;
             return this;
         }
 

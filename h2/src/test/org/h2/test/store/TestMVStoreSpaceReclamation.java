@@ -17,6 +17,7 @@ import org.h2.mvstore.MVStoreException;
 import org.h2.mvstore.MVStoreOnlineReclamationResult;
 import org.h2.mvstore.MVStoreReclamationAnalysis;
 import org.h2.mvstore.MVStoreReclamationAnalyzer;
+import org.h2.mvstore.MVStoreReclamationCode;
 import org.h2.mvstore.MVStoreReclamationCoordinator;
 import org.h2.mvstore.MVStoreReclamationRecovery;
 import org.h2.mvstore.MVStoreReclamationRelocationMap;
@@ -659,7 +660,7 @@ public class TestMVStoreSpaceReclamation extends TestBase {
                     .build();
             MVStoreOnlineReclamationResult result = MVStoreReclamationCoordinator.run(store, request);
             assertEquals(MVStoreReclamationStatus.SKIPPED, result.getStatus());
-            assertEquals("DRY_RUN", result.getMessage());
+            assertEquals(MVStoreReclamationCode.DRY_RUN, result.getMessage());
             assertFalse(result.isRewritten());
             assertTrue(result.getCandidateChunks().size() > 0);
             assertEquals(result.getBeforeFileSize(), result.getAfterFileSize());
@@ -714,7 +715,7 @@ public class TestMVStoreSpaceReclamation extends TestBase {
             MVStoreOnlineReclamationResult result = MVStoreReclamationCoordinator.run(store,
                     new MVStoreReclamationRequest.Builder().targetFillRate(10).build());
             assertEquals(MVStoreReclamationStatus.SKIPPED, result.getStatus());
-            assertEquals("NO_RECLAMATION_CANDIDATE", result.getMessage());
+            assertEquals(MVStoreReclamationCode.NO_RECLAMATION_CANDIDATE, result.getMessage());
             assertFalse(result.isRewritten());
             assertEquals(0, result.getCandidateChunks().size());
             closeStore(store);
@@ -954,7 +955,7 @@ public class TestMVStoreSpaceReclamation extends TestBase {
             assertFalse(scheduler.isEnabled());
             MVStoreOnlineReclamationResult result = scheduler.runIfEnabled(store);
             assertEquals(MVStoreReclamationStatus.SKIPPED, result.getStatus());
-            assertEquals("RECLAMATION_SCHEDULER_DISABLED", result.getMessage());
+            assertEquals(MVStoreReclamationCode.RECLAMATION_SCHEDULER_DISABLED, result.getMessage());
             closeStore(store);
             store = null;
         } finally {
@@ -1004,7 +1005,7 @@ public class TestMVStoreSpaceReclamation extends TestBase {
             assertEquals(MVStoreReclamationStatus.SUCCESS, first.getStatus());
             MVStoreOnlineReclamationResult second = scheduler.runIfEnabled(store);
             assertEquals(MVStoreReclamationStatus.SKIPPED, second.getStatus());
-            assertEquals("RECLAMATION_SCHEDULER_BACKOFF", second.getMessage());
+            assertEquals(MVStoreReclamationCode.RECLAMATION_SCHEDULER_BACKOFF, second.getMessage());
             closeStore(store);
             store = null;
         } finally {

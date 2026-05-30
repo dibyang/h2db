@@ -35,14 +35,14 @@ public final class MVStoreReclamationScheduler {
         if (!enabled) {
             MVStoreReclamationAnalysis analysis = MVStoreReclamationAnalyzer.analyze(store);
             return new MVStoreOnlineReclamationResult(MVStoreReclamationStatus.SKIPPED,
-                    "RECLAMATION_SCHEDULER_DISABLED", analysis, analysis, false,
+                    MVStoreReclamationCode.RECLAMATION_SCHEDULER_DISABLED, analysis, analysis, false,
                     false, false, request.isTailCompactionAllowed(), false, new java.util.ArrayList<Integer>());
         }
         long now = System.currentTimeMillis();
         if (now < nextAllowedRunMillis) {
             MVStoreReclamationAnalysis analysis = MVStoreReclamationAnalyzer.analyze(store);
             return new MVStoreOnlineReclamationResult(MVStoreReclamationStatus.SKIPPED,
-                    "RECLAMATION_SCHEDULER_BACKOFF", analysis, analysis, false,
+                    MVStoreReclamationCode.RECLAMATION_SCHEDULER_BACKOFF, analysis, analysis, false,
                     request.isRelocationMapAllowed(), false, request.isTailCompactionAllowed(), false,
                     new java.util.ArrayList<Integer>());
         }

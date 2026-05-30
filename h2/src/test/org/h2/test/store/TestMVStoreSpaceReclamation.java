@@ -105,6 +105,8 @@ public class TestMVStoreSpaceReclamation extends TestBase {
                 this::testReclamationJournalRecoversPublishedMarker);
         runScenario("T-S2-RECLAMATION-JOURNAL-RECOVER-UNPUBLISHED-01",
                 this::testReclamationJournalRecoversUnpublishedMarker);
+        runScenario("T-S2-RECLAMATION-JOURNAL-RECOVER-REOPEN-01",
+                this::testReclamationJournalRecoversAfterReopen);
         runScenario("T-S2-RECLAMATION-COORDINATOR-RECOVER-FIRST-01",
                 this::testCoordinatorRecoversStaleJournalBeforeRun);
         runScenario("T-S2-RELOCATION-MAP-FEATURE-GATE-01", this::testRelocationMapFeatureGate);
@@ -850,6 +852,34 @@ public class TestMVStoreSpaceReclamation extends TestBase {
             assertTrue(recovery.isRecovered());
             assertTrue(recovery.getMessage().contains("RECOVERED_UNPUBLISHED_RECLAMATION_JOURNAL"));
             assertNoReclamationJournal(store);
+            closeStore(store);
+            store = null;
+        } finally {
+            closeStoreImmediately(store);
+            deleteFilesUnlessKept(base);
+        }
+    }
+
+    private void testReclamationJournalRecoversAfterReopen() {
+        String base = mvStoreFile("reclamationJournalRecoverReopen");
+        MVStore store = null;
+        try {
+            createBloatedStore(base);
+            store = new MVStore.Builder().fileName(base).autoCommitDisabled().open();
+            writeReclamationJournalMarker(store, "PUBLISHED", true);
+            closeStore(store);
+            store = null;
+
+            store = new MVStore.Builder().fileName(base).autoCommitDisabled().open();
+            MVStoreReclamationRecovery recovery = MVStoreReclamationCoordinator.recover(store);
+            assertFalse(recovery.isRecovered());
+            assertEquals("NO_RECLAMATION_JOURNAL", recovery.getMessage());
+            assertNoReclamationJournal(store);
+            MVMap<Integer, byte[]> data = store.openMap("data");
+            assertEquals(1L, data.sizeAsLong());
+            byte[] marker = data.get(-1);
+            assertNotNull(marker);
+            assertEquals(MARKER, marker[0]);
             closeStore(store);
             store = null;
         } finally {

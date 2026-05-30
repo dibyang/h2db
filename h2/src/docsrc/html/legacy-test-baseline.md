@@ -25,7 +25,7 @@
 | SQL 兼容语法 | `Unknown data type: "IDENTITY"` | 已确认主要由仓库默认 MySQL mode 与 legacy 测试默认 REGULAR 预期冲突触发；分组 runner 固定未显式 mode 的 URL 为 REGULAR，剩余失败再按类治理 |
 | 脚本输出预期 | `TestScript` 中列名、分隔线、表达式展示不匹配 | 已按当前行为更新 `compatibility/compatibility.sql`、`datatypes/double_precision.sql`、`other/conditions.sql`，`TestScript` 已迁入 smoke |
 | JDBC 可更新结果集 | `The result set is not updatable`、`TYPE_SCROLL_INSENSITIVE`/`CONCUR_UPDATABLE` 断言不匹配 | 已确认主要由 metadata 表类型过滤误依赖非排序数组触发；`BASE TABLE` 过滤恢复后，相关类已迁入 smoke |
-| 兼容模式断言 | Oracle/MySQL/metadata/keywords 等期望与当前实现不一致 | 按兼容模式分组治理，保留每个模式的最小回归集 |
+| 兼容模式断言 | Oracle/MySQL/metadata/keywords 等期望与当前实现不一致 | metadata 表类型顺序已按当前 `SYS TABLE` 行为对齐，`TestMetaData` 已迁入 smoke；后续完整 `TestAll` 中发现的兼容模式差异继续按模式分组治理 |
 | 环境敏感断言 | 时间戳毫秒、Locale 中文月份、Web Console 输出 | 固定 locale/timezone 或调整断言为稳定语义 |
 
 ## 推进规则
@@ -44,7 +44,7 @@
 | L2 | 治理 `IDENTITY` 兼容失败 | 代表性 db/jdbc 测试不再因 `IDENTITY` 失败 |
 | L3 | 治理 JDBC updatable result set 失败 | `TestCompatibilityOracle`、`TestResultSet`、`TestUpdatableResultSet` 已迁入 smoke |
 | L4 | 治理 `TestScript` 输出基线 | `TestScript` 已迁入 smoke，支持 `-Ph2TestScript=...` 单脚本定位 |
-| L5 | 治理兼容模式和 metadata/keywords 失败 | Oracle/MySQL/metadata 类失败不再混在通用失败面 |
+| L5 | 治理兼容模式和 metadata/keywords 失败 | `TestMetaData` 已迁入 smoke，baseline report 当前无剩余类 |
 | L6 | 治理环境敏感失败 | locale、timezone、时间精度类失败稳定化 |
 | L7 | 扩大 must-pass 分组 | baseline report 中修复后的类迁入 smoke |
 | L8 | 恢复完整 `runH2TestAllCi` 作为可选验收 | 完整入口失败数为 0 或仅剩明确豁免 |

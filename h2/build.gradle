@@ -266,6 +266,7 @@ def legacySmokeTests = [
         'org.h2.test.jdbc.TestPreparedStatement',
         'org.h2.test.jdbc.TestResultSet',
         'org.h2.test.jdbc.TestStatement',
+        'org.h2.test.jdbc.TestMetaData',
         'org.h2.test.jdbc.TestUpdatableResultSet',
         'org.h2.test.jdbc.TestZloty',
         'org.h2.test.scripts.TestScript',
@@ -275,9 +276,7 @@ def legacySmokeTests = [
         'org.h2.test.unit.TestUtils'
 ]
 
-def legacyBaselineIssueTests = [
-        'org.h2.test.jdbc.TestMetaData'
-]
+def legacyBaselineIssueTests = []
 
 task runH2LegacySmoke(type: JavaExec) {
     description = 'Runs the currently must-pass legacy TestBase smoke group through Gradle.'

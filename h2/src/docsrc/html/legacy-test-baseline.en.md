@@ -25,7 +25,7 @@ The latest full `runH2TestAllCi` run can compile and start the original suite, b
 | SQL compatibility syntax | `Unknown data type: "IDENTITY"` | Confirmed to be primarily caused by the repository default MySQL mode conflicting with legacy tests that expect REGULAR mode; the grouped runner now uses REGULAR for URLs without an explicit mode, and remaining failures should be triaged per class |
 | Script output expectations | Column names, separators, and expression rendering mismatches in `TestScript` | Updated `compatibility/compatibility.sql`, `datatypes/double_precision.sql`, and `other/conditions.sql` to current behavior; `TestScript` was moved into smoke |
 | JDBC updatable result sets | `The result set is not updatable`, result set type/concurrency assertions | Confirmed to be primarily caused by metadata table type filtering depending on a non-sorted array; after restoring `BASE TABLE` filtering, related classes were moved into smoke |
-| Compatibility mode assertions | Oracle/MySQL/metadata/keywords expectations differ from current behavior | Triage by compatibility mode and preserve a minimal regression set for each mode |
+| Compatibility mode assertions | Oracle/MySQL/metadata/keywords expectations differ from current behavior | Metadata table type ordering is aligned with the current `SYS TABLE` behavior and `TestMetaData` was moved into smoke; additional compatibility differences from full `TestAll` should still be triaged by mode |
 | Environment-sensitive assertions | Timestamp precision, Chinese locale month names, Web Console output | Fix locale/timezone or rewrite assertions around stable semantics |
 
 ## Working Rules
@@ -44,7 +44,7 @@ The latest full `runH2TestAllCi` run can compile and start the original suite, b
 | L2 | Resolve `IDENTITY` compatibility failures | Representative db/jdbc tests no longer fail on `IDENTITY` |
 | L3 | Resolve JDBC updatable result set failures | `TestCompatibilityOracle`, `TestResultSet`, and `TestUpdatableResultSet` are moved into smoke |
 | L4 | Resolve `TestScript` output baseline | `TestScript` is moved into smoke, with `-Ph2TestScript=...` support for single-script triage |
-| L5 | Resolve compatibility mode and metadata/keywords failures | Oracle/MySQL/metadata failures are no longer mixed into the generic failure bucket |
+| L5 | Resolve compatibility mode and metadata/keywords failures | `TestMetaData` is moved into smoke and the baseline report currently has no remaining classes |
 | L6 | Stabilize environment-sensitive failures | Locale, timezone, and time precision failures are stable |
 | L7 | Expand the must-pass group | Fixed baseline report classes are moved into smoke |
 | L8 | Restore full `runH2TestAllCi` as optional acceptance | Full entrypoint has zero failures or only explicit waivers |

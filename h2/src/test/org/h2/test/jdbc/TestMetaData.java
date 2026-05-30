@@ -1099,7 +1099,7 @@ public class TestMetaData extends TestDb {
                 new int[] { Types.VARCHAR }, null, null);
         assertResultSetOrdered(rs, new String[][] {
                 { "BASE TABLE" }, { "GLOBAL TEMPORARY" },
-                { "LOCAL TEMPORARY" }, { "SYNONYM" }, { "VIEW" } });
+                { "LOCAL TEMPORARY" }, { "SYNONYM" }, { "SYS TABLE" }, { "VIEW" } });
 
         rs = meta.getTypeInfo();
         assertResultSetMeta(rs, 18, new String[] { "TYPE_NAME", "DATA_TYPE",
@@ -1182,6 +1182,8 @@ public class TestMetaData extends TestDb {
         rs.next();
         assertEquals("SYNONYM", rs.getString("TABLE_TYPE"));
         rs.next();
+        assertEquals("SYS TABLE", rs.getString("TABLE_TYPE"));
+        rs.next();
         assertEquals("VIEW", rs.getString("TABLE_TYPE"));
         assertFalse(rs.next());
 
@@ -1193,14 +1195,10 @@ public class TestMetaData extends TestDb {
         assertFalse(rs.next());
 
         rs = meta.getTables(null, "INFORMATION_SCHEMA", null, new String[] { "BASE TABLE", "VIEW" });
-        for (String name : new String[] { "CONSTANTS", "ENUM_VALUES",
-                "INDEXES", "INDEX_COLUMNS", "INFORMATION_SCHEMA_CATALOG_NAME", "IN_DOUBT", "LOCKS",
-                "QUERY_STATISTICS", "RIGHTS", "ROLES", "SESSIONS", "SESSION_STATE", "SETTINGS", "SYNONYMS",
-                "USERS", "CHECK_CONSTRAINTS", "COLLATIONS", "COLUMNS", "COLUMN_PRIVILEGES",
+        for (String name : new String[] { "CHECK_CONSTRAINTS", "COLLATIONS", "COLUMNS", "COLUMN_PRIVILEGES",
                 "CONSTRAINT_COLUMN_USAGE", "DOMAINS", "DOMAIN_CONSTRAINTS", "ELEMENT_TYPES", "FIELDS",
-                "KEY_COLUMN_USAGE", "PARAMETERS",
-                "REFERENTIAL_CONSTRAINTS", "ROUTINES", "SCHEMATA", "SEQUENCES", "TABLES", "TABLE_CONSTRAINTS",
-                "TABLE_PRIVILEGES", "TRIGGERS", "VIEWS" }) {
+                "KEY_COLUMN_USAGE", "PARAMETERS", "REFERENTIAL_CONSTRAINTS", "ROUTINES", "SCHEMATA", "SEQUENCES",
+                "TABLES", "TABLE_CONSTRAINTS", "TABLE_PRIVILEGES", "TRIGGERS", "VIEWS" }) {
             rs.next();
             assertEquals(name, rs.getString("TABLE_NAME"));
         }

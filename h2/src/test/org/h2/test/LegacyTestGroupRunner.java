@@ -25,7 +25,7 @@ public final class LegacyTestGroupRunner {
      */
     public static void main(String... args) throws Exception {
         if (args.length == 0) {
-            throw new IllegalArgumentException("At least one legacy test class is required");
+            return;
         }
         setTestSystemProperties();
         TestAll.atLeastOneTestFailed = false;

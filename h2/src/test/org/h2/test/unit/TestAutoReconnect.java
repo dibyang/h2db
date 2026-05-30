@@ -96,6 +96,9 @@ public class TestAutoReconnect extends TestDb {
             url = "jdbc:h2:tcp://localhost:" + port + "/" + getBaseDir() + "/" + getTestName() + ";" +
                 "FILE_LOCK=SOCKET;AUTO_RECONNECT=TRUE";
         }
+        if (config.defaultMode != null) {
+            url += ";MODE=" + config.defaultMode;
+        }
 
         // test the database event listener
         conn = getConnection(url + ";DATABASE_EVENT_LISTENER='" +

@@ -236,6 +236,68 @@ task runH2TestAllCi(type: JavaExec) {
     systemProperty 'file.encoding', 'UTF-8'
 }
 
+def legacySmokeTests = [
+        'org.h2.test.db.TestAlter',
+        'org.h2.test.db.TestAlterSchemaRename',
+        'org.h2.test.db.TestAutoRecompile',
+        'org.h2.test.db.TestCheckpoint',
+        'org.h2.test.db.TestDuplicateKeyUpdate',
+        'org.h2.test.db.TestFunctionOverload',
+        'org.h2.test.db.TestMaterializedView',
+        'org.h2.test.db.TestMergeUsing',
+        'org.h2.test.jdbc.TestBatchUpdates',
+        'org.h2.test.jdbc.TestCallableStatement',
+        'org.h2.test.jdbc.TestDatabaseEventListener',
+        'org.h2.test.jdbc.TestManyJdbcObjects',
+        'org.h2.test.jdbc.TestNativeSQL',
+        'org.h2.test.jdbc.TestZloty',
+        'org.h2.test.store.TestDataUtils',
+        'org.h2.test.store.TestFreeSpace',
+        'org.h2.test.unit.TestStringUtils',
+        'org.h2.test.unit.TestUtils'
+]
+
+def legacyBaselineIssueTests = [
+        'org.h2.test.scripts.TestScript',
+        'org.h2.test.db.TestCases',
+        'org.h2.test.db.TestCompatibility',
+        'org.h2.test.db.TestCompatibilityOracle',
+        'org.h2.test.db.TestCsv',
+        'org.h2.test.db.TestIndex',
+        'org.h2.test.db.TestRunscript',
+        'org.h2.test.db.TestTableEngines',
+        'org.h2.test.db.TestTempTables',
+        'org.h2.test.db.TestTransaction',
+        'org.h2.test.db.TestTriggersConstraints',
+        'org.h2.test.db.TestViewAlterTable',
+        'org.h2.test.jdbc.TestConnection',
+        'org.h2.test.jdbc.TestLobApi',
+        'org.h2.test.jdbc.TestMetaData',
+        'org.h2.test.jdbc.TestPreparedStatement',
+        'org.h2.test.jdbc.TestResultSet',
+        'org.h2.test.jdbc.TestStatement',
+        'org.h2.test.jdbc.TestUpdatableResultSet'
+]
+
+task runH2LegacySmoke(type: JavaExec) {
+    description = 'Runs the currently must-pass legacy TestBase smoke group through Gradle.'
+    dependsOn legacyTestClasses
+    main = 'org.h2.test.LegacyTestGroupRunner'
+    args legacySmokeTests
+    classpath = sourceSets.legacyTest.runtimeClasspath
+    systemProperty 'file.encoding', 'UTF-8'
+}
+
+task runH2LegacyBaselineReport(type: JavaExec) {
+    description = 'Runs known failing legacy baseline groups for triage; this report task does not gate the build.'
+    dependsOn legacyTestClasses
+    main = 'org.h2.test.LegacyTestGroupRunner'
+    args legacyBaselineIssueTests
+    classpath = sourceSets.legacyTest.runtimeClasspath
+    systemProperty 'file.encoding', 'UTF-8'
+    ignoreExitValue = true
+}
+
 test {
     dependsOn runPluginArchitectureCheck
 }

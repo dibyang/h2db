@@ -64,4 +64,34 @@ public class PluginInformationSchemaTest {
             assertEquals(PluginCapability.STORAGE_PERSISTENT, rs.getString(1));
         }
     }
+
+    /**
+     * T-PLUGIN-P7-EXTERNAL-INFO-SCHEMA-01.
+     */
+    @Test
+    public void exposesConfiguredPluginProviderRows() throws Exception {
+        String url = "jdbc:h2:mem:pluginConfiguredInfo;PLUGIN_CLASSES="
+                + PluginLoaderTest.ConfiguredPlugin.class.getName();
+        try (Connection conn = DriverManager.getConnection(url, "sa", "");
+                Statement stat = conn.createStatement()) {
+            try (ResultSet rs = stat.executeQuery("select source, is_builtin from information_schema.plugins "
+                    + "where plugin_id = 'test.configured'")) {
+                assertTrue(rs.next());
+                assertEquals("CONFIGURED_CLASS", rs.getString(1));
+                assertTrue(!rs.getBoolean(2));
+            }
+            try (ResultSet rs = stat.executeQuery("select provider_type, provider_id from "
+                    + "information_schema.plugin_providers where plugin_id = 'test.configured'")) {
+                assertTrue(rs.next());
+                assertEquals("table", rs.getString(1));
+                assertEquals("external_table", rs.getString(2));
+            }
+            try (ResultSet rs = stat.executeQuery("select capability_name from "
+                    + "information_schema.plugin_capabilities where provider_type = 'table' "
+                    + "and provider_id = 'external_table'")) {
+                assertTrue(rs.next());
+                assertEquals(PluginCapability.TABLE_CREATE, rs.getString(1));
+            }
+        }
+    }
 }

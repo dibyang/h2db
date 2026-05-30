@@ -57,7 +57,7 @@ If full acceptance fails in a network phase with a connection timeout, rerun the
 | P4 | Done | Consolidate built-in plugin paths | Ensure MVStore storage/table engines are registered and resolved through built-in providers; default table creation does not use the legacy `TableEngine` cache | `runPluginArchitectureCheck`, `runH2LegacySmoke` |
 | P5 | Done | Complete table-engine pluginization | Cover external `TableEngineProvider` SQL table creation, schema default params, and built-in/legacy path compatibility | `runPluginArchitectureCheck`, `runH2LegacySmoke` |
 | P6 | Done | Complete storage-engine pluginization | Cover storage id persistence, requested/persisted mismatch, secondary/default mismatch protection, missing provider, read-only downgrade, and maintenance capabilities | `runPluginArchitectureCheck` |
-| P7 | Not started | Complete observability | Stabilize `INFORMATION_SCHEMA.PLUGINS`, `PLUGIN_PROVIDERS`, and `PLUGIN_CAPABILITIES`; update docs | `runPluginArchitectureCheck` |
+| P7 | Done | Complete observability | Stabilize built-in and configured plugin output in `INFORMATION_SCHEMA.PLUGINS`, `PLUGIN_PROVIDERS`, and `PLUGIN_CAPABILITIES` | `runPluginArchitectureCheck` |
 | P8 | Not started | Acceptance and closeout | Run the daily gate, decide whether full `TestAll ci` is needed by risk, update status, and commit | Daily gate, full acceptance when needed |
 
 ## Working Rules

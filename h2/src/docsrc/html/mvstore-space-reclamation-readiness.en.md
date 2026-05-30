@@ -1,6 +1,6 @@
 # MVStore Space Reclamation Readiness
 
-This document records whether the codebase, tests, and working rules are ready before starting S2 online space reclamation optimization. Conclusion: the pluginization prerequisite is closed, the MVStore space reclamation scaffolding and dedicated test gate are available, and S2 detailed design and implementation can start.
+This document records whether the codebase, tests, and working rules are ready before starting S2 online space reclamation optimization. Conclusion: the pluginization prerequisite is closed, the MVStore space reclamation scaffolding and dedicated test gate are available, and S2 detailed design and implementation can start. The S2 online optimization main path is partial reclamation, not full-store shadow copy followed by whole-file replacement.
 
 ## Background
 
@@ -28,7 +28,7 @@ This readiness step does not implement a new reclamation algorithm and does not 
 | --- | --- | --- |
 | `MVStoreSpaceReclamation.compactClosedStore()` | Creates a compacted shadow for a closed store, verifies it, then replaces the source file | Reliable offline compact baseline |
 | `MVStoreSpaceReclamation.compactToShadow()` | Prepares `.reclaim.shadow` and `.reclaim.manifest` | Base for the online prepare phase |
-| `MVStoreSpaceReclamation.switchToShadow()` | Verifies the manifest and source fingerprint, then switches the shadow in | Base for crash-safe publish |
+| `MVStoreSpaceReclamation.switchToShadow()` | Verifies the manifest and source fingerprint, then switches the shadow in | Reference for offline compact or later fallback publish |
 | `MVStoreSpaceReclamation.cleanUp()` / `recover()` | Cleans or recovers intermediate files | Base for failure recovery and idempotent retry |
 | `MVStoreMaintenance.vacuumOnline()` | Currently delegates to `Store.compactFile(50)` | S2 should upgrade this to the real online reclamation boundary |
 | `MVStoreSpaceReclamationMaintenance` | Provides read, write, and switch decisions | Can be extended for long transactions and write gates |
@@ -130,7 +130,7 @@ The first S2 round should be explicitly triggered and low-risk by default. If a 
 
 ## Rollout
 
-The first S2 round should use explicit triggering and a conservative default. Automatic background reclamation, threshold scheduling, periodic maintenance threads, and default-on behavior are later phases after the manual entrypoint, failure recovery, and dedicated tests are stable.
+The first S2 round should use explicit triggering and a conservative default, with bounded partial compact as the main path. Automatic background reclamation, threshold scheduling, periodic maintenance threads, and default-on behavior are later phases after the manual entrypoint, diagnostics, and dedicated tests are stable.
 
 ## Test Plan
 
@@ -153,8 +153,8 @@ Result: passed on 2026-05-30.
 
 | Risk | Impact | Mitigation |
 | --- | --- | --- |
-| Unclear crash-safe publish semantics | Recovery may become complex or data may become unavailable | Decide the publish strategy in the S2 design before coding. |
-| Race between online writes and shadow copy | A stale shadow could be published | Reject fingerprint mismatches by default; design catch-up separately. |
+| Partial compact interaction with active transactions is unclear | Reclamation may make no progress or block for too long | Do not wait for long transactions in the first round; return busy/skipped. |
+| Whole-file shadow publish is mistaken for the online main path | IO and recovery complexity may be amplified | S2.1-S2.3 are explicitly partial only; shadow remains offline/fallback review work. |
 | Long transactions block switch | Reclamation may not complete for a long time | Define busy/skipped results and diagnostics. |
 | Windows file replacement differences | Publish failure or backup leftovers | Keep platform-sensitive fault and recovery tests. |
 | Full `TestAll ci` network flakes | Phase acceptance may be noisy | Keep focused phase reruns and baseline records, and do not misclassify network flakes as S2 regressions. |
@@ -163,10 +163,10 @@ Result: passed on 2026-05-30.
 
 | Phase | Goal | Deliverable | Verification |
 | --- | --- | --- | --- |
-| S2.1 | Define online reclamation decision and statistics | Diagnostics for reclaimable size, fill rate, and active transactions without changing files | JUnit + `runMvStoreSpaceReclamationCheck` |
-| S2.2 | Wire the real `vacuumOnline()` maintenance boundary | Move from `Store.compactFile(50)` to a diagnosable MVStore reclamation flow | JUnit + MVStore dedicated tests |
-| S2.3 | Implement shadow prepare and gate policy | Source fingerprint, write gate, and long transaction decisions | MVStore dedicated and concurrency tests |
-| S2.4 | Implement crash-safe publish | Complete manifest, backup, recover, and cleanup semantics | Fault harness and recovery tests |
+| S2.1 | Define partial reclamation decision and statistics | Diagnostics for reclaimable size, fill rate, and active transactions without introducing full-store shadow | JUnit + `runMvStoreSpaceReclamationCheck` |
+| S2.2 | Wire the `vacuumOnline()` partial maintenance boundary | Move from direct `Store.compactFile(50)` to a diagnosable partial reclamation flow | JUnit + MVStore dedicated tests |
+| S2.3 | Implement partial gate and budget policy | targetFillRate, write gate, long transaction, and no-progress decisions | MVStore dedicated and concurrency tests |
+| S2.4 | Review shadow publish fallback | Decide whether whole-file shadow publish remains offline/fallback only | Fault harness and recovery tests |
 | S2.5 | Complete docs and operational boundaries | Chinese and English usage notes, limits, and diagnostics | Docs review + daily gate |
 | S2.6 | Evaluate automatic scheduling | Thresholds, background thread, throttling, default-off policy | Separate design before implementation |
 
@@ -174,12 +174,12 @@ Result: passed on 2026-05-30.
 
 | Question | Suggested default |
 | --- | --- |
-| Should the first round support crash-safe publish? | Yes, but only for explicit triggers and with conservative backup retention. |
-| Should catch-up be allowed while writes continue? | No in the first round; reject or reprepare when the source changes. |
+| Should the first round support whole-file crash-safe publish? | No as the online main path; keep it as offline/fallback capability and review in S2.4. |
+| Should catch-up be allowed while writes continue? | The partial main path does not use shadow catch-up; review separately if whole-file shadow returns later. |
 | Should a SQL command be added? | No in the first round; stabilize the Java maintenance API first. |
 | Should automatic background reclamation be part of S2? | Not in the first round; design it separately as S2.6. |
 | Should legacy tests remain? | Yes, but all runnable legacy tests must be managed by Gradle tasks. |
 
 ## Readiness Conclusion
 
-Space reclamation optimization can start. The next step is the detailed S2 design, with explicit decisions on crash-safe publish, source changes during online writes, long transaction gates, Windows file switch semantics, and test gates. Implementation should then proceed from S2.1 to S2.5, with a local commit after each completed phase.
+Space reclamation optimization can start. The next step is the detailed S2 design, with explicit decisions on partial compact thresholds, targetFillRate, long transaction gates, no-progress semantics, and test gates. Whole-file shadow publish should only be reviewed as an offline/fallback path. Implementation should then proceed from S2.1 to S2.5, with a local commit after each completed phase.

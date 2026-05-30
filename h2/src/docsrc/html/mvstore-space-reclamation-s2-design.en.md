@@ -1,6 +1,8 @@
 # MVStore Online Space Reclamation S2 Design
 
-This document is the implementable design for S2 online space reclamation optimization. It follows the readiness conclusion in `mvstore-space-reclamation-readiness.md`: without changing the MVStore disk format or adding default SQL behavior, upgrade the current lightweight `vacuumOnline()` compact entrypoint into a diagnosable, recoverable, and testable online reclamation flow.
+This document is the implementable design for S2 online space reclamation optimization. It follows the readiness conclusion in `mvstore-space-reclamation-readiness.md`: without changing the MVStore disk format or adding default SQL behavior, upgrade the current lightweight `vacuumOnline()` compact entrypoint into a diagnosable, recoverable, and testable partial space reclamation flow.
+
+Important correction: the S2 online reclamation main path is partial / chunk-level reclamation, not a full-store shadow copy followed by whole-file replacement. The existing `MVStoreSpaceReclamation` shadow, backup, and manifest capabilities remain useful for offline compact, failure modeling, and a later fallback publish design, but they are not the S2.1-S2.3 online main path.
 
 ## Background
 
@@ -8,9 +10,9 @@ MVStore files can contain unused space after heavy insert, delete, and update wo
 
 | Gap | Impact |
 | --- | --- |
-| Insufficient pre-reclamation decision | Callers cannot tell whether reclamation is worthwhile or why it was skipped. |
-| Shadow/publish flow is not wired into the online entrypoint | Existing `MVStoreSpaceReclamation` utilities are not used by `StorageMaintenance.vacuumOnline()`. |
-| Crash-safe publish is not formally decided | Recovery semantics for shadow, backup, and manifest files are still scaffolding-level. |
+| Insufficient partial reclamation decision | There is no clear threshold, budget, or skip reason for reclaimable chunks and fill rate. |
+| Online partial compact lacks a maintenance boundary | `Store.compactFile(50)` exists, but it is not wrapped as a diagnosable, testable, and governable S2 flow. |
+| Shadow/publish can be mistaken for the online main path | Whole-file shadow replacement is closer to offline compact or fallback publish and should not be the first S2 online path. |
 | Write and long-transaction gates are not connected to real database flows | The current gate is a minimum model and is not bound to MVStore or session lifecycles. |
 | Test layering needs strengthening | JUnit and legacy MVStore dedicated coverage need clear ownership. |
 
@@ -18,11 +20,11 @@ MVStore files can contain unused space after heavy insert, delete, and update wo
 
 | Goal | Acceptance result |
 | --- | --- |
-| Converged online entrypoint | `StorageMaintenance.vacuumOnline()` is the only S2 online reclamation entrypoint in the first round. |
+| Converged online partial entrypoint | `StorageMaintenance.vacuumOnline()` is the only S2 online partial reclamation entrypoint in the first round. |
 | Diagnosable decisions | no-op, busy, stale shadow, unsupported, and success return stable messages. |
-| Reusable shadow prepare | Reuse and extend `MVStoreSpaceReclamation.compactToShadow()` semantics. |
-| Crash-safe publish | Any interruption during publish preserves an openable source database or can be recovered through `recover()`. |
-| Conservative handling of online writes | No version-scan catch-up in the first round; source changes reject publish or reprepare. |
+| Governed partial compact | Decide whether to run local compact from file size, fill rate, estimated savings, and budgets. |
+| No whole-file rewrite | S2.1-S2.3 do not use full-store shadow publish or require a full-store copy. |
+| Conservative concurrency | Do not wait for long transactions in the first round, do not add background threads, and skip when safe reclamation is not possible. |
 | Traceable tests | Each S2 subphase has JUnit or legacy dedicated tests and is wired into a Gradle task. |
 
 ## Non-goals
@@ -32,6 +34,7 @@ MVStore files can contain unused space after heavy insert, delete, and update wo
 | Automatic background reclamation | Scheduling, throttling, and default thresholds need a separate design in S2.6. |
 | New SQL `VACUUM` / `COMPACT` command | Stabilize the Java maintenance API before expanding compatibility surface. |
 | Online incremental catch-up | Version scanning and map-change replay are high-risk for the first round. |
+| Online full-store shadow copy + publish | The first round only does partial reclamation; whole-file shadow replacement remains offline compact or later fallback work. |
 | MVStore disk format changes | The first round must keep old database compatibility. |
 | Plugin hot loading or maintenance plugin lifecycle | This remains later pluginization work and is out of S2. |
 
@@ -41,8 +44,9 @@ MVStore files can contain unused space after heavy insert, delete, and update wo
 | --- | --- | --- |
 | `StorageMaintenance` | Has `compactClosed()`, `compactOnline()`, and `vacuumOnline()` | Do not add entrypoints; enhance `vacuumOnline()` semantics. |
 | `StorageMaintenanceResult` | Has success, skipped, unsupported, and message | Reuse in the first round; add contract tests before introducing failed/busy enums. |
-| `MVStoreSpaceReclamation` | Has closed compact, prepare shadow, switch, cleanup, and recover | Split out online-ready prepare/publish decisions and recovery constraints. |
-| `MVStoreSpaceReclamationOptions` | Supports compress, verify, keepBackup, refreshShadowIfSourceChanged, ioDelay, listener | Design tests before adding online thresholds, publish strategy, and gate timeout. |
+| `Store.compactFile(int)` | Existing local compact capability | S2 first wraps it with decisions, diagnostics, budgets, and tests. |
+| `MVStoreSpaceReclamation` | Has closed compact, prepare shadow, switch, cleanup, and recover | Keep as offline/fallback reference, not the online main path. |
+| `MVStoreSpaceReclamationOptions` | Supports compress, verify, keepBackup, refreshShadowIfSourceChanged, ioDelay, listener | Do not expand publish strategy into the online main flow in the first round. |
 | `MVStoreSpaceReclamationMaintenance` | Minimum read/write/switch decision gate | Keep changes small before binding it to the real MVStore maintenance flow. |
 | `TestMVStoreSpaceReclamation` | Covers shadow, manifest, source changes, gates, and fault matrix | Keep it as the S2 dedicated gate; new scenarios must be wired into this task. |
 
@@ -54,7 +58,7 @@ MVStore files can contain unused space after heavy insert, delete, and update wo
 | File safety | Publish failure must not leave an unopened database. |
 | Existing behavior compatibility | Default SQL and startup behavior remain unchanged; only explicit maintenance calls trigger S2. |
 | Idempotent recovery | `recover()`, `cleanUp()`, repeated prepare, and repeated publish must be safe. |
-| Low-risk defaults | Do not catch up by default; skip or reprepare when the source changes. |
+| Low-risk defaults | Only run bounded partial compact by default; skip when busy or low value. |
 | Testability | All new production code needs tests; interface contracts prefer JUnit, file fault scenarios prefer legacy MVStore dedicated tests. |
 
 ## Interface Design
@@ -74,10 +78,10 @@ S2 return contract for `vacuumOnline()`:
 | `UNSUPPORTED` | `UNSUPPORTED` | Storage engine does not declare `STORAGE_VACUUM_ONLINE`. |
 | `skipped` | `VACUUM_ONLINE_SKIPPED_LOW_RECLAIMABLE_SPACE` | File is too small or reclaimable ratio is too low. |
 | `skipped` | `VACUUM_ONLINE_SKIPPED_BUSY` | Backup, another reclamation, or long transaction blocks the run. |
-| `skipped` | `VACUUM_ONLINE_SKIPPED_SOURCE_CHANGED` | Source fingerprint changed after prepare and refresh is not allowed. |
-| `success` | `VACUUM_ONLINE_FINISHED savedBytes=... savedPercent=...` | Shadow publish succeeded. |
+| `skipped` | `VACUUM_ONLINE_SKIPPED_NO_PROGRESS` | Partial compact produced no observable benefit. |
+| `success` | `VACUUM_ONLINE_FINISHED savedBytes=... savedPercent=...` | Partial compact completed and released space. |
 
-`compactOnline()` continues to mean lightweight MVStore native compact. It should not be upgraded into shadow publish, otherwise the two entrypoints become ambiguous.
+`compactOnline()` continues to mean lightweight MVStore native compact. `vacuumOnline()` in S2 also starts from partial compact, but adds clearer decisions, diagnostics, and gate semantics. Whole-file shadow publish is not wired into either online entrypoint.
 
 ### Internal Online Request
 
@@ -85,9 +89,9 @@ Add a package-private request object to describe one online attempt:
 
 | Type | Fields | Purpose |
 | --- | --- | --- |
-| `MVStoreSpaceReclamationRequest` | `fileName`, `options`, `minimumSavedPercent`, `minimumSavedBytes`, `publishMode`, `gateTimeoutMillis` | Describes one online reclamation attempt. |
-| `MVStoreSpaceReclamationDecision` | `allowed`, `skipMessage`, `sourceSize`, `estimatedReclaimableBytes`, `fillRate`, `activeTransactions` | Records whether the run should execute and why. |
-| `MVStoreSpaceReclamationPublishMode` | `VERIFY_SOURCE_UNCHANGED`, `REFRESH_SHADOW_IF_SOURCE_CHANGED` | Only these two modes are supported in the first round. |
+| `MVStoreSpaceReclamationRequest` | `store`, `fileName`, `minimumSavedPercent`, `minimumSavedBytes`, `targetFillRate`, `maxRunMillis`, `gateTimeoutMillis` | Describes one partial reclamation attempt. |
+| `MVStoreSpaceReclamationDecision` | `allowed`, `skipMessage`, `sourceSize`, `estimatedReclaimableBytes`, `fillRate`, `chunksFillRate`, `activeTransactions` | Records whether the run should execute and why. |
+| `MVStorePartialReclamationResult` | `beforeSize`, `afterSize`, `savedBytes`, `savedPercent`, `madeProgress`, `message` | Records the partial compact result. |
 
 If implementation shows that a separate request type is unnecessary, the fields may be added to `MVStoreSpaceReclamationOptions.Builder` first, but the tests and message contract must remain.
 
@@ -99,15 +103,19 @@ Recommended S2.1/S2.2 additions:
 | --- | --- | --- |
 | `minimumSavedBytes` | `0` | Skip when estimated saving is lower. |
 | `minimumSavedPercent` | `0` | Skip when estimated ratio is lower. |
+| `targetFillRate` | `50` | Target fill rate passed to `compactFile(targetFillRate)`. |
+| `maxRunMillis` | `0` | The first round may not enforce interruption; reserve the design slot. |
 | `gateTimeoutMillis` | `0` | Do not wait for long transactions in the first round; skip immediately. |
-| `publishMode` | `VERIFY_SOURCE_UNCHANGED` | Conservative default when the source changes. |
-| `keepBackup` | Existing default `false` | Crash-safe publish must create a backup during publish; successful cleanup follows this option. |
 
 ## Data Structures
 
+### Partial Reclamation Runtime State
+
+S2.1-S2.3 do not add a persistent manifest. Partial reclamation acts on the existing MVStore file and relies on MVStore's own write, chunk, and recovery semantics. Runtime state only records before/after statistics and the skip reason for the current maintenance attempt.
+
 ### Manifest
 
-The existing manifest records phase, shadow, backup, and source fingerprint. S2 should add fields while remaining backward compatible:
+The manifest belongs to full-store shadow compact / publish fallback, not to the S2 first-round online partial main path. If shadow publish is reintroduced after S2.4, the manifest can be extended in this backward-compatible way:
 
 | Field | Required | Description |
 | --- | --- | --- |
@@ -123,7 +131,7 @@ Manifest reading must be lenient: ignore unknown fields and use defaults for mis
 
 ### Result
 
-`MVStoreSpaceReclamationResult` already has `sourceSize`, `compactedSize`, `savedBytes`, `savedPercent`, and `replaced`. The first S2 round should not break this object. Express skipped decisions through `StorageMaintenanceResult.message` first; evaluate a separate analysis/result object later if needed.
+`MVStoreSpaceReclamationResult` already has `sourceSize`, `compactedSize`, `savedBytes`, `savedPercent`, and `replaced`; keep it for whole-file shadow or closed compact. The S2 partial path should use `StorageMaintenanceResult.message` and an internal result instead of forcing the `replaced` semantics onto partial compact.
 
 ## State Machine
 
@@ -131,24 +139,16 @@ Manifest reading must be lenient: ignore unknown fields and use defaults for mis
 stateDiagram-v2
     [*] --> DECIDING
     DECIDING --> SKIPPED: low value / busy / unsupported
-    DECIDING --> PREPARING: allowed
-    PREPARING --> VERIFYING: shadow copied
-    PREPARING --> ABORTED: copy failed
-    VERIFYING --> SHADOW_READY: shadow opens
-    VERIFYING --> ABORTED: verify failed
-    SHADOW_READY --> SKIPPED: source changed
-    SHADOW_READY --> PREPARING: refresh allowed
-    SHADOW_READY --> SWITCHING: source unchanged and gate allows
-    SWITCHING --> COMPLETED: atomic replace succeeded
-    SWITCHING --> RECOVERING: interrupted or replace failed
-    RECOVERING --> COMPLETED: restored source or completed publish
-    RECOVERING --> ABORTED: unrecoverable file state
+    DECIDING --> COMPACTING: allowed
+    COMPACTING --> COMPLETED: compactFile made progress
+    COMPACTING --> SKIPPED: no progress
+    COMPACTING --> ABORTED: compact failed
     SKIPPED --> [*]
     COMPLETED --> [*]
     ABORTED --> [*]
 ```
 
-Implementation note: `RECOVERING` can initially be an internal recovery path instead of a public `MVStoreSpaceReclamationPhase`. If it becomes visible through listeners, tests must be added.
+Implementation note: this state machine is the partial online path. `PREPARING`, `SHADOW_READY`, `SWITCHING`, and `RECOVERING` belong to the shadow publish path and should not be mixed into the first online main flow.
 
 ## Sequence
 
@@ -172,15 +172,9 @@ sequenceDiagram
         alt low value or long transaction
             Reclaim-->>Maintenance: skipped(reason)
         else run
-            Reclaim->>FS: write manifest(PREPARING)
-            Reclaim->>FS: create shadow
-            Reclaim->>FS: verify shadow
-            Reclaim->>FS: write manifest(SHADOW_READY)
-            Reclaim->>FS: verify source fingerprint
-            Reclaim->>FS: copy backup
-            Reclaim->>FS: write manifest(SWITCHING)
-            Reclaim->>FS: atomic replace shadow -> source
-            Reclaim->>FS: cleanup manifest/shadow/backup
+            Reclaim->>Reclaim: capture before size/fill rate
+            Reclaim->>FS: run bounded partial compact
+            Reclaim->>Reclaim: capture after size/fill rate
             Reclaim-->>Maintenance: success(summary)
         end
         Maintenance->>Gate: exitSpaceReclamation()
@@ -190,19 +184,17 @@ sequenceDiagram
 
 ### Startup / Next-Maintenance Recovery
 
-The first round does not require changing database startup. Prefer calling `recover(fileName)` when `vacuumOnline()` starts, so leftovers from the previous maintenance attempt do not affect the next run. Whether to run automatic recover before MVStore open is an S2.4 decision point; if implemented, tests must prove it cannot delete user files accidentally.
+The first round does not change database startup. Partial compact does not introduce new shadow, backup, or manifest files, so S2.1-S2.3 do not need a startup recovery path. Existing `recover(fileName)` continues to serve whole-file shadow compact leftovers; automatic recover before MVStore open should only be revisited if shadow publish is reintroduced later.
 
 ## Error Handling
 
 | Error | Handling |
 | --- | --- |
 | File missing | Convert to existing MVStore/DbException behavior and do not create a shadow. |
-| Prepare copy fails | Delete incomplete shadow and leave the manifest cleanable. |
-| Verify fails | Delete shadow, keep source unchanged, return an exception or skipped depending on entrypoint policy. |
-| Source fingerprint changed | Skip by default and do not publish. |
-| Backup copy fails | Do not publish; keep the source unchanged. |
-| Atomic replace fails | Try restoring backup; if restore fails, keep manifest for `recover()`. |
-| Cleanup fails | Do not invalidate successful publish, but expose leftovers through message/listener. |
+| Partial compact fails | Rely on existing MVStore exception and recovery semantics, and do not create shadow leftovers. |
+| Partial compact makes no progress | Return skipped/no-progress and expose before/after size in the message. |
+| Long transaction or maintenance gate busy | Return skipped/busy and do not wait. |
+| File size statistics fail | Do not compact; convert to existing MVStore/DbException behavior. |
 | Listener throws | Keep existing policy: ignore listener failure and continue the main flow. |
 
 ## Idempotency
@@ -211,8 +203,9 @@ The first round does not require changing database startup. Prefer calling `reco
 | --- | --- |
 | `recover(fileName)` | Repeated calls have the same result; when source exists, only trusted leftovers are cleaned. |
 | `cleanUp(fileName)` | Repeated calls are safe and never delete the normal source. |
-| `compactToShadow()` | May overwrite old shadow, but must handle old manifest state first. |
-| `switchToShadow()` | Source changes or missing shadow must never damage the source file. |
+| Partial compact | Failure must not leave S2-specific intermediate files. |
+| `compactToShadow()` | Still belongs to whole-file shadow path; may overwrite old shadow, but must handle old manifest state first. |
+| `switchToShadow()` | Still belongs to whole-file shadow path; source changes or missing shadow must never damage the source file. |
 | `vacuumOnline()` | Can be retried after busy/skipped; after success, a new call may no-op or decide again. |
 
 ## Rollback Strategy
@@ -222,9 +215,9 @@ Each S2 phase must be independently revertible:
 | Phase | Rollback |
 | --- | --- |
 | S2.1 decision/statistics | Keep interfaces and disable thresholds, or return to always running the old compact. |
-| S2.2 vacuum boundary | Temporarily restore `vacuumOnline()` to `Store.compactFile(50)`. |
-| S2.3 prepare/gate | Keep closed-store tools and disable online shadow publish. |
-| S2.4 publish/recover | Disable publish and allow only prepare/analyze/cleanup. |
+| S2.2 vacuum boundary | Temporarily restore `vacuumOnline()` to the current direct `Store.compactFile(50)` call. |
+| S2.3 gate/budget | Disable the new gate/budget decisions and keep basic partial compact. |
+| S2.4 shadow fallback review | Do not wire it into the online entrypoint; keep closed-store tooling. |
 | S2.5 docs | Documentation rollback has no runtime impact. |
 
 ## Compatibility
@@ -240,7 +233,7 @@ Each S2 phase must be independently revertible:
 
 ## Rollout
 
-The first round supports only explicit `StorageMaintenance.vacuumOnline()` calls. Automatic scheduling, background threads, default thresholds, and configuration entrypoints need a separate S2.6 design. If a configuration is needed later, it should default off and first support diagnostic dry-run.
+The first round supports only explicit `StorageMaintenance.vacuumOnline()` calls and only runs bounded partial compact. Automatic scheduling, background threads, default thresholds, and configuration entrypoints need a separate S2.6 design. If a configuration is needed later, it should default off and first support diagnostic dry-run.
 
 ## Test Plan
 
@@ -249,10 +242,9 @@ The first round supports only explicit `StorageMaintenance.vacuumOnline()` calls
 | S2.1 | JUnit | Options defaults, decision messages, low-value skipped, capability boundary. |
 | S2.1 | Legacy MVStore | Bloat file statistics aligned with existing `BloatStats`. |
 | S2.2 | JUnit | `MVStoreMaintenance.vacuumOnline()` returns success/skipped/unsupported messages. |
-| S2.2 | Legacy MVStore | Vacuum entrypoint creates and cleans shadow leftovers. |
-| S2.3 | Legacy MVStore | Source changed skips by default; refresh mode reprepares. |
-| S2.3 | Legacy MVStore | Long transaction and backup interaction gate. |
-| S2.4 | Legacy MVStore | Crash before switch, during switch, cleanup failure, recover idempotency. |
+| S2.2 | Legacy MVStore | Vacuum entrypoint runs partial compact and records before/after file size. |
+| S2.3 | Legacy MVStore | Low reclaimable, busy, and long transaction gate. |
+| S2.4 | Legacy MVStore | Review whether shadow fallback is needed; run crash/recover matrix only if it is wired. |
 | S2.5 | Docs/build | Chinese and English docs stay synced and dedicated gates pass. |
 
 Minimum command for every phase:
@@ -277,9 +269,10 @@ For larger production-code changes, also run the daily gate:
 
 | Risk | Level | Mitigation |
 | --- | --- | --- |
-| Power loss or process exit during publish | High | Manifest + backup + recover test matrix first. |
-| Online writes make the shadow stale | High | Source changes skip by default in the first round. |
-| Windows file replacement differs from POSIX rename | High | Keep move/restore failure tests and do not assume POSIX semantics. |
+| Partial compact interaction with active transactions is unclear | High | Do not wait in the first round; add busy/skipped tests first. |
+| `compactFile` makes no visible progress | Medium | Record before/after statistics and no-progress messages. |
+| Whole-file shadow publish accidentally becomes the online main path | High | Docs and tests state S2.1-S2.3 are partial only. |
+| Windows file replacement differs from POSIX rename | Medium | Only affects later shadow fallback, not the partial main path. |
 | Long transactions block reclamation | Medium | Do not wait in the first round; return skipped/busy. |
 | Cleanup deletes the wrong file | Medium | `cleanUp()` only deletes fixed suffix files and never deletes source. |
 | Messages become compatibility surface | Medium | Use stable prefixes and append statistics after them. |
@@ -288,10 +281,10 @@ For larger production-code changes, also run the daily gate:
 
 | Phase | Task | Code deliverable | Test deliverable | Commit |
 | --- | --- | --- | --- | --- |
-| S2.1 | Decision and statistics | Add decision/options and dry-run style skipped/success decisions | JUnit + legacy stats case | Separate commit |
-| S2.2 | Wire vacuumOnline | `MVStoreMaintenance.vacuumOnline()` calls the S2 decision flow | Maintenance entry JUnit + MVStore dedicated tests | Separate commit |
-| S2.3 | Shadow prepare/gate | Wire operation gate, source fingerprint, and stale shadow policy | Source changed, busy, long transaction | Separate commit |
-| S2.4 | Crash-safe publish | Complete backup/manifest/recover/publish flow | Fault matrix and recover idempotency | Separate commit |
+| S2.1 | Decision and statistics | Add partial decision/options and dry-run style skipped/success decisions | JUnit + legacy stats case | Separate commit |
+| S2.2 | Wire vacuumOnline | `MVStoreMaintenance.vacuumOnline()` calls the partial reclamation decision flow | Maintenance entry JUnit + MVStore dedicated tests | Separate commit |
+| S2.3 | Partial gate/budget | Wire operation gate, targetFillRate, and no-progress diagnostics | Busy, long transaction, low value | Separate commit |
+| S2.4 | Shadow publish fallback review | Review whether whole-file shadow publish should be enhanced as offline/fallback capability, not the default online main path | Fault matrix and recover idempotency | Separate commit |
 | S2.5 | Docs and acceptance | Chinese/English usage notes, limits, diagnostic messages | Dedicated gate + plugin gate + daily gate | Separate commit |
 | S2.6 | Automatic scheduling design | Design only by default | Separate test plan | Separate review |
 
@@ -299,13 +292,13 @@ For larger production-code changes, also run the daily gate:
 
 | Question | Suggested decision |
 | --- | --- |
-| Should the first round support crash-safe publish? | Yes. It must pass the fault matrix before wiring into `vacuumOnline()`. |
-| Should source changes use catch-up? | No catch-up. Skip by default; optional refresh may reprepare. |
+| Should the first round do whole-file crash-safe publish? | No as the online main path. Keep it as offline/fallback capability and review in S2.4. |
+| Should source changes use catch-up? | The partial main path does not use shadow catch-up; review separately if whole-file shadow returns later. |
 | Should long transactions wait? | No in the first round; return skipped/busy. Design timeout wait later. |
-| Should backup be kept after successful publish? | Default no, but backup must exist during the publish window; `keepBackup` can retain it for debugging. |
-| Should startup automatic recover be wired? | Decide in S2.4. Default first step is recover when entering maintenance. |
+| Should backup be kept? | The partial main path does not create backup; discuss `keepBackup` only if shadow fallback is enabled. |
+| Should startup automatic recover be wired? | Not needed for the partial main path; decide only if shadow fallback is wired. |
 | Should a SQL command be added? | No. Revisit after the Java maintenance API is stable. |
 
 ## Design Conclusion
 
-The first S2 round uses conservative online reclamation: explicit trigger, decide first, prepare shadow, verify source unchanged, create backup, crash-safe publish, and clean leftovers. It does not add automatic scheduling, online catch-up, or disk format changes. Implementation can start with S2.1, with tests and a local commit after each phase.
+The first S2 round uses conservative partial online reclamation: explicit trigger, decide first, run bounded partial compact, record before/after statistics, and skip when low-value or busy. It does not do whole-file shadow publish, automatic scheduling, online catch-up, or disk format changes. Implementation can start with S2.1, with tests and a local commit after each phase.

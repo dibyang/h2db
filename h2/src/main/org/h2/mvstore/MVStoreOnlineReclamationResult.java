@@ -25,12 +25,14 @@ public final class MVStoreOnlineReclamationResult {
     private final long beforeEstimatedReclaimableBytes;
     private final long afterEstimatedReclaimableBytes;
     private final long estimatedReclaimedBytes;
+    private final boolean relocationMapAllowed;
+    private final boolean relocationMapUsed;
     private final boolean rewritten;
     private final ArrayList<Integer> candidateChunks;
 
     MVStoreOnlineReclamationResult(MVStoreReclamationStatus status, String message,
             MVStoreReclamationAnalysis before, MVStoreReclamationAnalysis after, boolean rewritten,
-            ArrayList<Integer> candidateChunks) {
+            boolean relocationMapAllowed, boolean relocationMapUsed, ArrayList<Integer> candidateChunks) {
         this.status = status;
         this.message = message;
         beforeFileSize = before.getFileSize();
@@ -42,6 +44,8 @@ public final class MVStoreOnlineReclamationResult {
         beforeEstimatedReclaimableBytes = before.getEstimatedReclaimableBytes();
         afterEstimatedReclaimableBytes = after.getEstimatedReclaimableBytes();
         estimatedReclaimedBytes = Math.max(0L, beforeEstimatedReclaimableBytes - afterEstimatedReclaimableBytes);
+        this.relocationMapAllowed = relocationMapAllowed;
+        this.relocationMapUsed = relocationMapUsed;
         this.rewritten = rewritten;
         this.candidateChunks = candidateChunks;
     }
@@ -94,6 +98,14 @@ public final class MVStoreOnlineReclamationResult {
         return rewritten;
     }
 
+    public boolean isRelocationMapAllowed() {
+        return relocationMapAllowed;
+    }
+
+    public boolean isRelocationMapUsed() {
+        return relocationMapUsed;
+    }
+
     public List<Integer> getCandidateChunks() {
         return Collections.unmodifiableList(candidateChunks);
     }
@@ -114,6 +126,8 @@ public final class MVStoreOnlineReclamationResult {
                 ", beforeEstimatedReclaimableBytes=" + beforeEstimatedReclaimableBytes +
                 ", afterEstimatedReclaimableBytes=" + afterEstimatedReclaimableBytes +
                 ", estimatedReclaimedBytes=" + estimatedReclaimedBytes +
+                ", relocationMapAllowed=" + relocationMapAllowed +
+                ", relocationMapUsed=" + relocationMapUsed +
                 ", rewritten=" + rewritten +
                 ", candidateChunks=" + candidateChunks;
     }

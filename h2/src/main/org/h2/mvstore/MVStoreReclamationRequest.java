@@ -21,6 +21,7 @@ public final class MVStoreReclamationRequest {
     private final int maxLiveBytesToRewrite;
     private final long maxRunMillis;
     private final boolean journalEnabled;
+    private final boolean relocationMapAllowed;
 
     private MVStoreReclamationRequest(Builder builder) {
         dryRun = builder.dryRun;
@@ -29,6 +30,7 @@ public final class MVStoreReclamationRequest {
         maxLiveBytesToRewrite = builder.maxLiveBytesToRewrite;
         maxRunMillis = builder.maxRunMillis;
         journalEnabled = builder.journalEnabled;
+        relocationMapAllowed = builder.relocationMapAllowed;
     }
 
     public boolean isDryRun() {
@@ -55,6 +57,10 @@ public final class MVStoreReclamationRequest {
         return journalEnabled;
     }
 
+    public boolean isRelocationMapAllowed() {
+        return relocationMapAllowed;
+    }
+
     /**
      * Builder for immutable reclamation requests.
      */
@@ -65,6 +71,7 @@ public final class MVStoreReclamationRequest {
         private int maxLiveBytesToRewrite = 16 * 1024 * 1024;
         private long maxRunMillis;
         private boolean journalEnabled;
+        private boolean relocationMapAllowed;
 
         public Builder dryRun(boolean dryRun) {
             this.dryRun = dryRun;
@@ -105,6 +112,11 @@ public final class MVStoreReclamationRequest {
 
         public Builder journalEnabled(boolean journalEnabled) {
             this.journalEnabled = journalEnabled;
+            return this;
+        }
+
+        public Builder relocationMapAllowed(boolean relocationMapAllowed) {
+            this.relocationMapAllowed = relocationMapAllowed;
             return this;
         }
 

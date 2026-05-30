@@ -32,13 +32,13 @@ public final class MVStoreReclamationCoordinator {
         ArrayList<Integer> selected = selectCandidateIds(before, request.getMaxCandidateChunks());
         if (selected.isEmpty()) {
             return result(MVStoreReclamationStatus.SKIPPED, "NO_RECLAMATION_CANDIDATE", before, before,
-                    false, selected);
+                    false, request, selected);
         }
         MVStoreReclamationJournal journal = request.isJournalEnabled()
                 ? MVStoreReclamationJournal.begin(store, selected) : null;
         if (request.isDryRun() || request.getMaxLiveBytesToRewrite() == 0) {
             complete(journal);
-            return result(MVStoreReclamationStatus.SKIPPED, "DRY_RUN", before, before, false, selected);
+            return result(MVStoreReclamationStatus.SKIPPED, "DRY_RUN", before, before, false, request, selected);
         }
         long start = System.currentTimeMillis();
         boolean rewritten;
@@ -50,21 +50,21 @@ public final class MVStoreReclamationCoordinator {
                     request.getTargetFillRate());
             phase(journal, "FAILED");
             return result(MVStoreReclamationStatus.FAILED, "RECLAMATION_FAILED: " + e.getMessage(),
-                    before, afterFailure, false, selected);
+                    before, afterFailure, false, request, selected);
         }
         MVStoreReclamationAnalysis after = MVStoreReclamationAnalyzer.analyze(store, request.getTargetFillRate());
         if (!rewritten) {
             complete(journal);
             return result(MVStoreReclamationStatus.NO_PROGRESS, "NO_OPEN_MAP_RELOCATION_PROGRESS", before, after,
-                    false, selected);
+                    false, request, selected);
         }
         complete(journal);
         if (request.getMaxRunMillis() > 0L && System.currentTimeMillis() - start > request.getMaxRunMillis()) {
             return result(MVStoreReclamationStatus.SUCCESS, "RECLAMATION_PAUSED_BY_TIME_BUDGET", before,
-                    after, true, selected);
+                    after, true, request, selected);
         }
         return result(MVStoreReclamationStatus.SUCCESS, "RECLAMATION_ROUND_FINISHED", before, after, true,
-                selected);
+                request, selected);
     }
 
     public static MVStoreReclamationRecovery recover(MVStore store) {
@@ -82,9 +82,9 @@ public final class MVStoreReclamationCoordinator {
 
     private static MVStoreOnlineReclamationResult result(MVStoreReclamationStatus status, String message,
             MVStoreReclamationAnalysis before, MVStoreReclamationAnalysis after, boolean rewritten,
-            ArrayList<Integer> candidateChunks) {
+            MVStoreReclamationRequest request, ArrayList<Integer> candidateChunks) {
         return new MVStoreOnlineReclamationResult(status, message, before, after, rewritten,
-                new ArrayList<>(candidateChunks));
+                request.isRelocationMapAllowed(), false, new ArrayList<>(candidateChunks));
     }
 
     private static void phase(MVStoreReclamationJournal journal, String phase) {

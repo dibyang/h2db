@@ -97,6 +97,7 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         runScenario("T-S2-PAGE-RELOCATION-LAZY-MAP-01", this::testPageRelocationCanUseLazyOpenedMaps);
         runScenario("T-S2-RECLAMATION-JOURNAL-CLEANUP-01", this::testReclamationJournalIsCleanedAfterRun);
         runScenario("T-S2-RECLAMATION-JOURNAL-RECOVER-EMPTY-01", this::testReclamationJournalRecoverWithoutJournal);
+        runScenario("T-S2-RELOCATION-MAP-FEATURE-GATE-01", this::testRelocationMapFeatureGate);
 
         if (!failures.isEmpty()) {
             fail("MVStore space reclamation scenario failures: " + failures);
@@ -764,6 +765,32 @@ public class TestMVStoreSpaceReclamation extends TestBase {
             store = null;
         } finally {
             closeStoreImmediately(store);
+        }
+    }
+
+    private void testRelocationMapFeatureGate() {
+        String base = mvStoreFile("relocationMapFeatureGate");
+        MVStore store = null;
+        try {
+            createBloatedStore(base);
+            store = new MVStore.Builder().fileName(base).autoCommitDisabled().autoCompactFillRate(0).open();
+            store.setRetentionTime(0);
+            store.openMap("data");
+
+            MVStoreOnlineReclamationResult result = MVStoreReclamationCoordinator.run(store,
+                    new MVStoreReclamationRequest.Builder()
+                            .targetFillRate(100)
+                            .relocationMapAllowed(true)
+                            .build());
+            assertEquals(MVStoreReclamationStatus.SUCCESS, result.getStatus());
+            assertTrue(result.isRelocationMapAllowed());
+            assertFalse(result.isRelocationMapUsed());
+            assertTrue(result.getDiagnosticSummary().contains("relocationMapAllowed=true"));
+            closeStore(store);
+            store = null;
+        } finally {
+            closeStoreImmediately(store);
+            deleteFilesUnlessKept(base);
         }
     }
 

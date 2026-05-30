@@ -558,6 +558,9 @@ kill -9 `jps -l | grep "org.h2.test." | cut -d " " -f 1`
             } else if ("-phase".equals(args[offset])) {
                 phase = args[offset + 1];
                 offset += 2;
+            } else if ("-defaultMode".equals(args[offset])) {
+                defaultMode = args[offset + 1];
+                offset += 2;
             } else {
                 break;
             }

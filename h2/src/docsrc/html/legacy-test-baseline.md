@@ -15,7 +15,7 @@
 | `.\gradlew.bat runH2TestAllCi` | 运行原始 `org.h2.test.TestAll ci` 完整入口 | 是 |
 | `.\gradlew.bat clean test check build` | 运行当前 Gradle 主构建和插件 JUnit 检查 | 是 |
 
-`runH2LegacySmoke` 和 `runH2LegacyBaselineReport` 通过 `org.h2.test.LegacyTestGroupRunner` 运行。该 runner 复用 `TestBase.runTest(TestAll)` 生命周期，只把测试类清单交给 Gradle 分组管理。为避免本仓库产品默认 MySQL mode 与上游 H2 legacy 测试预期混在一起，runner 会给未显式指定 `MODE=` 的测试 URL 补 `MODE=REGULAR`；测试本身显式指定 MySQL、Oracle、DB2 等 mode 时不覆盖。
+`runH2LegacySmoke`、`runH2LegacyBaselineReport` 和 Gradle `TestAll ci` 入口都会把本仓库产品默认 MySQL mode 与上游 H2 legacy 测试预期隔离开。它们会给未显式指定 `MODE=` 的测试 URL 补 `MODE=REGULAR`；测试本身显式指定 MySQL、Oracle、DB2 等 mode 时不覆盖。
 
 ## 当前基线问题
 
@@ -28,7 +28,7 @@
 | JDBC 可更新结果集 | `The result set is not updatable`、`TYPE_SCROLL_INSENSITIVE`/`CONCUR_UPDATABLE` 断言不匹配 | 已确认主要由 metadata 表类型过滤误依赖非排序数组触发；`BASE TABLE` 过滤恢复后，相关类已迁入 smoke |
 | 兼容模式断言 | Oracle/MySQL/metadata/keywords 等期望与当前实现不一致 | metadata 表类型顺序已按当前 `SYS TABLE` 行为对齐，`TestMetaData` 已迁入 smoke；后续完整 `TestAll` 中发现的兼容模式差异继续按模式分组治理 |
 | 环境敏感断言 | 时间戳毫秒、Locale 中文月份、Web Console 输出 | 固定 locale/timezone 或调整断言为稳定语义 |
-| 完整 `TestAll ci` 运行时间 | 未拆分的 `runH2TestAllCi` 本地运行超过 15 分钟超时 | 先通过 `runH2TestAllCiPhaseReport` 定位长耗时阶段，再恢复完整入口为验收任务 |
+| 完整 `TestAll ci` 运行时间 | 未拆分的 `runH2TestAllCi` 本地运行超过 15 分钟超时 | `memory` 阶段已在 `MODE=REGULAR` 下通过；继续验证剩余命名阶段后，再恢复完整入口为验收任务 |
 
 ## 推进规则
 
@@ -48,6 +48,6 @@
 | L4 | 治理 `TestScript` 输出基线 | `TestScript` 已迁入 smoke，支持 `-Ph2TestScript=...` 单脚本定位 |
 | L5 | 治理兼容模式和 metadata/keywords 失败 | `TestMetaData` 已迁入 smoke，baseline report 当前无剩余类 |
 | L6 | 治理环境敏感失败 | `TestAll ci` 支持按阶段运行，可以在不阻塞全量套件的情况下定位 locale、timezone、时间精度类失败 |
-| L7 | 扩大 must-pass 分组 | baseline report 中修复后的类迁入 smoke |
+| L7 | 扩大 must-pass 分组 | baseline report 中修复后的类迁入 smoke，且 `TestAll ci` 的 `memory` 阶段在同一 REGULAR legacy mode 策略下通过 |
 | L8 | 恢复完整 `runH2TestAllCi` 作为可选验收 | 所有命名 `TestAll ci` 阶段通过或有明确豁免后，完整入口失败数为 0 或仅剩明确豁免 |
 | L9 | 将 legacy 分组纳入日常开发规范 | 文档、Gradle 任务和提交检查约定一致 |

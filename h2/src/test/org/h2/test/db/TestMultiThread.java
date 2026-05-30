@@ -180,7 +180,7 @@ public class TestMultiThread extends TestDb implements Runnable {
     }
 
     private Connection getConnection() throws SQLException {
-        return getConnection("jdbc:h2:mem:" + getTestName());
+        return getConnection("mem:" + getTestName());
     }
 
     @Override

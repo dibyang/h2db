@@ -15,7 +15,7 @@ Run these commands from `h2/`:
 | `.\gradlew.bat runH2TestAllCi` | Runs the original `org.h2.test.TestAll ci` entrypoint | Yes |
 | `.\gradlew.bat clean test check build` | Runs the current Gradle build and plugin JUnit checks | Yes |
 
-`runH2LegacySmoke` and `runH2LegacyBaselineReport` use `org.h2.test.LegacyTestGroupRunner`. The runner reuses the `TestBase.runTest(TestAll)` lifecycle and lets Gradle manage explicit test class lists. To keep this repository's product default MySQL mode separate from upstream H2 legacy test expectations, the runner adds `MODE=REGULAR` to test URLs that do not already specify `MODE=`. Tests that explicitly request MySQL, Oracle, DB2, or another mode are not overridden.
+`runH2LegacySmoke`, `runH2LegacyBaselineReport`, and the Gradle `TestAll ci` entrypoints keep this repository's product default MySQL mode separate from upstream H2 legacy test expectations. They add `MODE=REGULAR` to test URLs that do not already specify `MODE=`. Tests that explicitly request MySQL, Oracle, DB2, or another mode are not overridden.
 
 ## Current Baseline Issues
 
@@ -28,7 +28,7 @@ The latest full `runH2TestAllCi` run can compile and start the original suite, b
 | JDBC updatable result sets | `The result set is not updatable`, result set type/concurrency assertions | Confirmed to be primarily caused by metadata table type filtering depending on a non-sorted array; after restoring `BASE TABLE` filtering, related classes were moved into smoke |
 | Compatibility mode assertions | Oracle/MySQL/metadata/keywords expectations differ from current behavior | Metadata table type ordering is aligned with the current `SYS TABLE` behavior and `TestMetaData` was moved into smoke; additional compatibility differences from full `TestAll` should still be triaged by mode |
 | Environment-sensitive assertions | Timestamp precision, Chinese locale month names, Web Console output | Fix locale/timezone or rewrite assertions around stable semantics |
-| Full `TestAll ci` runtime | The unpartitioned `runH2TestAllCi` attempt exceeded a 15 minute local timeout | Use `runH2TestAllCiPhaseReport` to isolate long-running phases before making the full entrypoint a gate |
+| Full `TestAll ci` runtime | The unpartitioned `runH2TestAllCi` attempt exceeded a 15 minute local timeout | The `memory` phase now passes with `MODE=REGULAR`; continue validating the remaining named phases before making the full entrypoint a gate |
 
 ## Working Rules
 
@@ -48,6 +48,6 @@ The latest full `runH2TestAllCi` run can compile and start the original suite, b
 | L4 | Resolve `TestScript` output baseline | `TestScript` is moved into smoke, with `-Ph2TestScript=...` support for single-script triage |
 | L5 | Resolve compatibility mode and metadata/keywords failures | `TestMetaData` is moved into smoke and the baseline report currently has no remaining classes |
 | L6 | Stabilize environment-sensitive failures | `TestAll ci` can be run by named phase so locale/timezone/time precision failures can be isolated without blocking the whole suite |
-| L7 | Expand the must-pass group | Fixed baseline report classes are moved into smoke |
+| L7 | Expand the must-pass group | Fixed baseline report classes are moved into smoke, and the `TestAll ci` `memory` phase passes under the same REGULAR legacy mode policy |
 | L8 | Restore full `runH2TestAllCi` as optional acceptance | All named `TestAll ci` phases pass or have explicit waivers, then the full entrypoint has zero failures or only explicit waivers |
 | L9 | Fold legacy grouping into the daily development workflow | Documentation, Gradle tasks, and commit checks are aligned |

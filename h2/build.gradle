@@ -231,7 +231,7 @@ task runH2TestAllCi(type: JavaExec) {
     description = 'Runs the original H2 TestAll ci suite through Gradle.'
     dependsOn legacyTestClasses
     main = 'org.h2.test.TestAll'
-    args 'ci'
+    args 'ci', '-defaultMode', 'REGULAR'
     classpath = sourceSets.legacyTest.runtimeClasspath
     systemProperty 'file.encoding', 'UTF-8'
 }
@@ -256,7 +256,7 @@ task runH2TestAllCiPhaseReport(type: JavaExec) {
     if (!legacyCiPhases.contains(selectedPhase)) {
         throw new GradleException("Unknown h2CiPhase: ${selectedPhase}. Expected one of ${legacyCiPhases}.")
     }
-    args 'ci', '-phase', selectedPhase
+    args 'ci', '-defaultMode', 'REGULAR', '-phase', selectedPhase
     classpath = sourceSets.legacyTest.runtimeClasspath
     systemProperty 'file.encoding', 'UTF-8'
     ignoreExitValue = true

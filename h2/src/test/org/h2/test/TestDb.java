@@ -14,6 +14,7 @@ import java.util.List;
 
 import org.h2.test.utils.SelfDestructor;
 import org.h2.tools.DeleteDbFiles;
+import org.h2.util.StringUtils;
 
 /**
  * The base class for tests that use connections to database.
@@ -127,11 +128,16 @@ public abstract class TestDb extends TestBase {
         if (config.collation != null) {
             url = addOption(url, "COLLATION", config.collation);
         }
+        if (config.defaultMode != null) {
+            url = addOption(url, "MODE", config.defaultMode);
+        }
         return "jdbc:h2:" + url;
     }
 
     private static String addOption(String url, String option, String value) {
-        if (url.indexOf(";" + option + "=") < 0) {
+        String upperUrl = StringUtils.toUpperEnglish(url);
+        String upperOption = StringUtils.toUpperEnglish(option);
+        if (upperUrl.indexOf(";" + upperOption + "=") < 0) {
             url += ";" + option + "=" + value;
         }
         return url;

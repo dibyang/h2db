@@ -33,6 +33,7 @@ public final class LegacyTestGroupRunner {
         TestAll config = new TestAll();
         config.ci = true;
         config.memory = true;
+        config.defaultMode = "REGULAR";
         config.beforeTest();
         try {
             for (String className : args) {

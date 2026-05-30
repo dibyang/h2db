@@ -404,6 +404,12 @@ java org.h2.test.TestAll timer
     /** If not null the database should be opened with the collation parameter */
     public String collation;
 
+    /**
+     * If not null database URLs should be opened with this mode unless they
+     * already specify one.
+     */
+    public String defaultMode;
+
 
     /**
      * The AB-BA locking detector.

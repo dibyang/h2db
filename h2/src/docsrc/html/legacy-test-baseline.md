@@ -13,7 +13,7 @@
 | `.\gradlew.bat runH2TestAllCi` | 运行原始 `org.h2.test.TestAll ci` 完整入口 | 是 |
 | `.\gradlew.bat clean test check build` | 运行当前 Gradle 主构建和插件 JUnit 检查 | 是 |
 
-`runH2LegacySmoke` 和 `runH2LegacyBaselineReport` 通过 `org.h2.test.LegacyTestGroupRunner` 运行。该 runner 复用 `TestBase.runTest(TestAll)` 生命周期，只把测试类清单交给 Gradle 分组管理。
+`runH2LegacySmoke` 和 `runH2LegacyBaselineReport` 通过 `org.h2.test.LegacyTestGroupRunner` 运行。该 runner 复用 `TestBase.runTest(TestAll)` 生命周期，只把测试类清单交给 Gradle 分组管理。为避免本仓库产品默认 MySQL mode 与上游 H2 legacy 测试预期混在一起，runner 会给未显式指定 `MODE=` 的测试 URL 补 `MODE=REGULAR`；测试本身显式指定 MySQL、Oracle、DB2 等 mode 时不覆盖。
 
 ## 当前基线问题
 
@@ -21,7 +21,7 @@
 
 | 类别 | 代表失败 | 处理方向 |
 | --- | --- | --- |
-| SQL 兼容语法 | `Unknown data type: "IDENTITY"` | 明确当前 H2 版本对旧 `IDENTITY` 写法的兼容策略；修复 parser/模式，或统一更新测试脚本预期 |
+| SQL 兼容语法 | `Unknown data type: "IDENTITY"` | 已确认主要由仓库默认 MySQL mode 与 legacy 测试默认 REGULAR 预期冲突触发；分组 runner 固定未显式 mode 的 URL 为 REGULAR，剩余失败再按类治理 |
 | 脚本输出预期 | `TestScript` 中列名、分隔线、表达式展示不匹配 | 判断是输出行为已变更还是脚本预期陈旧，按目录分批更新 |
 | JDBC 可更新结果集 | `The result set is not updatable`、`TYPE_SCROLL_INSENSITIVE`/`CONCUR_UPDATABLE` 断言不匹配 | 对齐 JDBC 行为设计，避免误把行为变化当成测试基线修复 |
 | 兼容模式断言 | Oracle/MySQL/metadata/keywords 等期望与当前实现不一致 | 按兼容模式分组治理，保留每个模式的最小回归集 |
@@ -48,4 +48,3 @@
 | L7 | 扩大 must-pass 分组 | baseline report 中修复后的类迁入 smoke |
 | L8 | 恢复完整 `runH2TestAllCi` 作为可选验收 | 完整入口失败数为 0 或仅剩明确豁免 |
 | L9 | 将 legacy 分组纳入日常开发规范 | 文档、Gradle 任务和提交检查约定一致 |
-

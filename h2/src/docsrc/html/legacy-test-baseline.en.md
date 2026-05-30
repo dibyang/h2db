@@ -13,7 +13,7 @@ Run these commands from `h2/`:
 | `.\gradlew.bat runH2TestAllCi` | Runs the original `org.h2.test.TestAll ci` entrypoint | Yes |
 | `.\gradlew.bat clean test check build` | Runs the current Gradle build and plugin JUnit checks | Yes |
 
-`runH2LegacySmoke` and `runH2LegacyBaselineReport` use `org.h2.test.LegacyTestGroupRunner`. The runner reuses the `TestBase.runTest(TestAll)` lifecycle and lets Gradle manage explicit test class lists.
+`runH2LegacySmoke` and `runH2LegacyBaselineReport` use `org.h2.test.LegacyTestGroupRunner`. The runner reuses the `TestBase.runTest(TestAll)` lifecycle and lets Gradle manage explicit test class lists. To keep this repository's product default MySQL mode separate from upstream H2 legacy test expectations, the runner adds `MODE=REGULAR` to test URLs that do not already specify `MODE=`. Tests that explicitly request MySQL, Oracle, DB2, or another mode are not overridden.
 
 ## Current Baseline Issues
 
@@ -21,7 +21,7 @@ The latest full `runH2TestAllCi` run can compile and start the original suite, b
 
 | Bucket | Representative failure | Direction |
 | --- | --- | --- |
-| SQL compatibility syntax | `Unknown data type: "IDENTITY"` | Decide the compatibility policy for the old `IDENTITY` spelling; fix parser/modes or update stale test expectations consistently |
+| SQL compatibility syntax | `Unknown data type: "IDENTITY"` | Confirmed to be primarily caused by the repository default MySQL mode conflicting with legacy tests that expect REGULAR mode; the grouped runner now uses REGULAR for URLs without an explicit mode, and remaining failures should be triaged per class |
 | Script output expectations | Column names, separators, and expression rendering mismatches in `TestScript` | Decide whether output behavior changed intentionally or scripts are stale, then migrate by script directory |
 | JDBC updatable result sets | `The result set is not updatable`, result set type/concurrency assertions | Align with the JDBC behavior design before changing expectations |
 | Compatibility mode assertions | Oracle/MySQL/metadata/keywords expectations differ from current behavior | Triage by compatibility mode and preserve a minimal regression set for each mode |
@@ -48,4 +48,3 @@ The latest full `runH2TestAllCi` run can compile and start the original suite, b
 | L7 | Expand the must-pass group | Fixed baseline report classes are moved into smoke |
 | L8 | Restore full `runH2TestAllCi` as optional acceptance | Full entrypoint has zero failures or only explicit waivers |
 | L9 | Fold legacy grouping into the daily development workflow | Documentation, Gradle tasks, and commit checks are aligned |
-

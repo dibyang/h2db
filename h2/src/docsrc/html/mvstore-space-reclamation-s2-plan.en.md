@@ -96,7 +96,7 @@ Run `runH2TestAllCi` when full acceptance is needed. If a known localhost networ
 | S2.4 | Done | Opt-in evacuation journal scaffold, phase recording, completion cleanup, and recovery entry point. |
 | S2.5 | Done | Relocation-map feature gate and result diagnostics; read-path redirection remains disabled by default. |
 | S2.6 | Done | Explicit-budget tail compaction invocation and diagnostics. |
-| S2.7 | Done | Scheduler facade that is disabled by default and reuses the same coordinator when enabled. |
+| S2.7 | Done | Low-intensity scheduler enabled by default; it reuses the same coordinator and supports disable, minimum interval, and failure backoff. |
 | S2.8 | Done | Chinese and English design, plan, and operational diagnostics documentation updated. |
 
 ## Current Defaults
@@ -112,4 +112,17 @@ The following capabilities now have request/result, feature-gate, or journal-sca
 | Real relocation-map read path | Feature-gated and currently unused | Add safe old-page-position to new-page-position reads and write-open compatibility rejection. |
 | Full crash-safe publish semantics | Journal scaffold exists | Add publish markers, fault injection, replay/rollback, and old-version open protection. |
 | Precise unknown-map diagnostics | MVStore can lazy-open maps for rewrite today | Emit a dedicated skip reason when ownership cannot be resolved. |
-| Background idle scheduling | Scheduler facade is disabled by default | Add idle budgets, rate limiting, and global mutual exclusion without affecting foreground latency. |
+| Background idle scheduling | Scheduler is low-intensity enabled by default | Continue observing rate limiting, backoff, and global mutual exclusion under real workloads. |
+
+## Operational Diagnostic Codes
+
+| Code | Meaning | Recommended Action |
+| --- | --- | --- |
+| `RECLAMATION_ROUND_FINISHED` | One online reclamation round completed successfully. | Inspect `estimatedReclaimedBytes`, fill rates, and file-size changes. |
+| `RECLAMATION_PAUSED_BY_TIME_BUDGET` | The round paused after reaching its run-time budget. | Keep default backoff; increase the budget only under sustained space pressure. |
+| `NO_RECLAMATION_CANDIDATE` | No reclaimable chunk candidate is available now. | Normal skip; if the file is still large, inspect retention, long transactions, or relocation-map state. |
+| `NO_OPEN_MAP_RELOCATION_PROGRESS` | Candidates existed, but no page relocation completed in this round. | Inspect map ownership, old-version pinning, and write contention. |
+| `DRY_RUN` | Analysis-only mode, no writes. | Use for diagnostics and pre-release assessment. |
+| `RECLAMATION_SCHEDULER_DISABLED` | The scheduler is configured off. | Enable `onlineReclamationEnabled(true)` or remove the disabling configuration if background reclamation is desired. |
+| `RECLAMATION_SCHEDULER_BACKOFF` | The scheduler is in its minimum-interval or failure-backoff window. | Normal throttling; it avoids frequent foreground IO contention. |
+| `RECLAMATION_FAILED` | This round failed with an exception. | Check the exception message, preserve files and journal state, and let the next round recover stale journal state first. |

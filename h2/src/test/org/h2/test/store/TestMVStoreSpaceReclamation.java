@@ -104,6 +104,8 @@ public class TestMVStoreSpaceReclamation extends TestBase {
                 this::testReclamationJournalRecoversPublishedMarker);
         runScenario("T-S2-RECLAMATION-JOURNAL-RECOVER-UNPUBLISHED-01",
                 this::testReclamationJournalRecoversUnpublishedMarker);
+        runScenario("T-S2-RECLAMATION-COORDINATOR-RECOVER-FIRST-01",
+                this::testCoordinatorRecoversStaleJournalBeforeRun);
         runScenario("T-S2-RELOCATION-MAP-FEATURE-GATE-01", this::testRelocationMapFeatureGate);
         runScenario("T-S2-RELOCATION-MAP-RESOLVE-01", this::testRelocationMapResolvesPagePosition);
         runScenario("T-S2-TAIL-MOVER-BUDGET-01", this::testTailMoverRunsOnlyWithExplicitBudget);
@@ -843,6 +845,28 @@ public class TestMVStoreSpaceReclamation extends TestBase {
             MVStoreReclamationRecovery recovery = MVStoreReclamationCoordinator.recover(store);
             assertTrue(recovery.isRecovered());
             assertTrue(recovery.getMessage().contains("RECOVERED_UNPUBLISHED_RECLAMATION_JOURNAL"));
+            assertNoReclamationJournal(store);
+            closeStore(store);
+            store = null;
+        } finally {
+            closeStoreImmediately(store);
+            deleteFilesUnlessKept(base);
+        }
+    }
+
+    private void testCoordinatorRecoversStaleJournalBeforeRun() {
+        String base = mvStoreFile("coordinatorRecoverFirst");
+        MVStore store = null;
+        try {
+            createBloatedStore(base);
+            store = new MVStore.Builder().fileName(base).autoCommitDisabled().autoCompactFillRate(0).open();
+            store.setRetentionTime(0);
+            store.openMap("data");
+            writeReclamationJournalMarker(store, "EVACUATING", false);
+
+            MVStoreOnlineReclamationResult result = MVStoreReclamationCoordinator.run(store,
+                    new MVStoreReclamationRequest.Builder().targetFillRate(100).build());
+            assertEquals(MVStoreReclamationStatus.SUCCESS, result.getStatus());
             assertNoReclamationJournal(store);
             closeStore(store);
             store = null;

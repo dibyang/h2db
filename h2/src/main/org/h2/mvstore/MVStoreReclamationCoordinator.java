@@ -27,6 +27,7 @@ public final class MVStoreReclamationCoordinator {
         if (request == null) {
             request = MVStoreReclamationRequest.DEFAULT;
         }
+        MVStoreReclamationJournal.recover(store);
         MVStoreReclamationAnalysis before = MVStoreReclamationAnalyzer.analyze(store,
                 request.getTargetFillRate());
         ArrayList<Integer> selected = selectCandidateIds(before, request.getMaxCandidateChunks());

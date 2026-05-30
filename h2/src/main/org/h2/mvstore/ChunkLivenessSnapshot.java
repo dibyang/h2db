@@ -19,6 +19,7 @@ public final class ChunkLivenessSnapshot {
         NOT_REWRITABLE,
         NOT_ALLOCATED,
         NOT_LIVE,
+        RECENT_CHUNK,
         LOW_VALUE
     }
 
@@ -36,7 +37,8 @@ public final class ChunkLivenessSnapshot {
     private final boolean candidate;
     private final PinnedReason pinnedReason;
 
-    ChunkLivenessSnapshot(Chunk<?> chunk, long oldestVersionToKeep, int targetFillRate) {
+    ChunkLivenessSnapshot(Chunk<?> chunk, long oldestVersionToKeep, int targetFillRate, long timeSinceCreation,
+            int retentionTime) {
         chunkId = chunk.id;
         block = chunk.block;
         lengthBlocks = chunk.len;
@@ -47,13 +49,14 @@ public final class ChunkLivenessSnapshot {
         liveMaxLength = chunk.maxLenLive;
         deadBytes = Math.max(0L, maxLength - liveMaxLength);
         fillRate = chunk.getFillRate();
-        pinnedReason = determinePinnedReason(chunk, oldestVersionToKeep, targetFillRate);
+        pinnedReason = determinePinnedReason(chunk, oldestVersionToKeep, targetFillRate, timeSinceCreation,
+                retentionTime);
         candidate = pinnedReason == PinnedReason.NONE;
         score = calculateScore(chunk, targetFillRate, candidate);
     }
 
     private static PinnedReason determinePinnedReason(Chunk<?> chunk, long oldestVersionToKeep,
-            int targetFillRate) {
+            int targetFillRate, long timeSinceCreation, int retentionTime) {
         if (!chunk.isAllocated()) {
             return PinnedReason.NOT_ALLOCATED;
         }
@@ -65,6 +68,9 @@ public final class ChunkLivenessSnapshot {
         }
         if (!chunk.isRewritable()) {
             return PinnedReason.NOT_REWRITABLE;
+        }
+        if (retentionTime >= 0 && chunk.time + retentionTime > timeSinceCreation) {
+            return PinnedReason.RECENT_CHUNK;
         }
         if (chunk.getFillRate() > targetFillRate) {
             return PinnedReason.LOW_VALUE;

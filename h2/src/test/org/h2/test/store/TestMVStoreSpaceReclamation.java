@@ -90,6 +90,7 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         runScenario("T-ONLINE-COMPACT-FAULT-MATRIX-01", this::testFaultInjectionMatrixKeepsReadableStore);
         runScenario("T-S2-RECLAMATION-ANALYSIS-CANDIDATES-01", this::testReclamationAnalysisFindsCandidates);
         runScenario("T-S2-RECLAMATION-ANALYSIS-LOW-VALUE-01", this::testReclamationAnalysisRejectsLowValueStore);
+        runScenario("T-S2-RECLAMATION-ANALYSIS-RECENT-CHUNK-01", this::testReclamationAnalysisReportsRecentChunks);
         runScenario("T-S2-RECLAMATION-ANALYSIS-VALIDATION-01", this::testReclamationAnalysisValidation);
         runScenario("T-S2-RECLAMATION-COORDINATOR-DRY-RUN-01", this::testReclamationCoordinatorDryRun);
         runScenario("T-S2-RECLAMATION-COORDINATOR-RUN-01", this::testReclamationCoordinatorRunsBoundedRewrite);
@@ -545,6 +546,7 @@ public class TestMVStoreSpaceReclamation extends TestBase {
             BloatStats stats = createBloatedStore(base);
             assertBloated(stats);
             store = new MVStore.Builder().fileName(base).autoCommitDisabled().autoCompactFillRate(0).open();
+            store.setRetentionTime(0);
             MVStoreReclamationAnalysis analysis = MVStoreReclamationAnalyzer.analyze(store, 100);
             assertTrue(analysis.getChunks().size() > 0);
             assertTrue(analysis.hasCandidates());
@@ -583,12 +585,42 @@ public class TestMVStoreSpaceReclamation extends TestBase {
             assertTrue(analysis.getChunks().size() > 0);
             assertFalse(analysis.hasCandidates());
             assertEquals(0L, analysis.getEstimatedReclaimableBytes());
+            assertEquals(ChunkLivenessSnapshot.PinnedReason.NOT_REWRITABLE,
+                    analysis.getChunks().get(0).getPinnedReason());
             closeStore(store);
             store = null;
         } finally {
             closeStoreImmediately(store);
             deleteFilesUnlessKept(base);
         }
+    }
+
+    private void testReclamationAnalysisReportsRecentChunks() {
+        String base = mvStoreFile("reclamationAnalysisRecentChunk");
+        MVStore store = null;
+        try {
+            createBloatedStore(base);
+            store = new MVStore.Builder().fileName(base).autoCommitDisabled().autoCompactFillRate(0).open();
+            MVStoreReclamationAnalysis analysis = MVStoreReclamationAnalyzer.analyze(store, 100);
+            assertTrue(analysis.getChunks().size() > 0);
+            assertFalse(analysis.hasCandidates());
+            assertTrue(hasPinnedReason(analysis, ChunkLivenessSnapshot.PinnedReason.RECENT_CHUNK));
+            closeStore(store);
+            store = null;
+        } finally {
+            closeStoreImmediately(store);
+            deleteFilesUnlessKept(base);
+        }
+    }
+
+    private static boolean hasPinnedReason(MVStoreReclamationAnalysis analysis,
+            ChunkLivenessSnapshot.PinnedReason reason) {
+        for (ChunkLivenessSnapshot snapshot : analysis.getChunks()) {
+            if (snapshot.getPinnedReason() == reason) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void testReclamationAnalysisValidation() {
@@ -616,6 +648,7 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         try {
             createBloatedStore(base);
             store = new MVStore.Builder().fileName(base).autoCommitDisabled().autoCompactFillRate(0).open();
+            store.setRetentionTime(0);
             MVStoreReclamationRequest request = new MVStoreReclamationRequest.Builder()
                     .dryRun(true)
                     .targetFillRate(100)

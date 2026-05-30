@@ -38,8 +38,11 @@ public final class MVStoreReclamationAnalyzer {
         ArrayList<ChunkLivenessSnapshot> chunks = new ArrayList<>();
         ArrayList<ChunkLivenessSnapshot> candidates = new ArrayList<>();
         long oldestVersionToKeep = store.getOldestVersionToKeep();
+        long timeSinceCreation = Math.max(0L, store.getTimeAbsolute() - fileStore.getCreationTime());
+        int retentionTime = fileStore.getRetentionTime();
         for (Chunk<?> chunk : fileStore.getChunks().values()) {
-            ChunkLivenessSnapshot snapshot = new ChunkLivenessSnapshot(chunk, oldestVersionToKeep, targetFillRate);
+            ChunkLivenessSnapshot snapshot = new ChunkLivenessSnapshot(chunk, oldestVersionToKeep, targetFillRate,
+                    timeSinceCreation, retentionTime);
             chunks.add(snapshot);
             if (snapshot.isCandidate()) {
                 candidates.add(snapshot);

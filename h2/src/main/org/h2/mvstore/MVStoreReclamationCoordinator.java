@@ -84,6 +84,10 @@ public final class MVStoreReclamationCoordinator {
         return MVStoreReclamationJournal.recover(store);
     }
 
+    public static void writeRecoveryMarkerForTest(MVStore store, String phase, boolean published) {
+        MVStoreReclamationJournal.writeRecoveryMarkerForTest(store, phase, published);
+    }
+
     private static ArrayList<Integer> selectCandidateIds(MVStoreReclamationAnalysis analysis, int maxCandidates) {
         ArrayList<Integer> selected = new ArrayList<>();
         List<ChunkLivenessSnapshot> candidates = analysis.getCandidates();

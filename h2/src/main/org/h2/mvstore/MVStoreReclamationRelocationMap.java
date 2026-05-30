@@ -26,6 +26,7 @@ public final class MVStoreReclamationRelocationMap {
         MVMap<String, String> metaMap = store.getMetaMap();
         metaMap.put(FEATURE, "true");
         metaMap.put(key(oldPosition), Long.toHexString(newPosition));
+        store.markMetaChanged();
         store.commit();
     }
 
@@ -60,6 +61,7 @@ public final class MVStoreReclamationRelocationMap {
             metaMap.remove(key);
         }
         metaMap.remove(FEATURE);
+        store.markMetaChanged();
         store.commit();
     }
 
@@ -75,7 +77,7 @@ public final class MVStoreReclamationRelocationMap {
         }
     }
 
-    private static boolean hasMappings(MVMap<String, String> metaMap) {
+    static boolean hasMappings(MVMap<String, String> metaMap) {
         return "true".equals(metaMap.get(FEATURE));
     }
 

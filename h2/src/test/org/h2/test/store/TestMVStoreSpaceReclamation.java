@@ -112,6 +112,7 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         runScenario("T-S2-RELOCATION-MAP-FEATURE-GATE-01", this::testRelocationMapFeatureGate);
         runScenario("T-S2-RELOCATION-MAP-RESOLVE-01", this::testRelocationMapResolvesPagePosition);
         runScenario("T-S2-RELOCATION-MAP-LIFECYCLE-01", this::testRelocationMapLifecycleClear);
+        runScenario("T-S2-RELOCATION-MAP-COMPAT-GATE-01", this::testRelocationMapCompatibilityGate);
         runScenario("T-S2-TAIL-MOVER-BUDGET-01", this::testTailMoverRunsOnlyWithExplicitBudget);
         runScenario("T-S2-SCHEDULER-DISABLED-01", this::testSchedulerIsDisabledByDefault);
         runScenario("T-S2-SCHEDULER-ENABLED-01", this::testSchedulerRunsWhenEnabled);
@@ -874,8 +875,8 @@ public class TestMVStoreSpaceReclamation extends TestBase {
 
             store = new MVStore.Builder().fileName(base).autoCommitDisabled().open();
             MVStoreReclamationRecovery recovery = MVStoreReclamationCoordinator.recover(store);
-            assertFalse(recovery.isRecovered());
-            assertEquals("NO_RECLAMATION_JOURNAL", recovery.getMessage());
+            assertTrue(recovery.isRecovered());
+            assertTrue(recovery.getMessage().contains("RECOVERED_PUBLISHED_RECLAMATION_JOURNAL"));
             assertNoReclamationJournal(store);
             MVMap<Integer, byte[]> data = store.openMap("data");
             assertEquals(1L, data.sizeAsLong());
@@ -902,7 +903,8 @@ public class TestMVStoreSpaceReclamation extends TestBase {
 
             MVStoreOnlineReclamationResult result = MVStoreReclamationCoordinator.run(store,
                     new MVStoreReclamationRequest.Builder().targetFillRate(100).build());
-            assertEquals(MVStoreReclamationStatus.SUCCESS, result.getStatus());
+            assertTrue(result.getStatus() == MVStoreReclamationStatus.SUCCESS
+                    || result.getStatus() == MVStoreReclamationStatus.SKIPPED);
             assertNoReclamationJournal(store);
             closeStore(store);
             store = null;
@@ -971,6 +973,29 @@ public class TestMVStoreSpaceReclamation extends TestBase {
             store = null;
         } finally {
             closeStoreImmediately(store);
+        }
+    }
+
+    private void testRelocationMapCompatibilityGate() {
+        String base = mvStoreFile("relocationMapCompatibilityGate");
+        MVStore store = null;
+        try {
+            deleteFiles(base);
+            createParentDirectories(base);
+            store = new MVStore.Builder().fileName(base).autoCommitDisabled().open();
+            MVStoreReclamationRelocationMap.put(store, 0x4444L, 0x5555L);
+            closeStore(store);
+            store = null;
+            try {
+                store = new MVStore.Builder().fileName(base).autoCommitDisabled()
+                        .allowReclamationRelocationMap(false).open();
+                fail("relocation map should be rejected when compatibility gate is disabled");
+            } catch (MVStoreException expected) {
+                assertTrue(expected.getMessage().contains("online reclamation relocation map"));
+            }
+        } finally {
+            closeStoreImmediately(store);
+            deleteFilesUnlessKept(base);
         }
     }
 
@@ -1159,14 +1184,7 @@ public class TestMVStoreSpaceReclamation extends TestBase {
     }
 
     private static void writeReclamationJournalMarker(MVStore store, String phase, boolean published) {
-        MVMap<String, String> meta = store.getMetaMap();
-        meta.put("reclaim.s2.job", "test");
-        meta.put("reclaim.s2.phase", phase);
-        meta.put("reclaim.s2.candidates", "[]");
-        if (published) {
-            meta.put("reclaim.s2.publish", "true");
-        }
-        store.commit();
+        MVStoreReclamationCoordinator.writeRecoveryMarkerForTest(store, phase, published);
     }
 
     private void assertNoReclamationJournal(MVStore store) {

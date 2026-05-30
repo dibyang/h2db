@@ -299,6 +299,11 @@ public class MVStore implements AutoCloseable {
 
             meta = metaMap;
             scrubMetaMap();
+            if (DataUtils.getConfigParam(config, "allowReclamationRelocationMap", 1) == 0
+                    && MVStoreReclamationRelocationMap.hasMappings(meta)) {
+                throw DataUtils.newMVStoreException(DataUtils.ERROR_UNSUPPORTED_FORMAT,
+                        "MVStore contains an online reclamation relocation map");
+            }
 
             // setAutoCommitDelay starts the thread, but only if
             // the parameter is different from the old value
@@ -1889,6 +1894,10 @@ public class MVStore implements AutoCloseable {
 
         public Builder onlineReclamationEnabled(boolean enabled) {
             return set("onlineReclamationEnabled", enabled ? 1 : 0);
+        }
+
+        public Builder allowReclamationRelocationMap(boolean allow) {
+            return set("allowReclamationRelocationMap", allow ? 1 : 0);
         }
 
         /**

@@ -35,22 +35,26 @@ final class MVStoreReclamationJournal {
                 Long.toHexString(System.currentTimeMillis()) + "-" + store.getCurrentVersion());
         journal.metaMap.put(JOB, journal.jobId);
         journal.metaMap.put(CANDIDATES, candidateChunks.toString());
+        journal.store.markMetaChanged();
         journal.phase("ANALYZING");
         return journal;
     }
 
     void phase(String phase) {
         metaMap.put(PHASE, phase);
+        store.markMetaChanged();
         store.commit();
     }
 
     void publish() {
         metaMap.put(PUBLISH, "true");
+        store.markMetaChanged();
         phase("PUBLISHED");
     }
 
     void complete() {
         removeJournalKeys(metaMap);
+        store.markMetaChanged();
         store.commit();
     }
 
@@ -65,16 +69,21 @@ final class MVStoreReclamationJournal {
         String phase = metaMap.get(PHASE);
         boolean published = "true".equals(metaMap.get(PUBLISH));
         removeJournalKeys(metaMap);
+        store.markMetaChanged();
         store.commit();
         return new MVStoreReclamationRecovery(true, (published ? "RECOVERED_PUBLISHED_RECLAMATION_JOURNAL"
                 : "RECOVERED_UNPUBLISHED_RECLAMATION_JOURNAL") + " phase=" + phase);
     }
 
-    static void writeRecoveryMarkerForTest(MVStore store, String phase) {
+    static void writeRecoveryMarkerForTest(MVStore store, String phase, boolean published) {
         MVMap<String, String> metaMap = store.getMetaMap();
         metaMap.put(JOB, "test");
         metaMap.put(PHASE, phase);
         metaMap.put(CANDIDATES, "[]");
+        if (published) {
+            metaMap.put(PUBLISH, "true");
+        }
+        store.markMetaChanged();
         store.commit();
     }
 

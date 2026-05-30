@@ -111,6 +111,7 @@ public class TestMVStoreSpaceReclamation extends TestBase {
                 this::testCoordinatorRecoversStaleJournalBeforeRun);
         runScenario("T-S2-RELOCATION-MAP-FEATURE-GATE-01", this::testRelocationMapFeatureGate);
         runScenario("T-S2-RELOCATION-MAP-RESOLVE-01", this::testRelocationMapResolvesPagePosition);
+        runScenario("T-S2-RELOCATION-MAP-LIFECYCLE-01", this::testRelocationMapLifecycleClear);
         runScenario("T-S2-TAIL-MOVER-BUDGET-01", this::testTailMoverRunsOnlyWithExplicitBudget);
         runScenario("T-S2-SCHEDULER-DISABLED-01", this::testSchedulerIsDisabledByDefault);
         runScenario("T-S2-SCHEDULER-ENABLED-01", this::testSchedulerRunsWhenEnabled);
@@ -943,9 +944,29 @@ public class TestMVStoreSpaceReclamation extends TestBase {
             store = new MVStore.Builder().open();
             long oldPosition = 0x1234L;
             long newPosition = 0x5678L;
+            assertFalse(MVStoreReclamationRelocationMap.hasMappings(store));
             assertEquals(oldPosition, MVStoreReclamationRelocationMap.resolve(store, oldPosition));
             MVStoreReclamationRelocationMap.put(store, oldPosition, newPosition);
+            assertTrue(MVStoreReclamationRelocationMap.hasMappings(store));
             assertEquals(newPosition, MVStoreReclamationRelocationMap.resolve(store, oldPosition));
+            closeStore(store);
+            store = null;
+        } finally {
+            closeStoreImmediately(store);
+        }
+    }
+
+    private void testRelocationMapLifecycleClear() {
+        MVStore store = null;
+        try {
+            store = new MVStore.Builder().open();
+            long oldPosition = 0x2222L;
+            long newPosition = 0x3333L;
+            MVStoreReclamationRelocationMap.put(store, oldPosition, newPosition);
+            assertTrue(MVStoreReclamationRelocationMap.hasMappings(store));
+            MVStoreReclamationRelocationMap.clear(store);
+            assertFalse(MVStoreReclamationRelocationMap.hasMappings(store));
+            assertEquals(oldPosition, MVStoreReclamationRelocationMap.resolve(store, oldPosition));
             closeStore(store);
             store = null;
         } finally {

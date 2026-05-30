@@ -1,6 +1,6 @@
 # Legacy Test Baseline Governance Plan
 
-This document describes how the existing non-JUnit tests are brought under Gradle management. The goal is not to rewrite `TestAll` in one step. The first step is to provide runnable, grouped, and trackable entrypoints, then gradually move fixed tests into the must-pass set.
+This document describes how the existing non-JUnit tests are brought under Gradle management. The goal is not to rewrite `TestAll` in one step. The first step is to provide runnable, grouped, migratable, and reviewable entrypoints so later pluginization work has a stable test foundation for every phase.
 
 ## Current Entrypoints
 
@@ -9,38 +9,86 @@ Run these commands from `h2/`:
 | Task | Purpose | Gates the build |
 | --- | --- | --- |
 | `.\gradlew.bat runH2LegacySmoke` | Runs the current must-pass legacy smoke group | Yes |
-| `.\gradlew.bat runH2LegacyBaselineReport` | Runs known failing legacy baseline groups for triage | No |
+| `.\gradlew.bat runH2LegacyBaselineReport` | Runs legacy baseline groups that still need observation; the current list is empty and reserved for future regression governance | No |
 | `.\gradlew.bat runH2LegacyBaselineReport "-Ph2TestScript=other/conditions.sql"` | Runs one `TestScript` script for focused SQL output triage | No |
-| `.\gradlew.bat runH2TestAllCiPhaseReport "-Ph2CiPhase=memory"` | Runs one original `TestAll ci` phase for timeout/failure triage; supported phases are `memory`, `additional`, `utils`, `lazy-memory`, `disk`, `disk-additional`, `network-memory`, `network-lazy`, and `encrypted-disk` | No |
-| `.\gradlew.bat runH2TestAllCi` | Runs the original `org.h2.test.TestAll ci` entrypoint | Yes |
+| `.\gradlew.bat runH2TestAllCiPhaseReport "-Ph2CiPhase=memory"` | Runs one original `TestAll ci` phase; supported phases are `memory`, `additional`, `utils`, `lazy-memory`, `disk`, `disk-additional`, `network-memory`, `network-lazy`, and `encrypted-disk` | No |
+| `.\gradlew.bat runH2TestAllCi` | Runs the original `org.h2.test.TestAll ci` entrypoint | Yes, as full acceptance |
+| `.\gradlew.bat listH2LegacySlowTests` | Lists slow/performance tests that are tracked but intentionally kept out of the daily gate | No |
 | `.\gradlew.bat clean test check build` | Runs the current Gradle build and plugin JUnit checks | Yes |
 
 `runH2LegacySmoke`, `runH2LegacyBaselineReport`, and the Gradle `TestAll ci` entrypoints keep this repository's product default MySQL mode separate from upstream H2 legacy test expectations. They add `MODE=REGULAR` to test URLs that do not already specify `MODE=`. Tests that explicitly request MySQL, Oracle, DB2, or another mode are not overridden.
 
-## Current Baseline Issues
+## Current Baseline Status
 
-The latest full `runH2TestAllCi` run can compile and start the original suite, but many tests still fail. The main buckets are:
+All named phases pass: `memory`, `additional`, `utils`, `lazy-memory`, `disk`, `disk-additional`, `network-memory`, `network-lazy`, and `encrypted-disk`. The full `runH2TestAllCi` entrypoint has passed local acceptance before, but a rerun on 2026-05-30 at 15:17 failed once in `net memory` when `TestMultiThreadedKernel` timed out connecting to `localhost:9092`; a focused `network-memory` phase rerun passed afterwards. This is tracked as an intermittent network item in the test foundation.
 
-| Bucket | Representative failure | Direction |
+Historical issues that have been fixed or brought under management:
+
+| Bucket | Representative issue | Current status |
 | --- | --- | --- |
-| SQL compatibility syntax | `Unknown data type: "IDENTITY"` | Confirmed to be primarily caused by the repository default MySQL mode conflicting with legacy tests that expect REGULAR mode; the grouped runner now uses REGULAR for URLs without an explicit mode, and remaining failures should be triaged per class |
-| Script output expectations | Column names, separators, and expression rendering mismatches in `TestScript` | Updated `compatibility/compatibility.sql`, `datatypes/double_precision.sql`, and `other/conditions.sql` to current behavior; `TestScript` was moved into smoke |
-| JDBC updatable result sets | `The result set is not updatable`, result set type/concurrency assertions | Confirmed to be primarily caused by metadata table type filtering depending on a non-sorted array; after restoring `BASE TABLE` filtering, related classes were moved into smoke |
-| Compatibility mode assertions | Oracle/MySQL/metadata/keywords expectations differ from current behavior | Metadata table type ordering is aligned with the current `SYS TABLE` behavior and `TestMetaData` was moved into smoke; additional compatibility differences from full `TestAll` should still be triaged by mode |
-| Environment-sensitive assertions | Timestamp precision, Chinese locale month names, Web Console output | Fix locale/timezone or rewrite assertions around stable semantics |
-| Full `TestAll ci` runtime | The unpartitioned `runH2TestAllCi` attempt exceeded a 15 minute local timeout | All named phases and the full `runH2TestAllCi` entrypoint now pass with `MODE=REGULAR` |
+| SQL compatibility syntax | `Unknown data type: "IDENTITY"` | Isolated from the repository default MySQL mode by the REGULAR legacy mode policy |
+| Script output expectations | Column names, separators, and expression rendering mismatches in `TestScript` | Related script baselines were updated to current behavior and `TestScript` was moved into smoke |
+| JDBC updatable result sets | `The result set is not updatable`, result set type/concurrency assertions | `BASE TABLE` filtering semantics were restored and related classes were moved into smoke |
+| Compatibility mode assertions | Oracle/MySQL/metadata/keywords expectations differed from current behavior | Metadata table type ordering is aligned and `TestMetaData` was moved into smoke |
+| Environment-sensitive assertions | Timestamp precision, Chinese locale month names, Web Console output, network phase port connection timeouts | Phase-level entrypoints make these failures isolatable; the focused `network-memory` rerun passed, while the intermittent full-suite network timeout remains tracked |
+| Full `TestAll ci` runtime | A local full run takes about 16 minutes | Kept as full acceptance, not as the default fast feedback loop for every small change |
+
+`TestUpgrade` can print output such as `"mvn is not recognized"` when the system `mvn` command is not installed. This output comes from the tool trying Maven first and then falling back to direct Maven Central artifact download. If the Gradle task passes, this is non-blocking environment noise.
+
+## Test Layers
+
+Daily development gate:
+
+```powershell
+.\gradlew.bat clean test check build runH2LegacySmoke
+```
+
+Use this for every small pluginization phase, production-code change, and test-foundation change. It covers the main Gradle build, plugin JUnit checks, and the legacy smoke group that is already must-pass.
+
+Full acceptance:
+
+```powershell
+.\gradlew.bat runH2TestAllCi
+```
+
+Use this when finishing a phase or before local commits that need to prove the original H2 legacy suite still passes. This task is intentionally slower and should be treated as phase acceptance rather than fast edit feedback. If a failure is concentrated in a network phase, rerun the matching `runH2TestAllCiPhaseReport` phase first and record whether it is intermittent.
+
+Phase triage:
+
+```powershell
+.\gradlew.bat runH2TestAllCiPhaseReport "-Ph2CiPhase=memory"
+```
+
+Use this when full acceptance fails, times out, or needs narrowing. This is an observational report entrypoint and does not gate the Gradle build.
+
+Slow/performance test management:
+
+```powershell
+.\gradlew.bat listH2LegacySlowTests
+```
+
+Tests currently tracked but not included in the daily gate:
+
+| Test class | Reason | Follow-up |
+| --- | --- | --- |
+| `org.h2.test.db.TestLargeBlob` | Large-object boundary test with high resource usage | Move into a dedicated large-resource acceptance task later |
+| `org.h2.test.store.TestDefrag` | Depends on `big` and non-`ci` configuration | Move into a dedicated storage slow-test task later |
+| `org.h2.test.store.TestMVStoreBenchmark` | Benchmark test, unsuitable as a daily stability signal | Move into a performance baseline task later |
+| `org.h2.test.db.TestSubqueryPerformanceOnLazyExecutionMode` | Performance/lazy-execution path validation | Move into a performance regression task later |
 
 ## Working Rules
 
 1. New or modified production code must run the relevant focused checks and `runH2LegacySmoke`.
-2. After a legacy failing class is fixed, move it from `legacyBaselineIssueTests` to `legacySmokeTests`.
-3. If a test class is still unstable, document the failure reason before making it must-pass.
-4. `runH2LegacyBaselineReport` is observational only and must not be treated as build success evidence.
-5. Keep `runH2TestAllCi` as the final acceptance target; make it a daily gate only after all groups are stable.
+2. Each pluginization phase must run the daily development gate before commit.
+3. Phase-complete or higher-risk storage, table-engine, or SQL-behavior changes must run full `runH2TestAllCi` before commit.
+4. After a legacy failing class is fixed, move it from `legacyBaselineIssueTests` to `legacySmokeTests`.
+5. If a test class is still unstable, document the failure reason before making it must-pass.
+6. `runH2LegacyBaselineReport` and `runH2TestAllCiPhaseReport` are observational only and must not be treated as build success evidence.
+7. Slow/performance tests are first tracked through `listH2LegacySlowTests`; later phases can split them into configurable, resource-bounded dedicated tasks.
 
 ## Phases
 
-Currently passing named `TestAll ci` phases: `memory`, `additional`, `utils`, `lazy-memory`, `disk`, `disk-additional`, `network-memory`, `network-lazy`, and `encrypted-disk`. The full `runH2TestAllCi` entrypoint also passes local acceptance.
+Currently passing named `TestAll ci` phases: `memory`, `additional`, `utils`, `lazy-memory`, `disk`, `disk-additional`, `network-memory`, `network-lazy`, and `encrypted-disk`. The full `runH2TestAllCi` entrypoint remains the acceptance entrypoint; one intermittent full-suite `network-memory` connection timeout is currently recorded, with the focused phase rerun passing.
 
 | Phase | Goal | Done when |
 | --- | --- | --- |
@@ -49,7 +97,7 @@ Currently passing named `TestAll ci` phases: `memory`, `additional`, `utils`, `l
 | L3 | Resolve JDBC updatable result set failures | `TestCompatibilityOracle`, `TestResultSet`, and `TestUpdatableResultSet` are moved into smoke |
 | L4 | Resolve `TestScript` output baseline | `TestScript` is moved into smoke, with `-Ph2TestScript=...` support for single-script triage |
 | L5 | Resolve compatibility mode and metadata/keywords failures | `TestMetaData` is moved into smoke and the baseline report currently has no remaining classes |
-| L6 | Stabilize environment-sensitive failures | `TestAll ci` can be run by named phase so locale/timezone/time precision failures can be isolated without blocking the whole suite |
-| L7 | Expand the must-pass group | Fixed baseline report classes are moved into smoke, and the `TestAll ci` `memory` phase passes under the same REGULAR legacy mode policy |
-| L8 | Restore full `runH2TestAllCi` as optional acceptance | All named `TestAll ci` phases pass and the full entrypoint has zero failures |
-| L9 | Fold legacy grouping into the daily development workflow | Documentation, Gradle tasks, and commit checks are aligned |
+| L6 | Stabilize environment-sensitive failures | `TestAll ci` can be run by named phase so locale/timezone/time precision failures can be isolated |
+| L7 | Expand the must-pass group | Fixed baseline report classes are moved into smoke and the `TestAll ci` `memory` phase passes |
+| L8 | Restore full `runH2TestAllCi` as acceptance | All named `TestAll ci` phases pass; the full entrypoint remains phase acceptance, and network timeout flakes must be rerun by focused phase and recorded |
+| L9 | Fold legacy grouping into the daily development workflow | Daily gate, full acceptance, slow/performance management, and environment-noise rules are documented with discoverable Gradle entrypoints |

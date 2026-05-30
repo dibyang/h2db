@@ -304,6 +304,13 @@ def legacySmokeTests = [
 
 def legacyBaselineIssueTests = []
 
+def legacySlowReportTests = [
+        'org.h2.test.db.TestLargeBlob',
+        'org.h2.test.store.TestDefrag',
+        'org.h2.test.store.TestMVStoreBenchmark',
+        'org.h2.test.db.TestSubqueryPerformanceOnLazyExecutionMode'
+]
+
 task runH2LegacySmoke(type: JavaExec) {
     description = 'Runs the currently must-pass legacy TestBase smoke group through Gradle.'
     dependsOn legacyTestClasses
@@ -324,6 +331,14 @@ task runH2LegacyBaselineReport(type: JavaExec) {
         systemProperty 'h2.testScript', project.property('h2TestScript')
     }
     ignoreExitValue = true
+}
+
+task listH2LegacySlowTests {
+    description = 'Lists legacy slow/performance tests that are tracked outside the daily TestAll ci gate.'
+    doLast {
+        println 'Legacy slow/performance tests tracked outside the daily gate:'
+        legacySlowReportTests.each { println " - ${it}" }
+    }
 }
 
 test {

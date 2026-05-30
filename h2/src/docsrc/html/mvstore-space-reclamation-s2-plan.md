@@ -140,3 +140,20 @@ S2 在线回收的正式版默认策略如下：
 | tail compaction | 仅显式时间预算触发 | 物理 tail move / truncate 对 IO 影响更大，默认不主动执行。 |
 
 发布判断：若 `runMvStoreSpaceReclamationCheck`、`runPluginArchitectureCheck`、recovery/corruption 专项和完整 CI 通过，且性能基线未发现明显写延迟回退，可按上述策略进入正式版本。
+
+## 发布门禁记录
+
+最近一次本地发布门禁结果：
+
+| 命令 | 结果 | 说明 |
+| --- | --- | --- |
+| `.\gradlew.bat runMvStoreSpaceReclamationCheck` | PASS | 覆盖 S2 候选分析、journal recovery、relocation map、scheduler、并发写入和性能基线。 |
+| `.\gradlew.bat runPluginArchitectureCheck` | PASS | 维护 SPI 与插件 capability gate 正常。 |
+| `.\gradlew.bat runMvStoreRecoveryCheck` | PASS | MVStore recovery/corruption 专项通过。 |
+| `.\gradlew.bat runH2LegacySmoke` | PASS | legacy smoke 通过。 |
+| `.\gradlew.bat runH2TestAllCi` | ENV-FLAKY | 完整套件曾出现 localhost 网络 abort/timeout、`mvn` 不在 PATH、lazy-memory `TestXA` 授权异常；相关失败 phase 单独复跑通过。 |
+| `.\gradlew.bat runH2TestAllCiPhaseReport -Ph2CiPhase=additional` | PASS | 复核 `TestTools` / 外部工具相关 phase。 |
+| `.\gradlew.bat runH2TestAllCiPhaseReport -Ph2CiPhase=network-lazy` | PASS | 复核 localhost 网络相关 phase。 |
+| `.\gradlew.bat runH2TestAllCiPhaseReport -Ph2CiPhase=lazy-memory` | PASS | 复核 `TestXA` lazy-memory phase。 |
+
+发布结论：S2 相关门禁均通过；完整 TestAll 的剩余问题表现为环境/完整套件交叉污染类偶发，需要在正式发布流水线中使用干净环境再跑一轮完整 CI。

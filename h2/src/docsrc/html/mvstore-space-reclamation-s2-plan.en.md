@@ -140,3 +140,20 @@ The formal-release default strategy for S2 online reclamation is:
 | Tail compaction | Triggered only with an explicit time budget | Physical tail move / truncate has higher IO impact and should not run implicitly. |
 
 Release decision: if `runMvStoreSpaceReclamationCheck`, `runPluginArchitectureCheck`, recovery/corruption checks, and full CI pass, and the performance baseline does not show a meaningful write-latency regression, S2 can ship with the strategy above.
+
+## Release Gate Record
+
+Latest local release-gate results:
+
+| Command | Result | Notes |
+| --- | --- | --- |
+| `.\gradlew.bat runMvStoreSpaceReclamationCheck` | PASS | Covers S2 candidate analysis, journal recovery, relocation map, scheduler, concurrent writes, and performance baselines. |
+| `.\gradlew.bat runPluginArchitectureCheck` | PASS | Maintenance SPI and plugin capability gates are healthy. |
+| `.\gradlew.bat runMvStoreRecoveryCheck` | PASS | MVStore recovery/corruption checks passed. |
+| `.\gradlew.bat runH2LegacySmoke` | PASS | Legacy smoke passed. |
+| `.\gradlew.bat runH2TestAllCi` | ENV-FLAKY | Full suite observed localhost network abort/timeout, missing `mvn` in PATH, and a lazy-memory `TestXA` authorization failure; the related phases passed when rerun individually. |
+| `.\gradlew.bat runH2TestAllCiPhaseReport -Ph2CiPhase=additional` | PASS | Rechecked the `TestTools` / external-tool phase. |
+| `.\gradlew.bat runH2TestAllCiPhaseReport -Ph2CiPhase=network-lazy` | PASS | Rechecked the localhost-network phase. |
+| `.\gradlew.bat runH2TestAllCiPhaseReport -Ph2CiPhase=lazy-memory` | PASS | Rechecked the `TestXA` lazy-memory phase. |
+
+Release conclusion: all S2-specific gates passed. The remaining full-TestAll issue behaves like an environment / full-suite cross-contamination flake and should be rerun once in a clean release CI environment before cutting the final release.

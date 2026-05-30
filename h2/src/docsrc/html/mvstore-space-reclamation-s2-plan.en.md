@@ -126,3 +126,17 @@ The following capabilities now have request/result, feature-gate, or journal-sca
 | `RECLAMATION_SCHEDULER_DISABLED` | The scheduler is configured off. | Enable `onlineReclamationEnabled(true)` or remove the disabling configuration if background reclamation is desired. |
 | `RECLAMATION_SCHEDULER_BACKOFF` | The scheduler is in its minimum-interval or failure-backoff window. | Normal throttling; it avoids frequent foreground IO contention. |
 | `RECLAMATION_FAILED` | This round failed with an exception. | Check the exception message, preserve files and journal state, and let the next round recover stale journal state first. |
+
+## Formal Release Default Strategy
+
+The formal-release default strategy for S2 online reclamation is:
+
+| Item | Strategy | Reason |
+| --- | --- | --- |
+| Scheduler | Enabled by default in low-intensity mode | It reuses MVStore housekeeping and is limited by minimum interval, failure backoff, rewrite budget, and run-time budget. |
+| Disable switch | Keep `onlineReclamationEnabled(false)` | Operators can immediately disable it if latency, compatibility, or debugging issues appear. |
+| Journal | Disabled by default, enabled per request | Durable journaling expands the recovery and compatibility surface, so the default path avoids journal writes. |
+| Relocation map | Used only when explicit mappings exist | Avoids extra behavior complexity without mappings; stores with feature metadata can be rejected when the gate is disabled. |
+| Tail compaction | Triggered only with an explicit time budget | Physical tail move / truncate has higher IO impact and should not run implicitly. |
+
+Release decision: if `runMvStoreSpaceReclamationCheck`, `runPluginArchitectureCheck`, recovery/corruption checks, and full CI pass, and the performance baseline does not show a meaningful write-latency regression, S2 can ship with the strategy above.

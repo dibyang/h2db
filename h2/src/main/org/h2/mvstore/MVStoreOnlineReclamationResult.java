@@ -22,6 +22,9 @@ public final class MVStoreOnlineReclamationResult {
     private final int afterFillRate;
     private final int beforeChunksFillRate;
     private final int afterChunksFillRate;
+    private final long beforeEstimatedReclaimableBytes;
+    private final long afterEstimatedReclaimableBytes;
+    private final long estimatedReclaimedBytes;
     private final boolean rewritten;
     private final ArrayList<Integer> candidateChunks;
 
@@ -36,6 +39,9 @@ public final class MVStoreOnlineReclamationResult {
         afterFillRate = after.getFillRate();
         beforeChunksFillRate = before.getChunksFillRate();
         afterChunksFillRate = after.getChunksFillRate();
+        beforeEstimatedReclaimableBytes = before.getEstimatedReclaimableBytes();
+        afterEstimatedReclaimableBytes = after.getEstimatedReclaimableBytes();
+        estimatedReclaimedBytes = Math.max(0L, beforeEstimatedReclaimableBytes - afterEstimatedReclaimableBytes);
         this.rewritten = rewritten;
         this.candidateChunks = candidateChunks;
     }
@@ -72,6 +78,18 @@ public final class MVStoreOnlineReclamationResult {
         return afterChunksFillRate;
     }
 
+    public long getBeforeEstimatedReclaimableBytes() {
+        return beforeEstimatedReclaimableBytes;
+    }
+
+    public long getAfterEstimatedReclaimableBytes() {
+        return afterEstimatedReclaimableBytes;
+    }
+
+    public long getEstimatedReclaimedBytes() {
+        return estimatedReclaimedBytes;
+    }
+
     public boolean isRewritten() {
         return rewritten;
     }
@@ -93,6 +111,9 @@ public final class MVStoreOnlineReclamationResult {
                 ", afterFillRate=" + afterFillRate +
                 ", beforeChunksFillRate=" + beforeChunksFillRate +
                 ", afterChunksFillRate=" + afterChunksFillRate +
+                ", beforeEstimatedReclaimableBytes=" + beforeEstimatedReclaimableBytes +
+                ", afterEstimatedReclaimableBytes=" + afterEstimatedReclaimableBytes +
+                ", estimatedReclaimedBytes=" + estimatedReclaimedBytes +
                 ", rewritten=" + rewritten +
                 ", candidateChunks=" + candidateChunks;
     }

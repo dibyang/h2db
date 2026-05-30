@@ -92,6 +92,8 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         runScenario("T-S2-RECLAMATION-COORDINATOR-RUN-01", this::testReclamationCoordinatorRunsBoundedRewrite);
         runScenario("T-S2-RECLAMATION-COORDINATOR-SKIP-01", this::testReclamationCoordinatorSkipsWithoutCandidates);
         runScenario("T-S2-RECLAMATION-REQUEST-VALIDATION-01", this::testReclamationRequestValidation);
+        runScenario("T-S2-PAGE-RELOCATION-OPEN-MAP-01", this::testPageRelocationReportsOpenMapProgress);
+        runScenario("T-S2-PAGE-RELOCATION-LAZY-MAP-01", this::testPageRelocationCanUseLazyOpenedMaps);
 
         if (!failures.isEmpty()) {
             fail("MVStore space reclamation scenario failures: " + failures);
@@ -637,6 +639,7 @@ public class TestMVStoreSpaceReclamation extends TestBase {
             assertTrue(result.isRewritten());
             assertTrue(result.getCandidateChunks().size() > 0);
             assertTrue(result.getAfterChunksFillRate() >= result.getBeforeChunksFillRate());
+            assertTrue(result.getBeforeEstimatedReclaimableBytes() > 0L);
             assertTrue(result.getDiagnosticSummary().contains("RECLAMATION_ROUND_FINISHED"));
             closeStore(store);
             store = null;
@@ -678,6 +681,50 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         expectIllegalArgument(() -> new MVStoreReclamationRequest.Builder().maxCandidateChunks(0));
         expectIllegalArgument(() -> new MVStoreReclamationRequest.Builder().maxLiveBytesToRewrite(-1));
         expectIllegalArgument(() -> new MVStoreReclamationRequest.Builder().maxRunMillis(-1));
+    }
+
+    private void testPageRelocationReportsOpenMapProgress() {
+        String base = mvStoreFile("pageRelocationOpenMap");
+        MVStore store = null;
+        try {
+            createBloatedStore(base);
+            store = new MVStore.Builder().fileName(base).autoCommitDisabled().autoCompactFillRate(0).open();
+            store.setRetentionTime(0);
+            store.openMap("data");
+
+            MVStoreOnlineReclamationResult result = MVStoreReclamationCoordinator.run(store,
+                    new MVStoreReclamationRequest.Builder().targetFillRate(100).build());
+            assertEquals(MVStoreReclamationStatus.SUCCESS, result.getStatus());
+            assertTrue(result.isRewritten());
+            assertTrue(result.getBeforeEstimatedReclaimableBytes() >= result.getEstimatedReclaimedBytes());
+            assertTrue(result.getDiagnosticSummary().contains("estimatedReclaimedBytes="));
+            closeStore(store);
+            store = null;
+        } finally {
+            closeStoreImmediately(store);
+            deleteFilesUnlessKept(base);
+        }
+    }
+
+    private void testPageRelocationCanUseLazyOpenedMaps() {
+        String base = mvStoreFile("pageRelocationLazyMap");
+        MVStore store = null;
+        try {
+            createBloatedStore(base);
+            store = new MVStore.Builder().fileName(base).autoCommitDisabled().autoCompactFillRate(0).open();
+            store.setRetentionTime(0);
+
+            MVStoreOnlineReclamationResult result = MVStoreReclamationCoordinator.run(store,
+                    new MVStoreReclamationRequest.Builder().targetFillRate(100).build());
+            assertEquals(MVStoreReclamationStatus.SUCCESS, result.getStatus());
+            assertTrue(result.isRewritten());
+            assertTrue(result.getCandidateChunks().size() > 0);
+            closeStore(store);
+            store = null;
+        } finally {
+            closeStoreImmediately(store);
+            deleteFilesUnlessKept(base);
+        }
     }
 
     private void expectFault(FaultPoint point, Scenario scenario) {

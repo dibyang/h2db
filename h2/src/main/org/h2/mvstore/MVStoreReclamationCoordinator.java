@@ -49,7 +49,7 @@ public final class MVStoreReclamationCoordinator {
         }
         MVStoreReclamationAnalysis after = MVStoreReclamationAnalyzer.analyze(store, request.getTargetFillRate());
         if (!rewritten) {
-            return result(MVStoreReclamationStatus.NO_PROGRESS, "NO_RECLAMATION_PROGRESS", before, after,
+            return result(MVStoreReclamationStatus.NO_PROGRESS, "NO_OPEN_MAP_RELOCATION_PROGRESS", before, after,
                     false, selected);
         }
         if (request.getMaxRunMillis() > 0L && System.currentTimeMillis() - start > request.getMaxRunMillis()) {

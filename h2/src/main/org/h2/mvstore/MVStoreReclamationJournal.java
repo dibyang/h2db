@@ -18,6 +18,7 @@ final class MVStoreReclamationJournal {
     private static final String JOB = PREFIX + "job";
     private static final String PHASE = PREFIX + "phase";
     private static final String CANDIDATES = PREFIX + "candidates";
+    private static final String PUBLISH = PREFIX + "publish";
 
     private final MVStore store;
     private final MVMap<String, String> metaMap;
@@ -43,6 +44,11 @@ final class MVStoreReclamationJournal {
         store.commit();
     }
 
+    void publish() {
+        metaMap.put(PUBLISH, "true");
+        phase("PUBLISHED");
+    }
+
     void complete() {
         removeJournalKeys(metaMap);
         store.commit();
@@ -57,9 +63,11 @@ final class MVStoreReclamationJournal {
             return new MVStoreReclamationRecovery(false, "NO_RECLAMATION_JOURNAL");
         }
         String phase = metaMap.get(PHASE);
+        boolean published = "true".equals(metaMap.get(PUBLISH));
         removeJournalKeys(metaMap);
         store.commit();
-        return new MVStoreReclamationRecovery(true, "RECOVERED_RECLAMATION_JOURNAL phase=" + phase);
+        return new MVStoreReclamationRecovery(true, (published ? "RECOVERED_PUBLISHED_RECLAMATION_JOURNAL"
+                : "RECOVERED_UNPUBLISHED_RECLAMATION_JOURNAL") + " phase=" + phase);
     }
 
     static void writeRecoveryMarkerForTest(MVStore store, String phase) {
@@ -71,7 +79,8 @@ final class MVStoreReclamationJournal {
     }
 
     private static boolean hasJournal(MVMap<String, String> metaMap) {
-        return metaMap.get(JOB) != null || metaMap.get(PHASE) != null || metaMap.get(CANDIDATES) != null;
+        return metaMap.get(JOB) != null || metaMap.get(PHASE) != null || metaMap.get(CANDIDATES) != null
+                || metaMap.get(PUBLISH) != null;
     }
 
     private static void removeJournalKeys(MVMap<String, String> metaMap) {

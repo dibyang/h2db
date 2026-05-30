@@ -54,6 +54,7 @@ public final class MVStoreReclamationCoordinator {
         }
         boolean tailCompactionAttempted = false;
         if (rewritten && request.isTailCompactionAllowed() && request.getMaxTailCompactionMillis() > 0) {
+            publish(journal);
             phase(journal, "SHRINKING");
             store.compactFile(request.getMaxTailCompactionMillis());
             tailCompactionAttempted = true;
@@ -64,6 +65,7 @@ public final class MVStoreReclamationCoordinator {
             return result(MVStoreReclamationStatus.NO_PROGRESS, "NO_OPEN_MAP_RELOCATION_PROGRESS", before, after,
                     false, request, tailCompactionAttempted, selected);
         }
+        publish(journal);
         complete(journal);
         if (request.getMaxRunMillis() > 0L && System.currentTimeMillis() - start > request.getMaxRunMillis()) {
             return result(MVStoreReclamationStatus.SUCCESS, "RECLAMATION_PAUSED_BY_TIME_BUDGET", before,
@@ -109,6 +111,12 @@ public final class MVStoreReclamationCoordinator {
     private static void complete(MVStoreReclamationJournal journal) {
         if (journal != null) {
             journal.complete();
+        }
+    }
+
+    private static void publish(MVStoreReclamationJournal journal) {
+        if (journal != null) {
+            journal.publish();
         }
     }
 }

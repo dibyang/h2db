@@ -98,6 +98,10 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         runScenario("T-S2-PAGE-RELOCATION-LAZY-MAP-01", this::testPageRelocationCanUseLazyOpenedMaps);
         runScenario("T-S2-RECLAMATION-JOURNAL-CLEANUP-01", this::testReclamationJournalIsCleanedAfterRun);
         runScenario("T-S2-RECLAMATION-JOURNAL-RECOVER-EMPTY-01", this::testReclamationJournalRecoverWithoutJournal);
+        runScenario("T-S2-RECLAMATION-JOURNAL-RECOVER-PUBLISHED-01",
+                this::testReclamationJournalRecoversPublishedMarker);
+        runScenario("T-S2-RECLAMATION-JOURNAL-RECOVER-UNPUBLISHED-01",
+                this::testReclamationJournalRecoversUnpublishedMarker);
         runScenario("T-S2-RELOCATION-MAP-FEATURE-GATE-01", this::testRelocationMapFeatureGate);
         runScenario("T-S2-TAIL-MOVER-BUDGET-01", this::testTailMoverRunsOnlyWithExplicitBudget);
         runScenario("T-S2-SCHEDULER-DISABLED-01", this::testSchedulerIsDisabledByDefault);
@@ -773,6 +777,46 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         }
     }
 
+    private void testReclamationJournalRecoversPublishedMarker() {
+        String base = mvStoreFile("reclamationJournalRecoverPublished");
+        MVStore store = null;
+        try {
+            deleteFiles(base);
+            createParentDirectories(base);
+            store = new MVStore.Builder().fileName(base).autoCommitDisabled().open();
+            writeReclamationJournalMarker(store, "PUBLISHED", true);
+            MVStoreReclamationRecovery recovery = MVStoreReclamationCoordinator.recover(store);
+            assertTrue(recovery.isRecovered());
+            assertTrue(recovery.getMessage().contains("RECOVERED_PUBLISHED_RECLAMATION_JOURNAL"));
+            assertNoReclamationJournal(store);
+            closeStore(store);
+            store = null;
+        } finally {
+            closeStoreImmediately(store);
+            deleteFilesUnlessKept(base);
+        }
+    }
+
+    private void testReclamationJournalRecoversUnpublishedMarker() {
+        String base = mvStoreFile("reclamationJournalRecoverUnpublished");
+        MVStore store = null;
+        try {
+            deleteFiles(base);
+            createParentDirectories(base);
+            store = new MVStore.Builder().fileName(base).autoCommitDisabled().open();
+            writeReclamationJournalMarker(store, "EVACUATING", false);
+            MVStoreReclamationRecovery recovery = MVStoreReclamationCoordinator.recover(store);
+            assertTrue(recovery.isRecovered());
+            assertTrue(recovery.getMessage().contains("RECOVERED_UNPUBLISHED_RECLAMATION_JOURNAL"));
+            assertNoReclamationJournal(store);
+            closeStore(store);
+            store = null;
+        } finally {
+            closeStoreImmediately(store);
+            deleteFilesUnlessKept(base);
+        }
+    }
+
     private void testRelocationMapFeatureGate() {
         String base = mvStoreFile("relocationMapFeatureGate");
         MVStore store = null;
@@ -875,6 +919,25 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         } catch (Exception e) {
             throw new AssertionError(e);
         }
+    }
+
+    private static void writeReclamationJournalMarker(MVStore store, String phase, boolean published) {
+        MVMap<String, String> meta = store.getMetaMap();
+        meta.put("reclaim.s2.job", "test");
+        meta.put("reclaim.s2.phase", phase);
+        meta.put("reclaim.s2.candidates", "[]");
+        if (published) {
+            meta.put("reclaim.s2.publish", "true");
+        }
+        store.commit();
+    }
+
+    private void assertNoReclamationJournal(MVStore store) {
+        MVMap<String, String> meta = store.getMetaMap();
+        assertNull(meta.get("reclaim.s2.job"));
+        assertNull(meta.get("reclaim.s2.phase"));
+        assertNull(meta.get("reclaim.s2.candidates"));
+        assertNull(meta.get("reclaim.s2.publish"));
     }
 
     private void expectIllegalArgument(Scenario scenario) {

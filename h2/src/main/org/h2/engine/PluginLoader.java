@@ -11,6 +11,7 @@ import java.util.ServiceLoader;
 
 import org.h2.api.H2Plugin;
 import org.h2.api.PluginDependency;
+import org.h2.api.PluginProvider;
 import org.h2.message.DbException;
 import org.h2.util.JdbcUtils;
 import org.h2.util.StringUtils;
@@ -101,6 +102,7 @@ public final class PluginLoader {
     }
 
     private static void validateVersionAndSecurity(PluginRegistry registry, H2Plugin plugin, String className) {
+        validatePluginDescriptor(plugin, className);
         String range = plugin.getH2VersionRange();
         if (!isVersionInRange(Constants.VERSION, range)) {
             throw DbException.getUnsupportedException("Configured plugin class " + className
@@ -128,7 +130,7 @@ public final class PluginLoader {
         } while (progressed);
         for (H2Plugin plugin : plugins) {
             if (!registered.contains(plugin.getId())) {
-                throw missingDependencyException(registry, registered, plugin);
+                throw unresolvedDependencyException(registry, registered, plugins, plugin);
             }
         }
     }
@@ -143,16 +145,57 @@ public final class PluginLoader {
         return true;
     }
 
-    private static DbException missingDependencyException(PluginRegistry registry, HashSet<String> registered,
-            H2Plugin plugin) {
+    private static DbException unresolvedDependencyException(PluginRegistry registry, HashSet<String> registered,
+            ArrayList<H2Plugin> plugins, H2Plugin plugin) {
+        HashSet<String> discovered = new HashSet<>();
+        for (H2Plugin discoveredPlugin : plugins) {
+            discovered.add(discoveredPlugin.getId());
+        }
         for (PluginDependency dependency : plugin.getDependencies()) {
-            if (!registry.hasPlugin(dependency.getPluginId()) && !registered.contains(dependency.getPluginId())) {
+            if (!registry.hasPlugin(dependency.getPluginId()) && !registered.contains(dependency.getPluginId())
+                    && !discovered.contains(dependency.getPluginId())) {
                 return DbException.getUnsupportedException("Configured plugin dependency is missing: plugin="
                         + plugin.getId() + ", dependency=" + dependency.getPluginId()
                         + ", version=" + dependency.getVersion());
             }
         }
         return DbException.getUnsupportedException("Configured plugin dependency cycle: plugin=" + plugin.getId());
+    }
+
+    private static void validatePluginDescriptor(H2Plugin plugin, String className) {
+        if (plugin == null) {
+            throw DbException.getUnsupportedException("Configured plugin descriptor is invalid: class=" + className
+                    + ", reason=plugin is null");
+        }
+        String pluginId = requireNonBlank(plugin.getId(), "plugin id", className);
+        requireNonBlank(plugin.getVersion(), "plugin version", className);
+        Iterable<? extends PluginProvider> providers = plugin.getProviders();
+        if (providers == null) {
+            throw DbException.getUnsupportedException("Configured plugin descriptor is invalid: class=" + className
+                    + ", plugin=" + pluginId + ", reason=providers are null");
+        }
+        boolean hasProvider = false;
+        for (PluginProvider provider : providers) {
+            if (provider == null) {
+                throw DbException.getUnsupportedException("Configured plugin descriptor is invalid: class="
+                        + className + ", plugin=" + pluginId + ", reason=provider is null");
+            }
+            requireNonBlank(provider.getType(), "provider type", className);
+            requireNonBlank(provider.getId(), "provider id", className);
+            hasProvider = true;
+        }
+        if (!hasProvider) {
+            throw DbException.getUnsupportedException("Configured plugin descriptor is invalid: class=" + className
+                    + ", plugin=" + pluginId + ", reason=no providers");
+        }
+    }
+
+    private static String requireNonBlank(String value, String name, String className) {
+        if (value == null || value.trim().isEmpty()) {
+            throw DbException.getUnsupportedException("Configured plugin descriptor is invalid: class=" + className
+                    + ", reason=" + name + " is empty");
+        }
+        return value;
     }
 
     static boolean isVersionInRange(String version, String range) {

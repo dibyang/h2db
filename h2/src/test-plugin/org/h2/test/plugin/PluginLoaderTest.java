@@ -13,6 +13,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Arrays;
+import java.util.Collections;
 
 import org.h2.api.H2Plugin;
 import org.h2.api.PluginDependency;
@@ -107,6 +108,45 @@ public class PluginLoaderTest {
 
         assertTrue(e.getMessage().contains("Configured plugin dependency is missing"));
         assertTrue(e.getMessage().contains("dependency=missing.plugin"));
+    }
+
+    /**
+     * T-PLUGIN-P3-DEPENDENCY-CYCLE-01.
+     */
+    @Test
+    public void rejectsPluginDependencyCycle() {
+        String classes = CycleAPlugin.class.getName() + "," + CycleBPlugin.class.getName();
+        SQLException e = assertThrows(SQLException.class, () ->
+                DriverManager.getConnection(url("pluginDependencyCycle", classes), "sa", ""));
+
+        assertTrue(e.getMessage().contains("Configured plugin dependency cycle"));
+        assertTrue(e.getMessage().contains("plugin=test.cycle.a"));
+    }
+
+    /**
+     * T-PLUGIN-P3-INVALID-DESCRIPTOR-01.
+     */
+    @Test
+    public void rejectsInvalidPluginDescriptorBeforeSecurityValidation() {
+        SQLException e = assertThrows(SQLException.class, () ->
+                DriverManager.getConnection(url("pluginInvalidDescriptor", EmptyIdPlugin.class.getName()),
+                        "sa", ""));
+
+        assertTrue(e.getMessage().contains("Configured plugin descriptor is invalid"));
+        assertTrue(e.getMessage().contains("plugin id is empty"));
+    }
+
+    /**
+     * T-PLUGIN-P3-NO-PROVIDER-01.
+     */
+    @Test
+    public void rejectsPluginWithoutProviders() {
+        SQLException e = assertThrows(SQLException.class, () ->
+                DriverManager.getConnection(url("pluginNoProvider", NoProviderPlugin.class.getName()),
+                        "sa", ""));
+
+        assertTrue(e.getMessage().contains("Configured plugin descriptor is invalid"));
+        assertTrue(e.getMessage().contains("reason=no providers"));
     }
 
     /**
@@ -318,6 +358,71 @@ public class PluginLoaderTest {
     /**
      * 测试用非法 provider type 插件。
      */
+    /**
+     * 测试用依赖环插件 A。
+     */
+    public static final class CycleAPlugin extends ConfiguredPlugin {
+        @Override
+        public String getId() {
+            return "test.cycle.a";
+        }
+
+        @Override
+        public Iterable<PluginDependency> getDependencies() {
+            return Arrays.asList(new PluginDependency("test.cycle.b", "1"));
+        }
+
+        @Override
+        public Iterable<? extends PluginProvider> getProviders() {
+            return Arrays.asList(new TestTableProvider("cycle_a_table"));
+        }
+    }
+
+    /**
+     * 测试用依赖环插件 B。
+     */
+    public static final class CycleBPlugin extends ConfiguredPlugin {
+        @Override
+        public String getId() {
+            return "test.cycle.b";
+        }
+
+        @Override
+        public Iterable<PluginDependency> getDependencies() {
+            return Arrays.asList(new PluginDependency("test.cycle.a", "1"));
+        }
+
+        @Override
+        public Iterable<? extends PluginProvider> getProviders() {
+            return Arrays.asList(new TestTableProvider("cycle_b_table"));
+        }
+    }
+
+    /**
+     * 测试用无效 plugin id 插件。
+     */
+    public static final class EmptyIdPlugin extends ConfiguredPlugin {
+        @Override
+        public String getId() {
+            return " ";
+        }
+    }
+
+    /**
+     * 测试用无 provider 插件。
+     */
+    public static final class NoProviderPlugin extends ConfiguredPlugin {
+        @Override
+        public String getId() {
+            return "test.no.provider";
+        }
+
+        @Override
+        public Iterable<? extends PluginProvider> getProviders() {
+            return Collections.emptyList();
+        }
+    }
+
     public static final class ForbiddenProviderPlugin extends ConfiguredPlugin {
         @Override
         public Iterable<? extends PluginProvider> getProviders() {

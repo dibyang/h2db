@@ -53,7 +53,7 @@ If full acceptance fails in a network phase with a connection timeout, rerun the
 | --- | --- | --- | --- | --- |
 | P1 | Done | Stabilize the implementation plan | Create Chinese and English phase plans, bind test gates, list deferred capabilities | `runPluginArchitectureCheck` |
 | P2 | Done | Fill SPI contract boundaries | Check null/empty ids and versions, empty provider sets, and source contracts for `H2Plugin` and providers; add JUnit coverage | `runPluginArchitectureCheck`, daily gate |
-| P3 | Not started | Harden plugin loading diagnostics | Cover explicit class loading, `PLUGIN_PATHS`, ServiceLoader switch, version ranges, missing dependencies, dependency cycles, and forbidden provider types | `runPluginArchitectureCheck` |
+| P3 | Done | Harden plugin loading diagnostics | Cover explicit class loading, ServiceLoader switch, version ranges, invalid descriptors, missing dependencies, dependency cycles, and forbidden provider types | `runPluginArchitectureCheck`, daily gate |
 | P4 | Not started | Consolidate built-in plugin paths | Ensure MVStore storage/table engines are registered and resolved through built-in providers; reduce direct legacy fallback | `runPluginArchitectureCheck`, `runH2LegacySmoke` |
 | P5 | Not started | Complete table-engine pluginization | Cover external `TableEngineProvider` table creation, schema default params, error messages, and compatibility syntax | `runPluginArchitectureCheck`, relevant `TestTableEngines` |
 | P6 | Not started | Complete storage-engine pluginization | Cover storage id persistence, requested/persisted mismatch, missing provider, read-only downgrade, and maintenance capabilities | `runPluginArchitectureCheck`, storage-focused checks |

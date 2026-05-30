@@ -120,6 +120,8 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         runScenario("T-S2-DEFAULT-HOUSEKEEPING-ENABLED-01", this::testDefaultHousekeepingRunsOnlineReclamation);
         runScenario("T-S2-DEFAULT-HOUSEKEEPING-DISABLED-01", this::testHousekeepingCanDisableOnlineReclamation);
         runScenario("T-S2-CONCURRENT-WRITE-RECLAMATION-01", this::testConcurrentWriteDuringOnlineReclamation);
+        runScenario("T-S2-PERF-NO-CANDIDATE-FAST-01", this::testNoCandidateReclamationReturnsQuickly);
+        runScenario("T-S2-PERF-BOUNDED-SPACE-BASELINE-01", this::testBoundedReclamationDoesNotGrowFile);
 
         if (!failures.isEmpty()) {
             fail("MVStore space reclamation scenario failures: " + failures);
@@ -1166,6 +1168,52 @@ public class TestMVStoreSpaceReclamation extends TestBase {
             closeStore(store);
             store = null;
             assertConcurrentMarkersReadable(base);
+        } finally {
+            closeStoreImmediately(store);
+            deleteFilesUnlessKept(base);
+        }
+    }
+
+    private void testNoCandidateReclamationReturnsQuickly() {
+        String base = mvStoreFile("noCandidateFast");
+        MVStore store = null;
+        try {
+            deleteFiles(base);
+            createParentDirectories(base);
+            store = new MVStore.Builder().fileName(base).autoCommitDisabled().autoCompactFillRate(0).open();
+            MVMap<Integer, byte[]> data = store.openMap("data");
+            data.put(1, new byte[] { MARKER });
+            store.commit();
+            long start = System.currentTimeMillis();
+            MVStoreOnlineReclamationResult result = MVStoreReclamationCoordinator.run(store,
+                    new MVStoreReclamationRequest.Builder().targetFillRate(10).build());
+            long elapsed = System.currentTimeMillis() - start;
+            assertEquals(MVStoreReclamationStatus.SKIPPED, result.getStatus());
+            assertEquals(MVStoreReclamationCode.NO_RECLAMATION_CANDIDATE, result.getMessage());
+            assertTrue("no-candidate path was unexpectedly slow: " + elapsed, elapsed < 5_000L);
+            closeStore(store);
+            store = null;
+        } finally {
+            closeStoreImmediately(store);
+            deleteFilesUnlessKept(base);
+        }
+    }
+
+    private void testBoundedReclamationDoesNotGrowFile() {
+        String base = mvStoreFile("boundedSpaceBaseline");
+        MVStore store = null;
+        try {
+            createBloatedStore(base);
+            store = new MVStore.Builder().fileName(base).autoCommitDisabled().autoCompactFillRate(0).open();
+            store.setRetentionTime(0);
+            store.openMap("data");
+            MVStoreOnlineReclamationResult result = MVStoreReclamationCoordinator.run(store,
+                    new MVStoreReclamationRequest.Builder().targetFillRate(100).maxTailCompactionMillis(50).build());
+            assertEquals(MVStoreReclamationStatus.SUCCESS, result.getStatus());
+            assertTrue(result.getBeforeFileSize() >= result.getAfterFileSize());
+            assertTrue(result.getBeforeEstimatedReclaimableBytes() >= result.getEstimatedReclaimedBytes());
+            closeStore(store);
+            store = null;
         } finally {
             closeStoreImmediately(store);
             deleteFilesUnlessKept(base);

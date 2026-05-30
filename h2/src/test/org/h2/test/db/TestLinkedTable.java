@@ -88,16 +88,18 @@ public class TestLinkedTable extends TestDb {
             return;
         }
         deleteDb("linkedTable");
-        Connection connMain = DriverManager.getConnection("jdbc:h2:mem:linkedTable");
+        String url = getURL("mem:linkedTable", true);
+        String user = getUser(), password = getPassword();
+        Connection connMain = DriverManager.getConnection(url, user, password);
         Statement statMain = connMain.createStatement();
         statMain.execute("create table test(id identity, name varchar default 'test')");
 
         Connection conn = getConnection("linkedTable");
         Statement stat = conn.createStatement();
         stat.execute("create linked table test1('', " +
-                "'jdbc:h2:mem:linkedTable', '', '', 'TEST') emit updates");
+                "'" + url + "', '" + user + "', '" + password + "', 'TEST') emit updates");
         stat.execute("create linked table test2('', " +
-                "'jdbc:h2:mem:linkedTable', '', '', 'TEST')");
+                "'" + url + "', '" + user + "', '" + password + "', 'TEST')");
         stat.execute("insert into test1 values(default, default)");
         stat.execute("insert into test2 values(default, default)");
         stat.execute("merge into test2 values(3, default)");

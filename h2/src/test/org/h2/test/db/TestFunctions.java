@@ -1622,6 +1622,8 @@ public class TestFunctions extends TestDb implements AggregateFunction {
         deleteDb("functions");
         Connection conn = getConnection("functions");
         Statement stat = conn.createStatement();
+        Locale old = Locale.getDefault();
+        try {
         Locale.setDefault(new Locale("en"));
 
         Locale locale = Locale.getDefault();
@@ -1880,7 +1882,10 @@ public class TestFunctions extends TestDb implements AggregateFunction {
 
         assertResult("10,000,000.", stat,
                 "SELECT TO_CHAR(CAST(10000000 AS DOUBLE PRECISION), 'FM999,999,999.99') FROM DUAL");
-        conn.close();
+        } finally {
+            Locale.setDefault(old);
+            conn.close();
+        }
     }
 
     private void testToCharFromText() throws SQLException {

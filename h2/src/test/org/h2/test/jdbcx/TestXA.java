@@ -186,9 +186,9 @@ public class TestXA extends TestDb {
 
     private void testXAAutoCommit() throws Exception {
         JdbcDataSource ds = new JdbcDataSource();
-        ds.setURL("jdbc:h2:mem:test");
-        ds.setUser("sa");
-        ds.setPassword("");
+        ds.setURL(getURL("mem:testXAAutoCommit", true));
+        ds.setUser(getUser());
+        ds.setPassword(getPassword());
         XAConnection xa = ds.getXAConnection();
         MyXid xid = new MyXid();
         xa.getXAResource().start(xid,

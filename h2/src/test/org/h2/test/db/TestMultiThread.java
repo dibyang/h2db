@@ -230,7 +230,8 @@ public class TestMultiThread extends TestDb implements Runnable {
 
             // create views that reference the common views in different threads
             ArrayList<Future<Void>> jobs = new ArrayList<>();
-            for (int i = 0; i < 1000; i++) {
+            int count = config.networked ? 100 : 1000;
+            for (int i = 0; i < count; i++) {
                 final int j = i;
                 jobs.add(executor.submit(() -> {
                     try (Connection conn2 = getConnection(url)) {

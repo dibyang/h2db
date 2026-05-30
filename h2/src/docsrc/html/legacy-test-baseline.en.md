@@ -28,7 +28,7 @@ The latest full `runH2TestAllCi` run can compile and start the original suite, b
 | JDBC updatable result sets | `The result set is not updatable`, result set type/concurrency assertions | Confirmed to be primarily caused by metadata table type filtering depending on a non-sorted array; after restoring `BASE TABLE` filtering, related classes were moved into smoke |
 | Compatibility mode assertions | Oracle/MySQL/metadata/keywords expectations differ from current behavior | Metadata table type ordering is aligned with the current `SYS TABLE` behavior and `TestMetaData` was moved into smoke; additional compatibility differences from full `TestAll` should still be triaged by mode |
 | Environment-sensitive assertions | Timestamp precision, Chinese locale month names, Web Console output | Fix locale/timezone or rewrite assertions around stable semantics |
-| Full `TestAll ci` runtime | The unpartitioned `runH2TestAllCi` attempt exceeded a 15 minute local timeout | All named phases now pass with `MODE=REGULAR`; continue with the full entrypoint as the final acceptance check |
+| Full `TestAll ci` runtime | The unpartitioned `runH2TestAllCi` attempt exceeded a 15 minute local timeout | All named phases and the full `runH2TestAllCi` entrypoint now pass with `MODE=REGULAR` |
 
 ## Working Rules
 
@@ -40,7 +40,7 @@ The latest full `runH2TestAllCi` run can compile and start the original suite, b
 
 ## Phases
 
-Currently passing named `TestAll ci` phases: `memory`, `additional`, `utils`, `lazy-memory`, `disk`, `disk-additional`, `network-memory`, `network-lazy`, and `encrypted-disk`. The next step is final acceptance with the full `runH2TestAllCi` entrypoint.
+Currently passing named `TestAll ci` phases: `memory`, `additional`, `utils`, `lazy-memory`, `disk`, `disk-additional`, `network-memory`, `network-lazy`, and `encrypted-disk`. The full `runH2TestAllCi` entrypoint also passes local acceptance.
 
 | Phase | Goal | Done when |
 | --- | --- | --- |
@@ -51,5 +51,5 @@ Currently passing named `TestAll ci` phases: `memory`, `additional`, `utils`, `l
 | L5 | Resolve compatibility mode and metadata/keywords failures | `TestMetaData` is moved into smoke and the baseline report currently has no remaining classes |
 | L6 | Stabilize environment-sensitive failures | `TestAll ci` can be run by named phase so locale/timezone/time precision failures can be isolated without blocking the whole suite |
 | L7 | Expand the must-pass group | Fixed baseline report classes are moved into smoke, and the `TestAll ci` `memory` phase passes under the same REGULAR legacy mode policy |
-| L8 | Restore full `runH2TestAllCi` as optional acceptance | All named `TestAll ci` phases pass or have explicit waivers, then the full entrypoint has zero failures or only explicit waivers |
+| L8 | Restore full `runH2TestAllCi` as optional acceptance | All named `TestAll ci` phases pass and the full entrypoint has zero failures |
 | L9 | Fold legacy grouping into the daily development workflow | Documentation, Gradle tasks, and commit checks are aligned |

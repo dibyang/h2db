@@ -28,7 +28,7 @@
 | JDBC 可更新结果集 | `The result set is not updatable`、`TYPE_SCROLL_INSENSITIVE`/`CONCUR_UPDATABLE` 断言不匹配 | 已确认主要由 metadata 表类型过滤误依赖非排序数组触发；`BASE TABLE` 过滤恢复后，相关类已迁入 smoke |
 | 兼容模式断言 | Oracle/MySQL/metadata/keywords 等期望与当前实现不一致 | metadata 表类型顺序已按当前 `SYS TABLE` 行为对齐，`TestMetaData` 已迁入 smoke；后续完整 `TestAll` 中发现的兼容模式差异继续按模式分组治理 |
 | 环境敏感断言 | 时间戳毫秒、Locale 中文月份、Web Console 输出 | 固定 locale/timezone 或调整断言为稳定语义 |
-| 完整 `TestAll ci` 运行时间 | 未拆分的 `runH2TestAllCi` 本地运行超过 15 分钟超时 | 所有命名阶段已在 `MODE=REGULAR` 下通过；继续用完整入口做最终验收 |
+| 完整 `TestAll ci` 运行时间 | 未拆分的 `runH2TestAllCi` 本地运行超过 15 分钟超时 | 所有命名阶段和完整 `runH2TestAllCi` 入口已在 `MODE=REGULAR` 下通过 |
 
 ## 推进规则
 
@@ -40,7 +40,7 @@
 
 ## 分阶段任务
 
-当前已通过的 `TestAll ci` 命名阶段：`memory`、`additional`、`utils`、`lazy-memory`、`disk`、`disk-additional`、`network-memory`、`network-lazy`、`encrypted-disk`。下一步用完整 `runH2TestAllCi` 入口做最终验收。
+当前已通过的 `TestAll ci` 命名阶段：`memory`、`additional`、`utils`、`lazy-memory`、`disk`、`disk-additional`、`network-memory`、`network-lazy`、`encrypted-disk`。完整 `runH2TestAllCi` 入口已通过本地验收。
 
 | 阶段 | 目标 | 完成标准 |
 | --- | --- | --- |
@@ -51,5 +51,5 @@
 | L5 | 治理兼容模式和 metadata/keywords 失败 | `TestMetaData` 已迁入 smoke，baseline report 当前无剩余类 |
 | L6 | 治理环境敏感失败 | `TestAll ci` 支持按阶段运行，可以在不阻塞全量套件的情况下定位 locale、timezone、时间精度类失败 |
 | L7 | 扩大 must-pass 分组 | baseline report 中修复后的类迁入 smoke，且 `TestAll ci` 的 `memory` 阶段在同一 REGULAR legacy mode 策略下通过 |
-| L8 | 恢复完整 `runH2TestAllCi` 作为可选验收 | 所有命名 `TestAll ci` 阶段通过或有明确豁免后，完整入口失败数为 0 或仅剩明确豁免 |
+| L8 | 恢复完整 `runH2TestAllCi` 作为可选验收 | 所有命名 `TestAll ci` 阶段通过，完整入口失败数为 0 |
 | L9 | 将 legacy 分组纳入日常开发规范 | 文档、Gradle 任务和提交检查约定一致 |

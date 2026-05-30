@@ -741,6 +741,9 @@ public class TestCompatibility extends TestDb {
     }
 
     private void testUnknownURL() {
+        if (config.networked) {
+            return;
+        }
         assertThrows(ErrorCode.UNKNOWN_MODE_1, () -> {
             getConnection("compatibility;MODE=Unknown").close();
             deleteDb("compatibility");

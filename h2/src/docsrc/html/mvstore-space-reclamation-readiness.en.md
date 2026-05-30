@@ -1,185 +1,77 @@
-# MVStore Space Reclamation Readiness
+# MVStore Space Reclamation S2 Readiness
 
-This document records whether the codebase, tests, and working rules are ready before starting S2 online space reclamation optimization. Conclusion: the pluginization prerequisite is closed, the MVStore space reclamation scaffolding and dedicated test gate are available, and S2 detailed design and implementation can start. The S2 online optimization main path is partial reclamation, not full-store shadow copy followed by whole-file replacement.
+This document records readiness for the S2 long-term solution. The phase boundary is explicit: S1, the medium-term solution, is complete; S2 is the long-term solution itself, and following space reclamation work is tracked as S2.0-S2.8.
 
-## Background
+## Readiness Conclusion
 
-The previous pluginization work fixed the provider and registry path for storage and table engines, diagnostic output, maintenance capability boundaries, and test gates. Space reclamation should now integrate through the `StorageMaintenance` capability boundary instead of spreading MVStore-specific maintenance logic across generic database flows.
+S2 can start. Pluginization prerequisites are closed, the MVStore storage engine exposes maintenance capabilities through the built-in provider path, and the dedicated test gate is runnable. The S2 main path is chunk/page-level online reclamation inside MVStore, not full-store shadow copy and not a simple wrapper around `compactFile()`.
 
-The current code already contains MVStore space reclamation components: `MVStoreSpaceReclamation`, `MVStoreSpaceReclamationOptions`, `MVStoreSpaceReclamationResult`, `MVStoreSpaceReclamationMaintenance`, `MVStoreSpaceReclamationOperationGate`, `MVStoreSpaceReclamationPhase`, and diagnostic listeners. They cover the base semantics for closed-store compact, shadow preparation, manifests, switch, cleanup, fault injection, and operation gates.
+## Existing Foundation
 
-## Goals
-
-| Goal | Readiness decision |
+| Foundation | Status |
 | --- | --- |
-| Pluginization does not block S2 | Done. The MVStore storage engine exposes maintenance capabilities through the built-in provider path. |
-| A reusable maintenance interface exists | Done. `StorageMaintenance` exposes `compactClosed()`, `compactOnline()`, and `vacuumOnline()`. |
-| A dedicated test gate exists | Done. `runMvStoreSpaceReclamationCheck` can run independently. |
-| A failure and recovery base model exists | Done. Existing tests cover shadow files, manifests, backups, cleanup, and the fault harness. |
-| A full-test baseline is recorded | Done. Full `TestAll ci` localhost network flakes are documented, and focused phase reruns passed. |
+| Maintenance entrypoint | `StorageMaintenance.vacuumOnline()` exists and can serve as the S2 external entrypoint. |
+| Local compact base | `MVStore.compact()`, `MVStore.compactFile()`, `FileStore.rewriteChunks()`, and `RandomAccessStore.compactMoveChunks()` exist. |
+| Offline/fallback scaffolding | `MVStoreSpaceReclamation` provides closed-store shadow compact, manifest, recover, and fault harness basics. |
+| Diagnostics base | `MVStoreSpaceReclamationResult`, listener, phases, and dedicated tests exist. |
+| Test gate | `runMvStoreSpaceReclamationCheck` can run independently. |
+| Pluginization prerequisite | Storage/table providers, maintenance capabilities, diagnostic tables, and JUnit plugin gates are complete. |
 
-## Non-goals
+## S2 Phases
 
-This readiness step does not implement a new reclamation algorithm and does not change the MVStore disk format, SQL semantics, defaults, or plugin loading lifecycle. Hot plugin loading, plugin signing, permission sandboxing, and multi-version plugin resolution remain later pluginization work and must not be mixed into the first S2 reclamation round.
-
-## Current Flows
-
-| Existing entrypoint | Current behavior | S2 value |
+| Phase | Goal | Main Deliverable |
 | --- | --- | --- |
-| `MVStoreSpaceReclamation.compactClosedStore()` | Creates a compacted shadow for a closed store, verifies it, then replaces the source file | Reliable offline compact baseline |
-| `MVStoreSpaceReclamation.compactToShadow()` | Prepares `.reclaim.shadow` and `.reclaim.manifest` | Base for the online prepare phase |
-| `MVStoreSpaceReclamation.switchToShadow()` | Verifies the manifest and source fingerprint, then switches the shadow in | Reference for offline compact or later fallback publish |
-| `MVStoreSpaceReclamation.cleanUp()` / `recover()` | Cleans or recovers intermediate files | Base for failure recovery and idempotent retry |
-| `MVStoreMaintenance.vacuumOnline()` | Currently delegates to `Store.compactFile(50)` | S2 should upgrade this to the real online reclamation boundary |
-| `MVStoreSpaceReclamationMaintenance` | Provides read, write, and switch decisions | Can be extended for long transactions and write gates |
+| S2.0 | Close the design | Chinese/English long-term design, phase plan, confirmed test gates. |
+| S2.1 | Observability and decision | Chunk liveness snapshot, candidate scoring, dry-run result. |
+| S2.2 | Govern existing partial compact | Coordinator wiring, budgets, no-progress diagnostics. |
+| S2.3 | Page relocation main path | Live-page relocation for open maps, long transaction skip, unknown map skip. |
+| S2.4 | Persistent evacuation journal | Crash recovery, continuation, or cleanup of unfinished jobs. |
+| S2.5 | Relocation map | Old-version reads for moved pages and long-retention pinning. |
+| S2.6 | Integrated tail mover | Move tail chunks and shrink file after relocation. |
+| S2.7 | Background scheduling | Default off, with idle budget, throttling, and dry-run. |
+| S2.8 | Operationalization | Chinese/English docs, diagnostic table, configuration guide, long-running slow tests. |
 
-## Core Constraints
+## Test Strategy
 
-| Constraint | Description |
+| Level | Requirement |
 | --- | --- |
-| Java 8 | Mainline code must not use syntax or APIs newer than Java 8. |
-| Compatibility | The first S2 round must not change the disk format or require old database migration. |
-| Recoverability | Every shadow, backup, and manifest intermediate state must be cleanable or recoverable. |
-| Observability | New maintenance paths must expose diagnosable states such as skipped, unsupported, busy, and failed. |
-| Test-first work | Every implementation slice needs tests; production code should prefer JUnit, while MVStore compatibility scenarios may continue to use legacy `TestBase` gates. |
-| Repeatable gates | S2 must at least pass `runMvStoreSpaceReclamationCheck`; higher-risk changes should also run the daily gate and related `TestAll ci` phases. |
+| JUnit | Request/result defaults, candidate scoring, budgets, messages, feature flags. |
+| MVStore dedicated | Chunk bloat, page relocation, unknown map, long transaction, tail shrink, no-progress. |
+| Fault injection | Before/after journal publish, interruption during free/shrink, missing relocation map. |
+| Concurrency | Writes during reclamation, long read transactions, close/backup/compact mutual exclusion. |
+| Compatibility | Old database open, new feature flag, unfinished journal recovery, read-only downgrade. |
 
-## Interface Design
-
-The first S2 round should advance through existing interfaces and should not add a public SQL command as the first step.
-
-| Interface | Current state | S2 handling |
-| --- | --- | --- |
-| `StorageMaintenance.vacuumOnline()` | Existing | Use as the main online space reclamation entrypoint and return `StorageMaintenanceResult`. |
-| `StorageMaintenance.compactOnline()` | Existing | Keep lightweight compact semantics separate from vacuum shadow/switch semantics. |
-| `MVStoreSpaceReclamationOptions` | Existing | Review defaults and compatibility before adding online strategy options. |
-| `MVStoreSpaceReclamationResult` | Existing | Add statistics only in a backward-compatible way; do not remove existing fields. |
-| Diagnostic listener | Existing | Any new S2 phase must emit listener events. |
-
-## Data Structures
-
-Current reusable on-disk intermediate files:
-
-| File | Purpose | S2 requirement |
-| --- | --- | --- |
-| `.reclaim.shadow` | Compacted candidate file | Created during prepare and verified before switch. |
-| `.reclaim.backup` | Source file backup | Kept or deleted during publish according to the crash-safe strategy. |
-| `.reclaim.manifest` | Phase, source fingerprint, and shadow information | Every phase transition must remain recoverable and verifiable. |
-
-S2 should not introduce a new persistent metadata version in the first round. If a manifest version is needed later, add read/write compatibility tests first.
-
-## State Machine
-
-Recommended state model based on the existing phases:
-
-```mermaid
-stateDiagram-v2
-    [*] --> IDLE
-    IDLE --> PREPARING: vacuumOnline()
-    PREPARING --> VERIFYING: shadow ready
-    VERIFYING --> SHADOW_READY: validation ok
-    SHADOW_READY --> SWITCHING: gate allows publish
-    SWITCHING --> COMPLETED: source replaced
-    PREPARING --> ABORTED: failure
-    VERIFYING --> ABORTED: validation failure
-    SHADOW_READY --> ABORTED: source changed and no refresh
-    SWITCHING --> RECOVERING: crash / restart
-    RECOVERING --> COMPLETED: source restored or shadow published
-    ABORTED --> IDLE: cleanup
-    COMPLETED --> IDLE: cleanup
-```
-
-## Sequence
-
-The first online reclamation round should be sliced as follows:
-
-1. Collect reclaimable size, file size, fill rate, active transaction state, and operation gate state.
-2. Enter the MVStore-specific maintenance implementation through `StorageMaintenance.vacuumOnline()`.
-3. Generate the shadow and manifest during prepare, while either blocking or detecting writes that would invalidate the source fingerprint.
-4. Verify that the shadow opens, key maps are readable, and the manifest matches the source fingerprint.
-5. Before publish, check long transactions and write gates. If switching is not allowed, return skipped or busy instead of retrying dangerously.
-6. After a successful switch, clean shadow and manifest files and keep or delete the backup according to configuration.
-
-## Error Handling
-
-| Scenario | Expected handling |
-| --- | --- |
-| Source changed | Reject switch by default; explicitly allowed flows may reprepare or use full-copy fallback. |
-| Long transaction blocks switch | Return skipped or busy and expose the reason in diagnostics. |
-| Shadow validation fails | Delete the untrusted shadow and keep the source file unchanged. |
-| Publish is interrupted | Recover through manifest and backup during startup or the next maintenance attempt. |
-| Listener throws | Do not fail the main flow; at most record diagnostic listener failure. |
-| Windows file replacement fails | Keep the source file, return failed or skipped, and never leave an unopened database. |
-
-## Idempotency
-
-`cleanUp()`, `recover()`, repeated prepare, and repeated switch must stay idempotent. S2 code must not assume an operation runs only once; tests need to cover repeated calls and partially completed file combinations.
-
-## Rollback Strategy
-
-The first S2 round should be explicitly triggered and low-risk by default. If a problem is found, rollback can restore the current `Store.compactFile(50)` behavior while keeping the closed-store compact utility. Any publish implementation must ensure that databases remain readable by the existing MVStore after rollback.
-
-## Compatibility
-
-| Dimension | Requirement |
-| --- | --- |
-| Disk format | No change in the first round. |
-| JDBC/SQL | No new default SQL behavior; any future command needs a separate design. |
-| Plugin API | Stay within the `StorageMaintenance` capability boundary and do not expand external plugin lifecycle promises. |
-| Test system | Keep JUnit plugin tests; MVStore space reclamation may continue using legacy `TestBase`, but runnable tests must be managed by Gradle tasks. |
-
-## Rollout
-
-The first S2 round should use explicit triggering and a conservative default, with bounded partial compact as the main path. Automatic background reclamation, threshold scheduling, periodic maintenance threads, and default-on behavior are later phases after the manual entrypoint, diagnostics, and dedicated tests are stable.
-
-## Test Plan
-
-| Level | Coverage | Gate |
-| --- | --- | --- |
-| JUnit | `StorageMaintenance` contracts, result semantics, capability declarations, provider exposure | `runPluginArchitectureCheck` |
-| MVStore dedicated tests | Shadow, manifest, backup, switch, cleanup, fault harness, operation gates | `runMvStoreSpaceReclamationCheck` |
-| Daily gate | Compile, regular checks, legacy smoke | `clean test check build runH2LegacySmoke` |
-| Full acceptance | Full `TestAll ci` | Run for higher-risk phases; document localhost network flakes with focused phase reruns |
-
-Current readiness verification:
+Minimum command for each phase:
 
 ```powershell
 .\gradlew.bat runMvStoreSpaceReclamationCheck
 ```
 
-Result: passed on 2026-05-30.
+When `StorageMaintenance` or plugin capabilities change, also run:
 
-## Risks
+```powershell
+.\gradlew.bat runPluginArchitectureCheck
+```
 
-| Risk | Impact | Mitigation |
-| --- | --- | --- |
-| Partial compact interaction with active transactions is unclear | Reclamation may make no progress or block for too long | Do not wait for long transactions in the first round; return busy/skipped. |
-| Whole-file shadow publish is mistaken for the online main path | IO and recovery complexity may be amplified | S2.1-S2.3 are explicitly partial only; shadow remains offline/fallback review work. |
-| Long transactions block switch | Reclamation may not complete for a long time | Define busy/skipped results and diagnostics. |
-| Windows file replacement differences | Publish failure or backup leftovers | Keep platform-sensitive fault and recovery tests. |
-| Full `TestAll ci` network flakes | Phase acceptance may be noisy | Keep focused phase reruns and baseline records, and do not misclassify network flakes as S2 regressions. |
+Higher-risk phases should also run the daily gate or related `TestAll ci` phase.
 
-## Phased Implementation Plan
+## Non-Main Path
 
-| Phase | Goal | Deliverable | Verification |
-| --- | --- | --- | --- |
-| S2.1 | Define partial reclamation decision and statistics | Diagnostics for reclaimable size, fill rate, and active transactions without introducing full-store shadow | JUnit + `runMvStoreSpaceReclamationCheck` |
-| S2.2 | Wire the `vacuumOnline()` partial maintenance boundary | Move from direct `Store.compactFile(50)` to a diagnosable partial reclamation flow | JUnit + MVStore dedicated tests |
-| S2.3 | Implement partial gate and budget policy | targetFillRate, write gate, long transaction, and no-progress decisions | MVStore dedicated and concurrency tests |
-| S2.4 | Review shadow publish fallback | Decide whether whole-file shadow publish remains offline/fallback only | Fault harness and recovery tests |
-| S2.5 | Complete docs and operational boundaries | Chinese and English usage notes, limits, and diagnostics | Docs review + daily gate |
-| S2.6 | Evaluate automatic scheduling | Thresholds, background thread, throttling, default-off policy | Separate design before implementation |
-
-## Decisions To Make
-
-| Question | Suggested default |
+| Capability | Handling |
 | --- | --- |
-| Should the first round support whole-file crash-safe publish? | No as the online main path; keep it as offline/fallback capability and review in S2.4. |
-| Should catch-up be allowed while writes continue? | The partial main path does not use shadow catch-up; review separately if whole-file shadow returns later. |
-| Should a SQL command be added? | No in the first round; stabilize the Java maintenance API first. |
-| Should automatic background reclamation be part of S2? | Not in the first round; design it separately as S2.6. |
-| Should legacy tests remain? | Yes, but all runnable legacy tests must be managed by Gradle tasks. |
+| Full-store shadow publish | Keep as offline compact or fallback capability, not the S2 online main path. |
+| SQL command | Not an S2 starting point; revisit after the Java maintenance API and diagnostics are stable. |
+| Plugin hot loading/signing/permission sandbox | Later pluginization work, not part of S2. |
 
-## Readiness Conclusion
+## Decisions Needed
 
-Space reclamation optimization can start. The next step is the detailed S2 design, with explicit decisions on partial compact thresholds, targetFillRate, long transaction gates, no-progress semantics, and test gates. Whole-file shadow publish should only be reviewed as an offline/fallback path. Implementation should then proceed from S2.1 to S2.5, with a local commit after each completed phase.
+| Question | Recommendation |
+| --- | --- |
+| Should relocation map be allowed? | Yes, but behind a feature flag, and old versions must reject write-open. |
+| Should reclamation work without pre-opening all maps? | Yes as the S2 final goal; start with open maps, then add lazy open / unknown-map diagnostics. |
+| Should background execution be default? | No. S2.7 is default-off after manual flow and recovery semantics are stable. |
+| Should long transactions be forced to wait? | No. Skip pinned chunks by default; handle old-version reads after relocation map is mature. |
+
+## Working Rules
+
+Commit locally after every completed S2 phase. New production code must add tests in the same phase; use JUnit for contract coverage when practical, and keep MVStore file, fault injection, and concurrency scenarios in the dedicated legacy test gate. External docs need matching English copies.

@@ -1,6 +1,15 @@
-# MVStore 空间回收长期终极方案设计
+# MVStore 空间回收 S2 长期终极方案设计
 
-本文档定义 MVStore 空间回收的长期终极方案。这里的“终极方案”不是整库复制、离线 compact 或简单包装 `compactFile()`，而是在 MVStore 内部建立可长期演进的在线部分回收体系：以 chunk 为回收单位，以 page relocation 为核心，以可恢复的维护元数据保证 crash safety，以后台调度和预算控制保证在线业务可用性。
+本文档定义 MVStore 空间回收的 S2 长期终极方案。阶段定位必须明确：S1 中期方案已经完成；现在要推进的 S2 就是长期终极方案本身，所有后续空间回收工作统一归入 S2.0-S2.8。这里的“终极方案”不是整库复制、离线 compact 或简单包装 `compactFile()`，而是在 MVStore 内部建立可长期演进的在线部分回收体系：以 chunk 为回收单位，以 page relocation 为核心，以可恢复的维护元数据保证 crash safety，以后台调度和预算控制保证在线业务可用性。
+
+## 阶段定位
+
+| 阶段 | 状态 | 定位 |
+| --- | --- | --- |
+| S1 | 已完成 | 中期方案。已有 partial compact、shadow/closed-store 脚手架、测试门禁和插件化维护边界可以作为基础。 |
+| S2 | 当前推进 | 长期终极方案。目标是 chunk/page 级在线回收、可恢复增量迁移、relocation metadata、tail compaction 和后台调度治理。 |
+
+后续所有空间回收开发计划都按 S2.0-S2.8 追踪，不再使用旧的 L 阶段命名，也不把 S2 拆成短期包装层。
 
 ## 背景
 
@@ -226,10 +235,10 @@ stateDiagram-v2
 
 | 阶段 | 磁盘格式 | 兼容策略 |
 | --- | --- | --- |
-| L1-L3 | 不变 | 只做现有 rewrite / move 的治理增强。 |
-| L4 | 增加 journal keys | 旧版本忽略或拒绝未完成 job；需要 feature flag。 |
-| L5 | 增加 relocation map | 旧版本必须拒绝写打开，允许只读降级需单独验证。 |
-| L6 | 后台调度 | 不改变格式，默认关闭。 |
+| S2.1-S2.3 | 不变 | 只做现有 rewrite / move 的治理增强。 |
+| S2.4 | 增加 journal keys | 旧版本忽略或拒绝未完成 job；需要 feature flag。 |
+| S2.5 | 增加 relocation map | 旧版本必须拒绝写打开，允许只读降级需单独验证。 |
+| S2.7 | 后台调度 | 不改变格式，默认关闭。 |
 
 ## 测试方案
 
@@ -260,15 +269,15 @@ stateDiagram-v2
 
 | 阶段 | 目标 | 交付 |
 | --- | --- | --- |
-| L0 | 设计收口 | 本文档、中英文副本、测试门禁确认。 |
-| L1 | 观测与决策 | chunk liveness snapshot、candidate scoring、dry-run result。 |
-| L2 | 治理现有 partial compact | `vacuumOnline()` 进入 coordinator，包装 `compact()` / `compactFile()`，输出预算和 no-progress。 |
-| L3 | Page relocation 主路径 | 面向 open maps 的 page relocation，补 long transaction 和 unknown map skip。 |
-| L4 | 持久 evacuation journal | 支持 crash 后恢复/继续/清理未完成任务。 |
-| L5 | Relocation map | 支持迁移仍可能被旧版本读取的 page，解决 long retention 下 chunk 无法释放。 |
-| L6 | Tail mover 一体化 | relocation 后自动 move tail chunks 和 shrink，保持预算。 |
-| L7 | 后台调度 | 默认关闭，支持 idle budget、限速和诊断 dry-run。 |
-| L8 | 对外运维化 | 中英文使用文档、诊断表、配置说明、长期慢测。 |
+| S2.0 | 设计收口 | 本文档、中英文副本、测试门禁确认。 |
+| S2.1 | 观测与决策 | chunk liveness snapshot、candidate scoring、dry-run result。 |
+| S2.2 | 治理现有 partial compact | `vacuumOnline()` 进入 coordinator，包装 `compact()` / `compactFile()`，输出预算和 no-progress。 |
+| S2.3 | Page relocation 主路径 | 面向 open maps 的 page relocation，补 long transaction 和 unknown map skip。 |
+| S2.4 | 持久 evacuation journal | 支持 crash 后恢复/继续/清理未完成任务。 |
+| S2.5 | Relocation map | 支持迁移仍可能被旧版本读取的 page，解决 long retention 下 chunk 无法释放。 |
+| S2.6 | Tail mover 一体化 | relocation 后自动 move tail chunks 和 shrink，保持预算。 |
+| S2.7 | 后台调度 | 默认关闭，支持 idle budget、限速和诊断 dry-run。 |
+| S2.8 | 对外运维化 | 中英文使用文档、诊断表、配置说明、长期慢测。 |
 
 ## 需要拍板的问题
 
@@ -282,4 +291,4 @@ stateDiagram-v2
 
 ## 设计结论
 
-长期终极方案是 MVStore 内部的在线 chunk/page 级回收系统。短期可以从现有 `compact()`、`compactFile()`、`rewriteChunks()` 和 `compactMoveChunks()` 出发，但最终必须形成 coordinator、liveness analyzer、candidate selector、page relocator、evacuation journal、relocation map 和 tail compactor 的闭环。这样才能在不整库复制的前提下，持续、可恢复、可观测地把碎片空间回收到文件系统。
+S2 长期终极方案是 MVStore 内部的在线 chunk/page 级回收系统。实现可以从现有 `compact()`、`compactFile()`、`rewriteChunks()` 和 `compactMoveChunks()` 出发，但这些只是 S2 的早期实现路径，不是独立短期方案。S2 必须最终形成 coordinator、liveness analyzer、candidate selector、page relocator、evacuation journal、relocation map 和 tail compactor 的闭环。这样才能在不整库复制的前提下，持续、可恢复、可观测地把碎片空间回收到文件系统。

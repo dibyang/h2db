@@ -1,6 +1,15 @@
-# MVStore Long-Term Space Reclamation Design
+# MVStore S2 Long-Term Space Reclamation Design
 
-This document defines the long-term solution for MVStore space reclamation. The long-term solution is not whole-file copy, offline compact, or a simple wrapper around `compactFile()`. It is an online partial reclamation system inside MVStore: chunk-based selection, page relocation as the core mechanism, recoverable maintenance metadata for crash safety, and scheduler/budget controls for online availability.
+This document defines the S2 long-term solution for MVStore space reclamation. The phase boundary is explicit: S1, the medium-term solution, is complete; S2 is the long-term solution itself, and all following space reclamation work is tracked as S2.0-S2.8. The long-term solution is not whole-file copy, offline compact, or a simple wrapper around `compactFile()`. It is an online partial reclamation system inside MVStore: chunk-based selection, page relocation as the core mechanism, recoverable maintenance metadata for crash safety, and scheduler/budget controls for online availability.
+
+## Phase Positioning
+
+| Phase | Status | Positioning |
+| --- | --- | --- |
+| S1 | Done | Medium-term solution. Existing partial compact, shadow/closed-store scaffolding, test gates, and pluginized maintenance boundaries are the base. |
+| S2 | Current work | Long-term solution. The goal is chunk/page-level online reclamation, recoverable incremental evacuation, relocation metadata, tail compaction, and governed background scheduling. |
+
+All future space reclamation work is tracked as S2.0-S2.8. Do not use the old L-phase naming, and do not split S2 into a short-term wrapper layer.
 
 ## Background
 
@@ -35,7 +44,7 @@ The long-term solution should compose these capabilities into a clear chunk clea
 
 | Non-goal | Notes |
 | --- | --- |
-| Default background execution in the first phase | Automatic scheduling waits until manual flow and recovery semantics are stable. |
+| Default background execution during S2.0-S2.6 | Automatic scheduling waits until manual flow and recovery semantics are stable. |
 | Replacing online reclamation with whole-file shadow publish | Whole-file shadow remains offline/fallback, not the long-term main path. |
 | Bypassing MVCC and retention | Data referenced by old versions must not be deleted directly. |
 | Completing all reclamation in one run | The long-term system must support small, multi-run, interruptible progress. |
@@ -139,7 +148,7 @@ The long-term final state needs a persistent journal in the layout/meta map with
 | `reclaim.job.<id>.page.<oldPos>` | Optional. Old page position to new page position. |
 | `reclaim.job.<id>.publish` | Publish marker indicating new roots or relocation metadata are durable. |
 
-The first phase can use an in-memory journal only. Before freeing pinned old pages or supporting crash-interrupted continuation, persistent journal support is required.
+S2.1-S2.3 can use an in-memory journal only. Before freeing pinned old pages or supporting crash-interrupted continuation, persistent journal support is required.
 
 ### Relocation Map
 
@@ -191,7 +200,7 @@ stateDiagram-v2
 
 ### Background Scheduling
 
-Background scheduling is not default in the first phase, but the long-term design should support it:
+Background scheduling is not default before S2.7, but the long-term design should support it:
 
 | Condition | Behavior |
 | --- | --- |
@@ -226,10 +235,10 @@ Background scheduling is not default in the first phase, but the long-term desig
 
 | Phase | Disk format | Compatibility strategy |
 | --- | --- | --- |
-| L1-L3 | Unchanged | Only governance around existing rewrite/move capabilities. |
-| L4 | Adds journal keys | Old versions ignore or reject unfinished jobs; feature flag required. |
-| L5 | Adds relocation map | Old versions must reject write-open; read-only downgrade needs separate validation. |
-| L6 | Background scheduling | No format change, default off. |
+| S2.1-S2.3 | Unchanged | Only governance around existing rewrite/move capabilities. |
+| S2.4 | Adds journal keys | Old versions ignore or reject unfinished jobs; feature flag required. |
+| S2.5 | Adds relocation map | Old versions must reject write-open; read-only downgrade needs separate validation. |
+| S2.7 | Background scheduling | No format change, default off. |
 
 ## Test Plan
 
@@ -260,15 +269,15 @@ Higher-risk phases should also run the daily gate or related `TestAll ci` phase.
 
 | Phase | Goal | Deliverable |
 | --- | --- | --- |
-| L0 | Close the design | This document, English copy, and confirmed test gates. |
-| L1 | Observability and decision | Chunk liveness snapshot, candidate scoring, dry-run result. |
-| L2 | Govern existing partial compact | `vacuumOnline()` enters coordinator, wraps `compact()` / `compactFile()`, emits budgets and no-progress. |
-| L3 | Page relocation main path | Page relocation for open maps, with long-transaction and unknown-map skips. |
-| L4 | Persistent evacuation journal | Crash recovery, continuation, or cleanup of unfinished jobs. |
-| L5 | Relocation map | Move pages that old versions may still read and free long-retention-pinned chunks. |
-| L6 | Integrated tail mover | Move tail chunks and shrink after relocation, within budget. |
-| L7 | Background scheduling | Default off; idle budgets, throttling, and diagnostic dry-run. |
-| L8 | Operationalization | Chinese/English user docs, diagnostic table, configuration guide, long-running slow tests. |
+| S2.0 | Close the design | This document, English copy, and confirmed test gates. |
+| S2.1 | Observability and decision | Chunk liveness snapshot, candidate scoring, dry-run result. |
+| S2.2 | Govern existing partial compact | `vacuumOnline()` enters coordinator, wraps `compact()` / `compactFile()`, emits budgets and no-progress. |
+| S2.3 | Page relocation main path | Page relocation for open maps, with long-transaction and unknown-map skips. |
+| S2.4 | Persistent evacuation journal | Crash recovery, continuation, or cleanup of unfinished jobs. |
+| S2.5 | Relocation map | Move pages that old versions may still read and free long-retention-pinned chunks. |
+| S2.6 | Integrated tail mover | Move tail chunks and shrink after relocation, within budget. |
+| S2.7 | Background scheduling | Default off; idle budgets, throttling, and diagnostic dry-run. |
+| S2.8 | Operationalization | Chinese/English user docs, diagnostic table, configuration guide, long-running slow tests. |
 
 ## Decisions Needed
 
@@ -282,4 +291,4 @@ Higher-risk phases should also run the daily gate or related `TestAll ci` phase.
 
 ## Design Conclusion
 
-The long-term solution is an online chunk/page-level reclamation system inside MVStore. It can start from the existing `compact()`, `compactFile()`, `rewriteChunks()`, and `compactMoveChunks()` mechanisms, but the final architecture needs a coordinator, liveness analyzer, candidate selector, page relocator, evacuation journal, relocation map, and tail compactor. This is the path to reclaim fragmented space continuously, recoverably, and observably without whole-store copying.
+The S2 long-term solution is an online chunk/page-level reclamation system inside MVStore. Implementation can start from the existing `compact()`, `compactFile()`, `rewriteChunks()`, and `compactMoveChunks()` mechanisms, but these are early implementation paths within S2, not a separate short-term plan. S2 must ultimately form a closed loop of coordinator, liveness analyzer, candidate selector, page relocator, evacuation journal, relocation map, and tail compactor. This is the path to reclaim fragmented space continuously, recoverably, and observably without whole-store copying.

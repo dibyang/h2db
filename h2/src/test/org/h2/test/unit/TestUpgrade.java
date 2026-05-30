@@ -5,12 +5,17 @@
  */
 package org.h2.test.unit;
 
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.Properties;
 import java.util.Random;
 
@@ -38,8 +43,32 @@ public class TestUpgrade extends TestBase {
     @Override
     public void test() throws Exception {
         deleteDb();
+        testMavenDownloadCommandUsesWrapper();
         testUpgrade(1, 2, 120);
         testUpgrade(1, 4, 200);
+    }
+
+    private void testMavenDownloadCommandUsesWrapper() throws Exception {
+        String oldUserDir = System.getProperty("user.dir");
+        Path projectDir = Paths.get(getBaseDir(), "testUpgradeMavenWrapper");
+        FileUtils.deleteRecursive(projectDir.toString(), false);
+        Files.createDirectories(projectDir);
+        String wrapperName = System.getProperty("os.name").toLowerCase().contains("windows") ? "mvnw.cmd" : "mvnw";
+        Path wrapper = projectDir.resolve(wrapperName);
+        Files.createFile(wrapper);
+        try {
+            System.setProperty("user.dir", projectDir.resolve("child").toString());
+            Method method = Upgrade.class.getDeclaredMethod("createMavenDownloadCommand", String.class, String.class,
+                    String.class);
+            method.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            ArrayList<String> args = (ArrayList<String>) method.invoke(null, "com.h2database", "h2", "1.4.200");
+            assertTrue(args.contains(wrapper.toAbsolutePath().toString()));
+            assertFalse(args.contains("mvn"));
+        } finally {
+            System.setProperty("user.dir", oldUserDir);
+            FileUtils.deleteRecursive(projectDir.toString(), false);
+        }
     }
 
     private void testUpgrade(int major, int minor, int build) throws Exception {

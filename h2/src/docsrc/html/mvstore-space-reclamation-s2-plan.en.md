@@ -151,9 +151,9 @@ Latest local release-gate results:
 | `.\gradlew.bat runPluginArchitectureCheck` | PASS | Maintenance SPI and plugin capability gates are healthy. |
 | `.\gradlew.bat runMvStoreRecoveryCheck` | PASS | MVStore recovery/corruption checks passed. |
 | `.\gradlew.bat runH2LegacySmoke` | PASS | Legacy smoke passed. |
-| `.\gradlew.bat runH2TestAllCi` | ENV-FLAKY | Full suite observed localhost network abort/timeout, missing `mvn` in PATH, and a lazy-memory `TestXA` authorization failure; the related phases passed when rerun individually. |
+| `.\gradlew.bat runH2TestAllCi` | ENV-FLAKY | The 2026-05-31 rerun no longer had missing-`mvn`, Maven plugin-resolution, or repeated-download noise; the full suite still hit one `localhost:9092` timeout in `lazy net` / `TestConnectionPool.testPerformance`, and the related phase passed when rerun individually. |
 | `.\gradlew.bat runH2TestAllCiPhaseReport -Ph2CiPhase=additional` | PASS | Rechecked the `TestTools` / external-tool phase. |
 | `.\gradlew.bat runH2TestAllCiPhaseReport -Ph2CiPhase=network-lazy` | PASS | Rechecked the localhost-network phase. |
 | `.\gradlew.bat runH2TestAllCiPhaseReport -Ph2CiPhase=lazy-memory` | PASS | Rechecked the `TestXA` lazy-memory phase. |
 
-Release conclusion: all S2-specific gates passed. The remaining full-TestAll issue behaves like an environment / full-suite cross-contamination flake and should be rerun once in a clean release CI environment before cutting the final release.
+Release conclusion: all S2-specific gates passed. Old-H2-jar fetching now uses cache first, direct download with cache write-back, and Maven / Maven Wrapper only as fallback. The remaining full-TestAll issue behaves like a localhost network flake and should be rerun once in a clean release CI environment before cutting the final release.

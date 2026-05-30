@@ -299,20 +299,24 @@ public final class Upgrade {
         String repoFile = group.replace('.', '/') + '/' + artifact + '/' + version + '/' + artifact + '-' + version
                 + ".jar";
         Path localMavenDir = Paths.get(System.getProperty("user.home") + "/.m2/repository");
+        Path f = localMavenDir.resolve(repoFile);
         if (Files.isDirectory(localMavenDir)) {
-            Path f = localMavenDir.resolve(repoFile);
+            if (Files.exists(f)) {
+                return check(Files.readAllBytes(f), sha256Checksum, f.toAbsolutePath().toString());
+            }
+        }
+        RuntimeException directDownloadFailure;
+        try {
+            byte[] data = download(REPOSITORY + '/' + repoFile, sha256Checksum);
+            cacheDownloadedArtifact(f, data);
+            return data;
+        } catch (RuntimeException e) {
+            directDownloadFailure = e;
+        }
+        if (Files.isDirectory(localMavenDir)) {
             if (!Files.exists(f)) {
                 try {
-                    ArrayList<String> args = new ArrayList<>();
-                    if (System.getProperty("os.name").toLowerCase().contains("windows")) {
-                        args.add("cmd");
-                        args.add("/C");
-                    }
-                    args.add("mvn");
-                    args.add("org.apache.maven.plugins:maven-dependency-plugin:2.1:get");
-                    args.add("-D" + "repoUrl=" + REPOSITORY);
-                    args.add("-D" + "artifact=" + group + ':' + artifact + ':' + version);
-                    exec(args);
+                    exec(createMavenDownloadCommand(group, artifact, version));
                 } catch (RuntimeException e) {
                     System.out.println("Could not download using Maven: " + e.toString());
                 }
@@ -321,7 +325,52 @@ public final class Upgrade {
                 return check(Files.readAllBytes(f), sha256Checksum, f.toAbsolutePath().toString());
             }
         }
-        return download(REPOSITORY + '/' + repoFile, sha256Checksum);
+        throw directDownloadFailure;
+    }
+
+    private static void cacheDownloadedArtifact(Path file, byte[] data) {
+        try {
+            Files.createDirectories(file.getParent());
+            Files.write(file, data);
+        } catch (IOException e) {
+            System.out.println("Could not cache downloaded Maven artifact: " + e.toString());
+        }
+    }
+
+    private static ArrayList<String> createMavenDownloadCommand(String group, String artifact, String version) {
+        ArrayList<String> args = new ArrayList<>();
+        addMavenCommand(args);
+        args.add("org.apache.maven.plugins:maven-dependency-plugin:2.1:get");
+        args.add("-D" + "repoUrl=" + REPOSITORY);
+        args.add("-D" + "artifact=" + group + ':' + artifact + ':' + version);
+        return args;
+    }
+
+    private static void addMavenCommand(ArrayList<String> args) {
+        boolean windows = isWindows();
+        Path wrapper = findMavenWrapper(Paths.get(System.getProperty("user.dir")).toAbsolutePath());
+        if (windows) {
+            args.add("cmd");
+            args.add("/C");
+        }
+        args.add(wrapper != null ? wrapper.toString() : "mvn");
+    }
+
+    private static Path findMavenWrapper(Path directory) {
+        Path current = directory;
+        String script = isWindows() ? "mvnw.cmd" : "mvnw";
+        while (current != null) {
+            Path wrapper = current.resolve(script);
+            if (Files.isRegularFile(wrapper)) {
+                return wrapper;
+            }
+            current = current.getParent();
+        }
+        return null;
+    }
+
+    private static boolean isWindows() {
+        return System.getProperty("os.name").toLowerCase().contains("windows");
     }
 
     private static int exec(ArrayList<String> args) {

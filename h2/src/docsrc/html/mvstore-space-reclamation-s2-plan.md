@@ -151,9 +151,9 @@ S2 在线回收的正式版默认策略如下：
 | `.\gradlew.bat runPluginArchitectureCheck` | PASS | 维护 SPI 与插件 capability gate 正常。 |
 | `.\gradlew.bat runMvStoreRecoveryCheck` | PASS | MVStore recovery/corruption 专项通过。 |
 | `.\gradlew.bat runH2LegacySmoke` | PASS | legacy smoke 通过。 |
-| `.\gradlew.bat runH2TestAllCi` | ENV-FLAKY | 完整套件曾出现 localhost 网络 abort/timeout、`mvn` 不在 PATH、lazy-memory `TestXA` 授权异常；相关失败 phase 单独复跑通过。 |
+| `.\gradlew.bat runH2TestAllCi` | ENV-FLAKY | 2026-05-31 复跑已无 `mvn` 缺失、Maven 插件解析或重复下载噪声；完整套件仍在 `lazy net` 的 `TestConnectionPool.testPerformance` 出现一次 `localhost:9092` 连接超时，相关 phase 单独复跑通过。 |
 | `.\gradlew.bat runH2TestAllCiPhaseReport -Ph2CiPhase=additional` | PASS | 复核 `TestTools` / 外部工具相关 phase。 |
 | `.\gradlew.bat runH2TestAllCiPhaseReport -Ph2CiPhase=network-lazy` | PASS | 复核 localhost 网络相关 phase。 |
 | `.\gradlew.bat runH2TestAllCiPhaseReport -Ph2CiPhase=lazy-memory` | PASS | 复核 `TestXA` lazy-memory phase。 |
 
-发布结论：S2 相关门禁均通过；完整 TestAll 的剩余问题表现为环境/完整套件交叉污染类偶发，需要在正式发布流水线中使用干净环境再跑一轮完整 CI。
+发布结论：S2 相关门禁均通过；旧版 H2 jar 获取路径已经收敛为缓存优先、直接下载并写回缓存、Maven / Maven Wrapper 兜底。完整 TestAll 的剩余问题表现为 localhost 网络偶发，需要在正式发布流水线中使用干净环境再跑一轮完整 CI。

@@ -20,7 +20,7 @@
 
 ## 当前基线状态
 
-所有命名阶段已通过：`memory`、`additional`、`utils`、`lazy-memory`、`disk`、`disk-additional`、`network-memory`、`network-lazy`、`encrypted-disk`。完整 `runH2TestAllCi` 曾通过本地验收，但已有两次完整套件长跑中的 localhost 网络偶发记录：2026-05-30 15:17 在 `net memory` 的 `TestMultiThreadedKernel` 出现一次 `localhost:9092` 连接超时，单独复跑 `network-memory` 阶段通过；2026-05-30 16:42 在 `additional` 的 `TestTools.testServer` 出现一次 TCP shutdown 连接中断，单独复跑 `additional` 阶段通过。这类问题先作为完整套件下的网络偶发项纳入测试底座治理。
+所有命名阶段已通过：`memory`、`additional`、`utils`、`lazy-memory`、`disk`、`disk-additional`、`network-memory`、`network-lazy`、`encrypted-disk`。完整 `runH2TestAllCi` 曾通过本地验收，但已有完整套件长跑中的 localhost 网络偶发记录：2026-05-30 15:17 在 `net memory` 的 `TestMultiThreadedKernel` 出现一次 `localhost:9092` 连接超时，单独复跑 `network-memory` 阶段通过；2026-05-30 16:42 在 `additional` 的 `TestTools.testServer` 出现一次 TCP shutdown 连接中断，单独复跑 `additional` 阶段通过；2026-05-31 07:29 在 `lazy net` 的 `TestConnectionPool.testPerformance` 出现一次 `localhost:9092` 连接超时，单独复跑 `network-lazy` 阶段通过。这类问题先作为完整套件下的网络偶发项纳入测试底座治理。
 
 已治理完成或纳入管理的历史问题：
 
@@ -33,7 +33,7 @@
 | 环境敏感断言 | 时间戳毫秒、Locale 中文月份、Web Console 输出、network phase 端口连接超时、TCP server shutdown 连接中断 | 已通过阶段化入口隔离定位；`network-memory` 和 `additional` 单阶段复跑通过，完整套件下的偶发网络问题继续记录 |
 | 完整 `TestAll ci` 运行时间 | 本地完整运行约 16 分钟 | 保留为完整验收，不作为每次小改动的默认快速反馈 |
 
-`TestUpgrade` 在没有系统 `mvn` 命令时可能打印类似 `"mvn is not recognized"` 的输出。该输出来自工具先尝试 Maven、本地缺失后回退到直接下载 Maven Central artifact 的路径；只要 Gradle 任务最终通过，此输出属于非阻断环境噪声。
+`TestUpgrade` 的旧版 H2 jar 获取路径已治理：先读取本地 `.m2` 缓存，缺失时直接从 Maven Central 下载并写回缓存，只有直接下载失败时才尝试 Maven / Maven Wrapper 兜底。2026-05-31 已验证 `utils` phase 首次运行会补齐缓存，随后复跑不再打印 `mvn` 缺失、Maven 插件解析或重复下载噪声。
 
 ## 测试分层
 
@@ -88,7 +88,7 @@
 
 ## 分阶段任务
 
-当前已通过的 `TestAll ci` 命名阶段：`memory`、`additional`、`utils`、`lazy-memory`、`disk`、`disk-additional`、`network-memory`、`network-lazy`、`encrypted-disk`。完整 `runH2TestAllCi` 作为验收入口保留；当前已记录完整套件下 `network-memory` 和 `additional` 的 localhost 网络偶发问题，对应单阶段复跑均通过。
+当前已通过的 `TestAll ci` 命名阶段：`memory`、`additional`、`utils`、`lazy-memory`、`disk`、`disk-additional`、`network-memory`、`network-lazy`、`encrypted-disk`。完整 `runH2TestAllCi` 作为验收入口保留；当前已记录完整套件下 `network-memory`、`additional` 和 `network-lazy` 的 localhost 网络偶发问题，对应单阶段复跑均通过。
 
 | 阶段 | 目标 | 完成标准 |
 | --- | --- | --- |

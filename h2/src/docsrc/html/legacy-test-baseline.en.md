@@ -20,7 +20,7 @@ Run these commands from `h2/`:
 
 ## Current Baseline Status
 
-All named phases pass: `memory`, `additional`, `utils`, `lazy-memory`, `disk`, `disk-additional`, `network-memory`, `network-lazy`, and `encrypted-disk`. The full `runH2TestAllCi` entrypoint has passed local acceptance before, but a rerun on 2026-05-30 at 15:17 failed once in `net memory` when `TestMultiThreadedKernel` timed out connecting to `localhost:9092`; a focused `network-memory` phase rerun passed afterwards. This is tracked as an intermittent network item in the test foundation.
+All named phases pass: `memory`, `additional`, `utils`, `lazy-memory`, `disk`, `disk-additional`, `network-memory`, `network-lazy`, and `encrypted-disk`. The full `runH2TestAllCi` entrypoint has passed local acceptance before, but two long full-suite localhost network flakes are recorded: a rerun on 2026-05-30 at 15:17 failed once in `net memory` when `TestMultiThreadedKernel` timed out connecting to `localhost:9092`, and the focused `network-memory` phase rerun passed afterwards; a rerun on 2026-05-30 at 16:42 failed once in `additional` when `TestTools.testServer` hit a TCP shutdown connection abort, and the focused `additional` phase rerun passed afterwards. These are tracked as intermittent network items in the test foundation.
 
 Historical issues that have been fixed or brought under management:
 
@@ -30,7 +30,7 @@ Historical issues that have been fixed or brought under management:
 | Script output expectations | Column names, separators, and expression rendering mismatches in `TestScript` | Related script baselines were updated to current behavior and `TestScript` was moved into smoke |
 | JDBC updatable result sets | `The result set is not updatable`, result set type/concurrency assertions | `BASE TABLE` filtering semantics were restored and related classes were moved into smoke |
 | Compatibility mode assertions | Oracle/MySQL/metadata/keywords expectations differed from current behavior | Metadata table type ordering is aligned and `TestMetaData` was moved into smoke |
-| Environment-sensitive assertions | Timestamp precision, Chinese locale month names, Web Console output, network phase port connection timeouts | Phase-level entrypoints make these failures isolatable; the focused `network-memory` rerun passed, while the intermittent full-suite network timeout remains tracked |
+| Environment-sensitive assertions | Timestamp precision, Chinese locale month names, Web Console output, network phase port connection timeouts, TCP server shutdown connection aborts | Phase-level entrypoints make these failures isolatable; focused `network-memory` and `additional` reruns passed, while intermittent full-suite network issues remain tracked |
 | Full `TestAll ci` runtime | A local full run takes about 16 minutes | Kept as full acceptance, not as the default fast feedback loop for every small change |
 
 `TestUpgrade` can print output such as `"mvn is not recognized"` when the system `mvn` command is not installed. This output comes from the tool trying Maven first and then falling back to direct Maven Central artifact download. If the Gradle task passes, this is non-blocking environment noise.
@@ -88,7 +88,7 @@ Tests currently tracked but not included in the daily gate:
 
 ## Phases
 
-Currently passing named `TestAll ci` phases: `memory`, `additional`, `utils`, `lazy-memory`, `disk`, `disk-additional`, `network-memory`, `network-lazy`, and `encrypted-disk`. The full `runH2TestAllCi` entrypoint remains the acceptance entrypoint; one intermittent full-suite `network-memory` connection timeout is currently recorded, with the focused phase rerun passing.
+Currently passing named `TestAll ci` phases: `memory`, `additional`, `utils`, `lazy-memory`, `disk`, `disk-additional`, `network-memory`, `network-lazy`, and `encrypted-disk`. The full `runH2TestAllCi` entrypoint remains the acceptance entrypoint; intermittent full-suite localhost network issues are currently recorded for `network-memory` and `additional`, with focused phase reruns passing.
 
 | Phase | Goal | Done when |
 | --- | --- | --- |

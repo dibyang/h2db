@@ -117,6 +117,7 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         runScenario("T-S2-SCHEDULER-BACKOFF-01", this::testSchedulerBackoffAfterRun);
         runScenario("T-S2-DEFAULT-HOUSEKEEPING-ENABLED-01", this::testDefaultHousekeepingRunsOnlineReclamation);
         runScenario("T-S2-DEFAULT-HOUSEKEEPING-DISABLED-01", this::testHousekeepingCanDisableOnlineReclamation);
+        runScenario("T-S2-CONCURRENT-WRITE-RECLAMATION-01", this::testConcurrentWriteDuringOnlineReclamation);
 
         if (!failures.isEmpty()) {
             fail("MVStore space reclamation scenario failures: " + failures);
@@ -1083,6 +1084,48 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         }
     }
 
+    private void testConcurrentWriteDuringOnlineReclamation() throws Exception {
+        String base = mvStoreFile("concurrentWriteReclamation");
+        MVStore store = null;
+        try {
+            createBloatedStore(base);
+            store = new MVStore.Builder().fileName(base).autoCommitDisabled().autoCompactFillRate(0).open();
+            store.setRetentionTime(0);
+            final MVMap<Integer, byte[]> data = store.openMap("data");
+            final RuntimeException[] writerFailure = new RuntimeException[1];
+            Thread writer = new Thread(() -> {
+                try {
+                    for (int i = 0; i < 16; i++) {
+                        data.put(-100 - i, new byte[] { (byte) i });
+                    }
+                } catch (RuntimeException e) {
+                    writerFailure[0] = e;
+                }
+            }, "mvstore-reclamation-writer");
+            writer.start();
+            MVStoreOnlineReclamationResult result = MVStoreReclamationCoordinator.run(store,
+                    new MVStoreReclamationRequest.Builder().targetFillRate(100).build());
+            writer.join();
+            if (writerFailure[0] != null) {
+                throw writerFailure[0];
+            }
+            store.commit();
+            assertTrue(result.getStatus() == MVStoreReclamationStatus.SUCCESS
+                    || result.getStatus() == MVStoreReclamationStatus.NO_PROGRESS);
+            for (int i = 0; i < 16; i++) {
+                byte[] value = data.get(-100 - i);
+                assertNotNull(value);
+                assertEquals((byte) i, value[0]);
+            }
+            closeStore(store);
+            store = null;
+            assertConcurrentMarkersReadable(base);
+        } finally {
+            closeStoreImmediately(store);
+            deleteFilesUnlessKept(base);
+        }
+    }
+
     private void expectFault(FaultPoint point, Scenario scenario) {
         try {
             scenario.run();
@@ -1210,6 +1253,23 @@ public class TestMVStoreSpaceReclamation extends TestBase {
             assertNotNull(extra);
             assertEquals(MARKER, marker[0]);
             assertEquals(MARKER + 1, extra[0]);
+            closeStore(store);
+            store = null;
+        } finally {
+            closeStoreImmediately(store);
+        }
+    }
+
+    private void assertConcurrentMarkersReadable(String fileName) {
+        MVStore store = null;
+        try {
+            store = new MVStore.Builder().fileName(fileName).autoCommitDisabled().open();
+            MVMap<Integer, byte[]> data = store.openMap("data");
+            for (int i = 0; i < 16; i++) {
+                byte[] value = data.get(-100 - i);
+                assertNotNull(value);
+                assertEquals((byte) i, value[0]);
+            }
             closeStore(store);
             store = null;
         } finally {

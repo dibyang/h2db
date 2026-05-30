@@ -17,6 +17,7 @@ import java.sql.SQLException;
 import org.h2.engine.StorageEngineResolver;
 import org.h2.message.DbException;
 import org.h2.mvstore.db.MVStoreStorageEngineProvider;
+import org.h2.mvstore.db.SecondaryMVStoreStorageEngineProvider;
 import org.h2.store.fs.FileUtils;
 import org.junit.jupiter.api.Test;
 
@@ -92,6 +93,31 @@ public class StorageEngineResolverTest {
             assertTrue(e.getMessage().contains("Storage engine mismatch"));
             assertTrue(e.getMessage().contains("requested=other"));
             assertTrue(e.getMessage().contains("persisted=mvstore"));
+        } finally {
+            FileUtils.deleteRecursive(baseDir, true);
+        }
+    }
+
+    /**
+     * T-PLUGIN-P6-PERSISTED-SECONDARY-MISMATCH-01.
+     */
+    @Test
+    public void rejectsDefaultOpenWhenPersistedStorageEngineIsSecondary() throws Exception {
+        String databaseName = baseDir + "/secondaryMismatch";
+        FileUtils.deleteRecursive(baseDir, true);
+        try {
+            try (Connection conn = DriverManager.getConnection("jdbc:h2:" + databaseName + ";STORAGE_ENGINE="
+                    + SecondaryMVStoreStorageEngineProvider.ID, "sa", "")) {
+                conn.createStatement().execute("create table test(id int)");
+            }
+
+            assertEquals(SecondaryMVStoreStorageEngineProvider.ID,
+                    StorageEngineResolver.readPersistedStorageEngineId(databaseName));
+            SQLException e = assertThrows(SQLException.class, () ->
+                    DriverManager.getConnection("jdbc:h2:" + databaseName, "sa", ""));
+            assertTrue(e.getMessage().contains("Storage engine mismatch"));
+            assertTrue(e.getMessage().contains("requested=mvstore"));
+            assertTrue(e.getMessage().contains("persisted=" + SecondaryMVStoreStorageEngineProvider.ID));
         } finally {
             FileUtils.deleteRecursive(baseDir, true);
         }

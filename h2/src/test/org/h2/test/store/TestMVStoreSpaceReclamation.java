@@ -19,6 +19,7 @@ import org.h2.mvstore.MVStoreReclamationAnalysis;
 import org.h2.mvstore.MVStoreReclamationAnalyzer;
 import org.h2.mvstore.MVStoreReclamationCoordinator;
 import org.h2.mvstore.MVStoreReclamationRecovery;
+import org.h2.mvstore.MVStoreReclamationRelocationMap;
 import org.h2.mvstore.MVStoreReclamationRequest;
 import org.h2.mvstore.MVStoreReclamationScheduler;
 import org.h2.mvstore.MVStoreReclamationStatus;
@@ -103,6 +104,7 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         runScenario("T-S2-RECLAMATION-JOURNAL-RECOVER-UNPUBLISHED-01",
                 this::testReclamationJournalRecoversUnpublishedMarker);
         runScenario("T-S2-RELOCATION-MAP-FEATURE-GATE-01", this::testRelocationMapFeatureGate);
+        runScenario("T-S2-RELOCATION-MAP-RESOLVE-01", this::testRelocationMapResolvesPagePosition);
         runScenario("T-S2-TAIL-MOVER-BUDGET-01", this::testTailMoverRunsOnlyWithExplicitBudget);
         runScenario("T-S2-SCHEDULER-DISABLED-01", this::testSchedulerIsDisabledByDefault);
         runScenario("T-S2-SCHEDULER-ENABLED-01", this::testSchedulerRunsWhenEnabled);
@@ -840,6 +842,22 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         } finally {
             closeStoreImmediately(store);
             deleteFilesUnlessKept(base);
+        }
+    }
+
+    private void testRelocationMapResolvesPagePosition() {
+        MVStore store = null;
+        try {
+            store = new MVStore.Builder().open();
+            long oldPosition = 0x1234L;
+            long newPosition = 0x5678L;
+            assertEquals(oldPosition, MVStoreReclamationRelocationMap.resolve(store, oldPosition));
+            MVStoreReclamationRelocationMap.put(store, oldPosition, newPosition);
+            assertEquals(newPosition, MVStoreReclamationRelocationMap.resolve(store, oldPosition));
+            closeStore(store);
+            store = null;
+        } finally {
+            closeStoreImmediately(store);
         }
     }
 

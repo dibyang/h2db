@@ -1019,6 +1019,9 @@ public class MVStore implements AutoCloseable {
      */
     <K,V> Page<K,V> readPage(MVMap<K,V> map, long pos) {
         checkNotClosed();
+        if (meta != null && map != meta) {
+            pos = MVStoreReclamationRelocationMap.resolve(meta, pos);
+        }
         return fileStore.readPage(map, pos);
     }
 

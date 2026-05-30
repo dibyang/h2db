@@ -39,7 +39,7 @@ import org.h2.util.Utils;
  */
 public class TestMVStore extends TestBase {
 
-    private static final int CURRENT_FORMAT = 3;
+    private static final int CURRENT_FORMAT = 2;
 
     /**
      * Run just this test.

@@ -10,8 +10,8 @@ import org.h2.result.ResultInterface;
 import org.h2.result.SimpleResult;
 import org.h2.value.TypeInfo;
 
-import java.util.HashSet;
 import java.util.Set;
+import java.util.TreeSet;
 
 /**
  * Base implementation of database meta information.
@@ -38,7 +38,7 @@ abstract class DatabaseMetaLocalBase extends DatabaseMeta {
 
     //dib.yang#增加sql关键字
     public String getSQLKeywords4SQL92() {
-        Set<String> keywords = new HashSet<>();
+        Set<String> keywords = new TreeSet<>();
         for (String keyword : SQL92_KEYWORDS) {
             keywords.add(keyword);
         }
@@ -64,15 +64,11 @@ abstract class DatabaseMetaLocalBase extends DatabaseMeta {
         keywords.add("VALUE");
         keywords.add("_ROWID_");
         StringBuilder builder = new StringBuilder();
-        boolean first = true;
         for (String keyword : keywords) {
-            builder.append(keyword);
-            if (!first) {
-                builder.append(",");
-            } else {
-                first = false;
+            if (builder.length() > 0) {
+                builder.append(',');
             }
-
+            builder.append(keyword);
         }
         return builder.toString();
     }

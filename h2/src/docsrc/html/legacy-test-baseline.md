@@ -28,7 +28,7 @@
 | JDBC 可更新结果集 | `The result set is not updatable`、`TYPE_SCROLL_INSENSITIVE`/`CONCUR_UPDATABLE` 断言不匹配 | 已确认主要由 metadata 表类型过滤误依赖非排序数组触发；`BASE TABLE` 过滤恢复后，相关类已迁入 smoke |
 | 兼容模式断言 | Oracle/MySQL/metadata/keywords 等期望与当前实现不一致 | metadata 表类型顺序已按当前 `SYS TABLE` 行为对齐，`TestMetaData` 已迁入 smoke；后续完整 `TestAll` 中发现的兼容模式差异继续按模式分组治理 |
 | 环境敏感断言 | 时间戳毫秒、Locale 中文月份、Web Console 输出 | 固定 locale/timezone 或调整断言为稳定语义 |
-| 完整 `TestAll ci` 运行时间 | 未拆分的 `runH2TestAllCi` 本地运行超过 15 分钟超时 | `memory` 阶段已在 `MODE=REGULAR` 下通过；继续验证剩余命名阶段后，再恢复完整入口为验收任务 |
+| 完整 `TestAll ci` 运行时间 | 未拆分的 `runH2TestAllCi` 本地运行超过 15 分钟超时 | `memory`、`additional`、`utils` 阶段已在 `MODE=REGULAR` 下通过；继续验证剩余命名阶段后，再恢复完整入口为验收任务 |
 
 ## 推进规则
 
@@ -39,6 +39,8 @@
 5. `runH2TestAllCi` 保留为最终验收目标；只有全部分组稳定后再恢复为日常阻断任务。
 
 ## 分阶段任务
+
+当前已通过的 `TestAll ci` 命名阶段：`memory`、`additional`、`utils`。剩余阶段继续按同一入口逐个验证并提交。
 
 | 阶段 | 目标 | 完成标准 |
 | --- | --- | --- |

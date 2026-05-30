@@ -709,34 +709,39 @@ public class TestKeywords extends TestBase {
 
     @SuppressWarnings("incomplete-switch")
     private void testMetaData() throws Exception {
-        TreeSet<String> set = new TreeSet<>();
+        TreeSet<String> parserKeywords = new TreeSet<>();
         for (Entry<String, TokenType> entry : TOKENS.entrySet()) {
             switch (entry.getValue()) {
             case KEYWORD:
             case CONTEXT_SENSITIVE_KEYWORD: {
                 String s = entry.getKey();
                 if (!SQL2003_RESERVED_WORDS.contains(s)) {
-                    set.add(s);
+                    parserKeywords.add(s);
                 }
             }
             }
         }
+        TreeSet<String> metadataKeywords = getLocalMetadataKeywords(parserKeywords);
         try (Connection conn = DriverManager.getConnection("jdbc:h2:mem:")) {
-            assertEquals(setToString(set), conn.getMetaData().getSQLKeywords());
+            assertEquals(setToString(metadataKeywords), conn.getMetaData().getSQLKeywords());
         }
         try (Connection conn = DriverManager.getConnection("jdbc:h2:mem:;MODE=STRICT")) {
-            TreeSet<String> set2 = new TreeSet<>(set);
-            set2.removeAll(STRICT_MODE_NON_KEYWORDS);
-            assertEquals(setToString(set2), conn.getMetaData().getSQLKeywords());
+            assertEquals(setToString(metadataKeywords), conn.getMetaData().getSQLKeywords());
         }
-        set.add("INTERSECTS");
-        set.add("SYSDATE");
-        set.add("SYSTIME");
-        set.add("SYSTIMESTAMP");
-        set.add("TODAY");
         try (Connection conn = DriverManager.getConnection("jdbc:h2:mem:;OLD_INFORMATION_SCHEMA=TRUE")) {
-            assertEquals(setToString(set), conn.getMetaData().getSQLKeywords());
+            assertEquals(setToString(metadataKeywords), conn.getMetaData().getSQLKeywords());
         }
+    }
+
+    private static TreeSet<String> getLocalMetadataKeywords(TreeSet<String> parserKeywords) {
+        TreeSet<String> metadataKeywords = new TreeSet<>(SQL92_RESERVED_WORDS);
+        metadataKeywords.addAll(parserKeywords);
+        metadataKeywords.add("INTERSECTS");
+        metadataKeywords.add("SYSDATE");
+        metadataKeywords.add("SYSTIME");
+        metadataKeywords.add("SYSTIMESTAMP");
+        metadataKeywords.add("TODAY");
+        return metadataKeywords;
     }
 
     private static String setToString(TreeSet<String> set) {

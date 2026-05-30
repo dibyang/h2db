@@ -4,6 +4,8 @@ This document is the implementable design for S2 online space reclamation optimi
 
 Important correction: the S2 online reclamation main path is partial / chunk-level reclamation, not a full-store shadow copy followed by whole-file replacement. The existing `MVStoreSpaceReclamation` shadow, backup, and manifest capabilities remain useful for offline compact, failure modeling, and a later fallback publish design, but they are not the S2.1-S2.3 online main path.
 
+If the active goal is the long-term solution, `mvstore-space-reclamation-long-term-design.md` is the primary design. S2.1-S2.3 in this document are only early slices of that solution and do not replace the long-term architecture around chunk/page relocation, evacuation journal, and relocation map.
+
 ## Background
 
 MVStore files can contain unused space after heavy insert, delete, and update workloads. Today `MVStoreMaintenance.vacuumOnline()` only delegates to `Store.compactFile(50)`. It can trigger some online compaction, but it lacks the following capabilities:

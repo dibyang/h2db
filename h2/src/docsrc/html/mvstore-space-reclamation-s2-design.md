@@ -4,6 +4,8 @@
 
 重要修正：S2 在线回收主线是 partial / chunk-level reclamation，不是整库 shadow copy 后整体替换。已有 `MVStoreSpaceReclamation` 的 shadow、backup、manifest 能力继续作为离线 compact、故障模型和后续兜底 publish 方案的参考，不作为 S2.1-S2.3 的在线主路径。
 
+如果推进目标是长期终极方案，应以 `mvstore-space-reclamation-long-term-design.md` 为主设计；本文档中的 S2.1-S2.3 只是终局方案的前置切片，不能替代 chunk/page relocation、evacuation journal 和 relocation map 的长期架构。
+
 ## 背景
 
 MVStore 文件在大量插入、删除、更新后会出现空间空洞。当前 `MVStoreMaintenance.vacuumOnline()` 仅委托 `Store.compactFile(50)`，它能触发一定程度的在线 compact，但缺少以下能力：

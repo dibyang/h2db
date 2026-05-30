@@ -27,12 +27,15 @@ public final class MVStoreOnlineReclamationResult {
     private final long estimatedReclaimedBytes;
     private final boolean relocationMapAllowed;
     private final boolean relocationMapUsed;
+    private final boolean tailCompactionAllowed;
+    private final boolean tailCompactionAttempted;
     private final boolean rewritten;
     private final ArrayList<Integer> candidateChunks;
 
     MVStoreOnlineReclamationResult(MVStoreReclamationStatus status, String message,
             MVStoreReclamationAnalysis before, MVStoreReclamationAnalysis after, boolean rewritten,
-            boolean relocationMapAllowed, boolean relocationMapUsed, ArrayList<Integer> candidateChunks) {
+            boolean relocationMapAllowed, boolean relocationMapUsed, boolean tailCompactionAllowed,
+            boolean tailCompactionAttempted, ArrayList<Integer> candidateChunks) {
         this.status = status;
         this.message = message;
         beforeFileSize = before.getFileSize();
@@ -46,6 +49,8 @@ public final class MVStoreOnlineReclamationResult {
         estimatedReclaimedBytes = Math.max(0L, beforeEstimatedReclaimableBytes - afterEstimatedReclaimableBytes);
         this.relocationMapAllowed = relocationMapAllowed;
         this.relocationMapUsed = relocationMapUsed;
+        this.tailCompactionAllowed = tailCompactionAllowed;
+        this.tailCompactionAttempted = tailCompactionAttempted;
         this.rewritten = rewritten;
         this.candidateChunks = candidateChunks;
     }
@@ -106,6 +111,14 @@ public final class MVStoreOnlineReclamationResult {
         return relocationMapUsed;
     }
 
+    public boolean isTailCompactionAllowed() {
+        return tailCompactionAllowed;
+    }
+
+    public boolean isTailCompactionAttempted() {
+        return tailCompactionAttempted;
+    }
+
     public List<Integer> getCandidateChunks() {
         return Collections.unmodifiableList(candidateChunks);
     }
@@ -128,6 +141,8 @@ public final class MVStoreOnlineReclamationResult {
                 ", estimatedReclaimedBytes=" + estimatedReclaimedBytes +
                 ", relocationMapAllowed=" + relocationMapAllowed +
                 ", relocationMapUsed=" + relocationMapUsed +
+                ", tailCompactionAllowed=" + tailCompactionAllowed +
+                ", tailCompactionAttempted=" + tailCompactionAttempted +
                 ", rewritten=" + rewritten +
                 ", candidateChunks=" + candidateChunks;
     }

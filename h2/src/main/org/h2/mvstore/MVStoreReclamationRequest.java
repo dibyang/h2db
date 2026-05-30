@@ -22,6 +22,8 @@ public final class MVStoreReclamationRequest {
     private final long maxRunMillis;
     private final boolean journalEnabled;
     private final boolean relocationMapAllowed;
+    private final boolean tailCompactionAllowed;
+    private final int maxTailCompactionMillis;
 
     private MVStoreReclamationRequest(Builder builder) {
         dryRun = builder.dryRun;
@@ -31,6 +33,8 @@ public final class MVStoreReclamationRequest {
         maxRunMillis = builder.maxRunMillis;
         journalEnabled = builder.journalEnabled;
         relocationMapAllowed = builder.relocationMapAllowed;
+        tailCompactionAllowed = builder.tailCompactionAllowed;
+        maxTailCompactionMillis = builder.maxTailCompactionMillis;
     }
 
     public boolean isDryRun() {
@@ -61,6 +65,14 @@ public final class MVStoreReclamationRequest {
         return relocationMapAllowed;
     }
 
+    public boolean isTailCompactionAllowed() {
+        return tailCompactionAllowed;
+    }
+
+    public int getMaxTailCompactionMillis() {
+        return maxTailCompactionMillis;
+    }
+
     /**
      * Builder for immutable reclamation requests.
      */
@@ -72,6 +84,8 @@ public final class MVStoreReclamationRequest {
         private long maxRunMillis;
         private boolean journalEnabled;
         private boolean relocationMapAllowed;
+        private boolean tailCompactionAllowed = true;
+        private int maxTailCompactionMillis;
 
         public Builder dryRun(boolean dryRun) {
             this.dryRun = dryRun;
@@ -117,6 +131,19 @@ public final class MVStoreReclamationRequest {
 
         public Builder relocationMapAllowed(boolean relocationMapAllowed) {
             this.relocationMapAllowed = relocationMapAllowed;
+            return this;
+        }
+
+        public Builder tailCompactionAllowed(boolean tailCompactionAllowed) {
+            this.tailCompactionAllowed = tailCompactionAllowed;
+            return this;
+        }
+
+        public Builder maxTailCompactionMillis(int maxTailCompactionMillis) {
+            if (maxTailCompactionMillis < 0) {
+                throw new IllegalArgumentException("maxTailCompactionMillis");
+            }
+            this.maxTailCompactionMillis = maxTailCompactionMillis;
             return this;
         }
 

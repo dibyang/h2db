@@ -52,19 +52,25 @@ public final class MVStoreReclamationCoordinator {
             return result(MVStoreReclamationStatus.FAILED, "RECLAMATION_FAILED: " + e.getMessage(),
                     before, afterFailure, false, request, selected);
         }
+        boolean tailCompactionAttempted = false;
+        if (rewritten && request.isTailCompactionAllowed() && request.getMaxTailCompactionMillis() > 0) {
+            phase(journal, "SHRINKING");
+            store.compactFile(request.getMaxTailCompactionMillis());
+            tailCompactionAttempted = true;
+        }
         MVStoreReclamationAnalysis after = MVStoreReclamationAnalyzer.analyze(store, request.getTargetFillRate());
         if (!rewritten) {
             complete(journal);
             return result(MVStoreReclamationStatus.NO_PROGRESS, "NO_OPEN_MAP_RELOCATION_PROGRESS", before, after,
-                    false, request, selected);
+                    false, request, tailCompactionAttempted, selected);
         }
         complete(journal);
         if (request.getMaxRunMillis() > 0L && System.currentTimeMillis() - start > request.getMaxRunMillis()) {
             return result(MVStoreReclamationStatus.SUCCESS, "RECLAMATION_PAUSED_BY_TIME_BUDGET", before,
-                    after, true, request, selected);
+                    after, true, request, tailCompactionAttempted, selected);
         }
         return result(MVStoreReclamationStatus.SUCCESS, "RECLAMATION_ROUND_FINISHED", before, after, true,
-                request, selected);
+                request, tailCompactionAttempted, selected);
     }
 
     public static MVStoreReclamationRecovery recover(MVStore store) {
@@ -83,8 +89,15 @@ public final class MVStoreReclamationCoordinator {
     private static MVStoreOnlineReclamationResult result(MVStoreReclamationStatus status, String message,
             MVStoreReclamationAnalysis before, MVStoreReclamationAnalysis after, boolean rewritten,
             MVStoreReclamationRequest request, ArrayList<Integer> candidateChunks) {
+        return result(status, message, before, after, rewritten, request, false, candidateChunks);
+    }
+
+    private static MVStoreOnlineReclamationResult result(MVStoreReclamationStatus status, String message,
+            MVStoreReclamationAnalysis before, MVStoreReclamationAnalysis after, boolean rewritten,
+            MVStoreReclamationRequest request, boolean tailCompactionAttempted, ArrayList<Integer> candidateChunks) {
         return new MVStoreOnlineReclamationResult(status, message, before, after, rewritten,
-                request.isRelocationMapAllowed(), false, new ArrayList<>(candidateChunks));
+                request.isRelocationMapAllowed(), false, request.isTailCompactionAllowed(),
+                tailCompactionAttempted, new ArrayList<>(candidateChunks));
     }
 
     private static void phase(MVStoreReclamationJournal journal, String phase) {

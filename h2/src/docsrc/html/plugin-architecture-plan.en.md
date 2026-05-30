@@ -58,7 +58,21 @@ If full acceptance fails in a network phase with a connection timeout, rerun the
 | P5 | Done | Complete table-engine pluginization | Cover external `TableEngineProvider` SQL table creation, schema default params, and built-in/legacy path compatibility | `runPluginArchitectureCheck`, `runH2LegacySmoke` |
 | P6 | Done | Complete storage-engine pluginization | Cover storage id persistence, requested/persisted mismatch, secondary/default mismatch protection, missing provider, read-only downgrade, and maintenance capabilities | `runPluginArchitectureCheck` |
 | P7 | Done | Complete observability | Stabilize built-in and configured plugin output in `INFORMATION_SCHEMA.PLUGINS`, `PLUGIN_PROVIDERS`, and `PLUGIN_CAPABILITIES` | `runPluginArchitectureCheck` |
-| P8 | Not started | Acceptance and closeout | Run the daily gate, decide whether full `TestAll ci` is needed by risk, update status, and commit | Daily gate, full acceptance when needed |
+| P8 | Done | Acceptance and closeout | Ran the daily gate; this round focused on plugin SPI, loading, table/storage provider tests, and diagnostic coverage, so full `TestAll ci` was not rerun | `clean test check build runH2LegacySmoke` |
+
+## Current Closeout Status
+
+P1-P8 are complete. The plugin foundation currently provides:
+
+| Capability | Status |
+| --- | --- |
+| Plugin registry | Provider registration, uniqueness checks, capability diagnostics, invalid descriptor rejection |
+| Plugin loading | Explicit classes, `PLUGIN_PATHS` classloader, optional `ServiceLoader`, version ranges, dependency ordering, missing dependency diagnostics, and dependency-cycle diagnostics |
+| Built-in plugins | MVStore storage/table providers registered and resolved through the built-in registry path |
+| Table-engine extension | External `TableEngineProvider` can create tables through SQL engine ids and receive table/schema params |
+| Storage-engine extension | Storage provider resolution, storage id persistence, mismatch rejection, read-only downgrade, and maintenance capability boundaries |
+| Observability | `INFORMATION_SCHEMA.PLUGINS`, `PLUGIN_PROVIDERS`, and `PLUGIN_CAPABILITIES` cover built-in and configured external plugins |
+| Test gates | `runPluginArchitectureCheck` and the daily gate have passed |
 
 ## Working Rules
 

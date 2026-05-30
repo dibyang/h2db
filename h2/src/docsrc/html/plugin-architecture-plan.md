@@ -58,7 +58,21 @@
 | P5 | 已完成 | 完善表引擎插件化 | 覆盖外部 `TableEngineProvider` SQL 建表、schema default params、内置与 legacy 路径兼容 | `runPluginArchitectureCheck`、`runH2LegacySmoke` |
 | P6 | 已完成 | 完善存储引擎插件化 | 覆盖 storage id 持久化、请求/持久化不匹配、secondary/default 防误开、缺失 provider、只读降级、维护能力 | `runPluginArchitectureCheck` |
 | P7 | 已完成 | 完善可观测性 | 确认内置和外部配置插件在 `INFORMATION_SCHEMA.PLUGINS`、`PLUGIN_PROVIDERS`、`PLUGIN_CAPABILITIES` 中输出稳定 | `runPluginArchitectureCheck` |
-| P8 | 未开始 | 阶段验收与收口 | 跑日常门禁，按风险决定是否跑完整 `TestAll ci`，更新状态并提交 | 日常门禁，必要时完整验收 |
+| P8 | 已完成 | 阶段验收与收口 | 已跑日常门禁；本轮改动集中在插件 SPI、加载、表/存储 provider 测试与诊断覆盖，未额外触发完整 `TestAll ci` | `clean test check build runH2LegacySmoke` |
+
+## 当前收口状态
+
+P1-P8 已完成。插件化基础设施当前具备：
+
+| 能力 | 状态 |
+| --- | --- |
+| 插件注册中心 | 支持 provider 注册、唯一性校验、能力诊断、无效描述符拒绝 |
+| 插件加载 | 支持显式 class、`PLUGIN_PATHS` classloader、可选 `ServiceLoader`、版本范围、依赖排序、依赖缺失和依赖环诊断 |
+| 内置插件 | MVStore storage/table provider 通过 builtin registry 路径注册和解析 |
+| 表引擎扩展 | 支持外部 `TableEngineProvider` 通过 SQL engine id 建表，并传递 table/schema params |
+| 存储引擎扩展 | 支持 storage provider 解析、storage id 持久化、不匹配拒绝、只读降级和维护能力边界 |
+| 可观测性 | `INFORMATION_SCHEMA.PLUGINS`、`PLUGIN_PROVIDERS`、`PLUGIN_CAPABILITIES` 覆盖内置和外部配置插件 |
+| 测试门禁 | `runPluginArchitectureCheck` 与日常门禁已通过 |
 
 ## 推进规则
 

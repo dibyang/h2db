@@ -183,7 +183,7 @@ public class MVStoreStorageEngineTest {
                     MVStoreStorageEngineProvider.ID, PluginCapability.STORAGE_PUBLISH_CRASH_SAFE));
             assertFalse(db.getPluginRegistry().supports(StorageEngineProvider.TYPE,
                     MVStoreStorageEngineProvider.ID, PluginCapability.STORAGE_TRUNCATE_SAFE));
-            assertTrue(db.getStorageEngine().getMaintenance().vacuumOnline().isSuccess());
+            assertTrue(db.getStorageEngine().getMaintenance().vacuumOnline().isSkipped());
         }
     }
 
@@ -226,7 +226,7 @@ public class MVStoreStorageEngineTest {
 
             assertTrue(db.getStorageEngine().supports(PluginCapability.STORAGE_VACUUM_ONLINE));
             assertTrue(db.getStorageEngine().getMaintenance().supports(PluginCapability.STORAGE_VACUUM_ONLINE));
-            assertTrue(db.getStorageEngine().getMaintenance().vacuumOnline().isSuccess());
+            assertTrue(db.getStorageEngine().getMaintenance().vacuumOnline().isSkipped());
         }
     }
 

@@ -14,8 +14,12 @@ import org.h2.mvstore.ChunkLivenessSnapshot;
 import org.h2.mvstore.MVMap;
 import org.h2.mvstore.MVStore;
 import org.h2.mvstore.MVStoreException;
+import org.h2.mvstore.MVStoreOnlineReclamationResult;
 import org.h2.mvstore.MVStoreReclamationAnalysis;
 import org.h2.mvstore.MVStoreReclamationAnalyzer;
+import org.h2.mvstore.MVStoreReclamationCoordinator;
+import org.h2.mvstore.MVStoreReclamationRequest;
+import org.h2.mvstore.MVStoreReclamationStatus;
 import org.h2.mvstore.MVStoreSpaceReclamation;
 import org.h2.mvstore.MVStoreSpaceReclamationAnalysis;
 import org.h2.mvstore.MVStoreSpaceReclamationMaintenance;
@@ -84,6 +88,10 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         runScenario("T-S2-RECLAMATION-ANALYSIS-CANDIDATES-01", this::testReclamationAnalysisFindsCandidates);
         runScenario("T-S2-RECLAMATION-ANALYSIS-LOW-VALUE-01", this::testReclamationAnalysisRejectsLowValueStore);
         runScenario("T-S2-RECLAMATION-ANALYSIS-VALIDATION-01", this::testReclamationAnalysisValidation);
+        runScenario("T-S2-RECLAMATION-COORDINATOR-DRY-RUN-01", this::testReclamationCoordinatorDryRun);
+        runScenario("T-S2-RECLAMATION-COORDINATOR-RUN-01", this::testReclamationCoordinatorRunsBoundedRewrite);
+        runScenario("T-S2-RECLAMATION-COORDINATOR-SKIP-01", this::testReclamationCoordinatorSkipsWithoutCandidates);
+        runScenario("T-S2-RECLAMATION-REQUEST-VALIDATION-01", this::testReclamationRequestValidation);
 
         if (!failures.isEmpty()) {
             fail("MVStore space reclamation scenario failures: " + failures);
@@ -584,6 +592,92 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         } finally {
             closeStoreImmediately(store);
         }
+    }
+
+    private void testReclamationCoordinatorDryRun() {
+        String base = mvStoreFile("reclamationCoordinatorDryRun");
+        MVStore store = null;
+        try {
+            createBloatedStore(base);
+            store = new MVStore.Builder().fileName(base).autoCommitDisabled().autoCompactFillRate(0).open();
+            MVStoreReclamationRequest request = new MVStoreReclamationRequest.Builder()
+                    .dryRun(true)
+                    .targetFillRate(100)
+                    .maxCandidateChunks(2)
+                    .build();
+            MVStoreOnlineReclamationResult result = MVStoreReclamationCoordinator.run(store, request);
+            assertEquals(MVStoreReclamationStatus.SKIPPED, result.getStatus());
+            assertEquals("DRY_RUN", result.getMessage());
+            assertFalse(result.isRewritten());
+            assertTrue(result.getCandidateChunks().size() > 0);
+            assertEquals(result.getBeforeFileSize(), result.getAfterFileSize());
+            closeStore(store);
+            store = null;
+        } finally {
+            closeStoreImmediately(store);
+            deleteFilesUnlessKept(base);
+        }
+    }
+
+    private void testReclamationCoordinatorRunsBoundedRewrite() {
+        String base = mvStoreFile("reclamationCoordinatorRun");
+        MVStore store = null;
+        try {
+            createBloatedStore(base);
+            store = new MVStore.Builder().fileName(base).autoCommitDisabled().autoCompactFillRate(0).open();
+            store.setRetentionTime(0);
+            store.openMap("data");
+            MVStoreReclamationRequest request = new MVStoreReclamationRequest.Builder()
+                    .targetFillRate(100)
+                    .maxCandidateChunks(2)
+                    .maxLiveBytesToRewrite(16 * 1024 * 1024)
+                    .build();
+            MVStoreOnlineReclamationResult result = MVStoreReclamationCoordinator.run(store, request);
+            assertEquals(MVStoreReclamationStatus.SUCCESS, result.getStatus());
+            assertTrue(result.isRewritten());
+            assertTrue(result.getCandidateChunks().size() > 0);
+            assertTrue(result.getAfterChunksFillRate() >= result.getBeforeChunksFillRate());
+            assertTrue(result.getDiagnosticSummary().contains("RECLAMATION_ROUND_FINISHED"));
+            closeStore(store);
+            store = null;
+        } finally {
+            closeStoreImmediately(store);
+            deleteFilesUnlessKept(base);
+        }
+    }
+
+    private void testReclamationCoordinatorSkipsWithoutCandidates() {
+        String base = mvStoreFile("reclamationCoordinatorSkip");
+        MVStore store = null;
+        try {
+            deleteFiles(base);
+            createParentDirectories(base);
+            store = new MVStore.Builder().fileName(base).autoCommitDisabled().autoCompactFillRate(0).open();
+            MVMap<Integer, byte[]> data = store.openMap("data");
+            data.put(1, new byte[] { MARKER });
+            store.commit();
+            store.getFileStore().sync();
+
+            MVStoreOnlineReclamationResult result = MVStoreReclamationCoordinator.run(store,
+                    new MVStoreReclamationRequest.Builder().targetFillRate(10).build());
+            assertEquals(MVStoreReclamationStatus.SKIPPED, result.getStatus());
+            assertEquals("NO_RECLAMATION_CANDIDATE", result.getMessage());
+            assertFalse(result.isRewritten());
+            assertEquals(0, result.getCandidateChunks().size());
+            closeStore(store);
+            store = null;
+        } finally {
+            closeStoreImmediately(store);
+            deleteFilesUnlessKept(base);
+        }
+    }
+
+    private void testReclamationRequestValidation() {
+        expectIllegalArgument(() -> new MVStoreReclamationRequest.Builder().targetFillRate(-1));
+        expectIllegalArgument(() -> new MVStoreReclamationRequest.Builder().targetFillRate(101));
+        expectIllegalArgument(() -> new MVStoreReclamationRequest.Builder().maxCandidateChunks(0));
+        expectIllegalArgument(() -> new MVStoreReclamationRequest.Builder().maxLiveBytesToRewrite(-1));
+        expectIllegalArgument(() -> new MVStoreReclamationRequest.Builder().maxRunMillis(-1));
     }
 
     private void expectFault(FaultPoint point, Scenario scenario) {

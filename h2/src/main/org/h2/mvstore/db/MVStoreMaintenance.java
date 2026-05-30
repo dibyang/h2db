@@ -9,6 +9,9 @@ import org.h2.api.PluginCapability;
 import org.h2.api.StorageEngine;
 import org.h2.api.StorageMaintenance;
 import org.h2.api.StorageMaintenanceResult;
+import org.h2.mvstore.MVStoreOnlineReclamationResult;
+import org.h2.mvstore.MVStoreReclamationCoordinator;
+import org.h2.mvstore.MVStoreReclamationStatus;
 
 /**
  * MVStore 存储维护能力边界。
@@ -54,7 +57,10 @@ final class MVStoreMaintenance implements StorageMaintenance {
         if (!supports(PluginCapability.STORAGE_VACUUM_ONLINE)) {
             return StorageMaintenanceResult.UNSUPPORTED;
         }
-        ((MVStoreBackedStorageEngine) engine).getStore().compactFile(50);
-        return StorageMaintenanceResult.success("VACUUM_ONLINE_FINISHED");
+        MVStoreOnlineReclamationResult result = MVStoreReclamationCoordinator.run(
+                ((MVStoreBackedStorageEngine) engine).getStore().getMvStore());
+        return result.getStatus() == MVStoreReclamationStatus.SUCCESS
+                ? StorageMaintenanceResult.success(result.getDiagnosticSummary())
+                : StorageMaintenanceResult.skipped(result.getDiagnosticSummary());
     }
 }

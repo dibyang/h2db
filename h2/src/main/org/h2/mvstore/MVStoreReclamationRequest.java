@@ -20,6 +20,7 @@ public final class MVStoreReclamationRequest {
     private final int maxCandidateChunks;
     private final int maxLiveBytesToRewrite;
     private final long maxRunMillis;
+    private final boolean journalEnabled;
 
     private MVStoreReclamationRequest(Builder builder) {
         dryRun = builder.dryRun;
@@ -27,6 +28,7 @@ public final class MVStoreReclamationRequest {
         maxCandidateChunks = builder.maxCandidateChunks;
         maxLiveBytesToRewrite = builder.maxLiveBytesToRewrite;
         maxRunMillis = builder.maxRunMillis;
+        journalEnabled = builder.journalEnabled;
     }
 
     public boolean isDryRun() {
@@ -49,6 +51,10 @@ public final class MVStoreReclamationRequest {
         return maxRunMillis;
     }
 
+    public boolean isJournalEnabled() {
+        return journalEnabled;
+    }
+
     /**
      * Builder for immutable reclamation requests.
      */
@@ -58,6 +64,7 @@ public final class MVStoreReclamationRequest {
         private int maxCandidateChunks = 1;
         private int maxLiveBytesToRewrite = 16 * 1024 * 1024;
         private long maxRunMillis;
+        private boolean journalEnabled;
 
         public Builder dryRun(boolean dryRun) {
             this.dryRun = dryRun;
@@ -93,6 +100,11 @@ public final class MVStoreReclamationRequest {
                 throw new IllegalArgumentException("maxRunMillis");
             }
             this.maxRunMillis = maxRunMillis;
+            return this;
+        }
+
+        public Builder journalEnabled(boolean journalEnabled) {
+            this.journalEnabled = journalEnabled;
             return this;
         }
 

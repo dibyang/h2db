@@ -18,6 +18,7 @@ import org.h2.mvstore.MVStoreOnlineReclamationResult;
 import org.h2.mvstore.MVStoreReclamationAnalysis;
 import org.h2.mvstore.MVStoreReclamationAnalyzer;
 import org.h2.mvstore.MVStoreReclamationCoordinator;
+import org.h2.mvstore.MVStoreReclamationRecovery;
 import org.h2.mvstore.MVStoreReclamationRequest;
 import org.h2.mvstore.MVStoreReclamationStatus;
 import org.h2.mvstore.MVStoreSpaceReclamation;
@@ -94,6 +95,8 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         runScenario("T-S2-RECLAMATION-REQUEST-VALIDATION-01", this::testReclamationRequestValidation);
         runScenario("T-S2-PAGE-RELOCATION-OPEN-MAP-01", this::testPageRelocationReportsOpenMapProgress);
         runScenario("T-S2-PAGE-RELOCATION-LAZY-MAP-01", this::testPageRelocationCanUseLazyOpenedMaps);
+        runScenario("T-S2-RECLAMATION-JOURNAL-CLEANUP-01", this::testReclamationJournalIsCleanedAfterRun);
+        runScenario("T-S2-RECLAMATION-JOURNAL-RECOVER-EMPTY-01", this::testReclamationJournalRecoverWithoutJournal);
 
         if (!failures.isEmpty()) {
             fail("MVStore space reclamation scenario failures: " + failures);
@@ -724,6 +727,43 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         } finally {
             closeStoreImmediately(store);
             deleteFilesUnlessKept(base);
+        }
+    }
+
+    private void testReclamationJournalIsCleanedAfterRun() {
+        String base = mvStoreFile("reclamationJournalCleanup");
+        MVStore store = null;
+        try {
+            createBloatedStore(base);
+            store = new MVStore.Builder().fileName(base).autoCommitDisabled().autoCompactFillRate(0).open();
+            store.setRetentionTime(0);
+            store.openMap("data");
+
+            MVStoreOnlineReclamationResult result = MVStoreReclamationCoordinator.run(store,
+                    new MVStoreReclamationRequest.Builder().targetFillRate(100).journalEnabled(true).build());
+            assertEquals(MVStoreReclamationStatus.SUCCESS, result.getStatus());
+            MVStoreReclamationRecovery recovery = MVStoreReclamationCoordinator.recover(store);
+            assertFalse(recovery.isRecovered());
+            assertEquals("NO_RECLAMATION_JOURNAL", recovery.getMessage());
+            closeStore(store);
+            store = null;
+        } finally {
+            closeStoreImmediately(store);
+            deleteFilesUnlessKept(base);
+        }
+    }
+
+    private void testReclamationJournalRecoverWithoutJournal() {
+        MVStore store = null;
+        try {
+            store = new MVStore.Builder().open();
+            MVStoreReclamationRecovery recovery = MVStoreReclamationCoordinator.recover(store);
+            assertFalse(recovery.isRecovered());
+            assertEquals("NO_RECLAMATION_JOURNAL", recovery.getMessage());
+            closeStore(store);
+            store = null;
+        } finally {
+            closeStoreImmediately(store);
         }
     }
 

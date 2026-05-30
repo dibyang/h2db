@@ -28,7 +28,7 @@ The latest full `runH2TestAllCi` run can compile and start the original suite, b
 | JDBC updatable result sets | `The result set is not updatable`, result set type/concurrency assertions | Confirmed to be primarily caused by metadata table type filtering depending on a non-sorted array; after restoring `BASE TABLE` filtering, related classes were moved into smoke |
 | Compatibility mode assertions | Oracle/MySQL/metadata/keywords expectations differ from current behavior | Metadata table type ordering is aligned with the current `SYS TABLE` behavior and `TestMetaData` was moved into smoke; additional compatibility differences from full `TestAll` should still be triaged by mode |
 | Environment-sensitive assertions | Timestamp precision, Chinese locale month names, Web Console output | Fix locale/timezone or rewrite assertions around stable semantics |
-| Full `TestAll ci` runtime | The unpartitioned `runH2TestAllCi` attempt exceeded a 15 minute local timeout | The `memory`, `additional`, `utils`, `lazy-memory`, and `disk` phases now pass with `MODE=REGULAR`; continue validating the remaining named phases before making the full entrypoint a gate |
+| Full `TestAll ci` runtime | The unpartitioned `runH2TestAllCi` attempt exceeded a 15 minute local timeout | The `memory`, `additional`, `utils`, `lazy-memory`, `disk`, and `disk-additional` phases now pass with `MODE=REGULAR`; continue validating the remaining named phases before making the full entrypoint a gate |
 
 ## Working Rules
 
@@ -40,7 +40,7 @@ The latest full `runH2TestAllCi` run can compile and start the original suite, b
 
 ## Phases
 
-Currently passing named `TestAll ci` phases: `memory`, `additional`, `utils`, `lazy-memory`, and `disk`. The remaining phases should continue to be verified and committed one at a time with the same entrypoint.
+Currently passing named `TestAll ci` phases: `memory`, `additional`, `utils`, `lazy-memory`, `disk`, and `disk-additional`. The remaining phases should continue to be verified and committed one at a time with the same entrypoint.
 
 | Phase | Goal | Done when |
 | --- | --- | --- |

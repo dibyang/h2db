@@ -501,8 +501,8 @@ public class TestCluster extends TestDb {
     private void deleteFiles() throws SQLException {
         DeleteDbFiles.main("-dir", getBaseDir() + "/node1", "-quiet");
         DeleteDbFiles.main("-dir", getBaseDir() + "/node2", "-quiet");
-        FileUtils.delete(getBaseDir() + "/node1");
-        FileUtils.delete(getBaseDir() + "/node2");
+        FileUtils.deleteRecursive(getBaseDir() + "/node1", false);
+        FileUtils.deleteRecursive(getBaseDir() + "/node2", false);
     }
 
     private void check(Connection conn, int len, String expectedCluster)

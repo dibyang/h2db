@@ -20,6 +20,7 @@ import org.h2.mvstore.MVStoreReclamationAnalyzer;
 import org.h2.mvstore.MVStoreReclamationCoordinator;
 import org.h2.mvstore.MVStoreReclamationRecovery;
 import org.h2.mvstore.MVStoreReclamationRequest;
+import org.h2.mvstore.MVStoreReclamationScheduler;
 import org.h2.mvstore.MVStoreReclamationStatus;
 import org.h2.mvstore.MVStoreSpaceReclamation;
 import org.h2.mvstore.MVStoreSpaceReclamationAnalysis;
@@ -99,6 +100,8 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         runScenario("T-S2-RECLAMATION-JOURNAL-RECOVER-EMPTY-01", this::testReclamationJournalRecoverWithoutJournal);
         runScenario("T-S2-RELOCATION-MAP-FEATURE-GATE-01", this::testRelocationMapFeatureGate);
         runScenario("T-S2-TAIL-MOVER-BUDGET-01", this::testTailMoverRunsOnlyWithExplicitBudget);
+        runScenario("T-S2-SCHEDULER-DISABLED-01", this::testSchedulerIsDisabledByDefault);
+        runScenario("T-S2-SCHEDULER-ENABLED-01", this::testSchedulerRunsWhenEnabled);
 
         if (!failures.isEmpty()) {
             fail("MVStore space reclamation scenario failures: " + failures);
@@ -815,6 +818,46 @@ public class TestMVStoreSpaceReclamation extends TestBase {
             assertTrue(result.isTailCompactionAttempted());
             assertTrue(result.getAfterFileSize() <= result.getBeforeFileSize());
             assertTrue(result.getDiagnosticSummary().contains("tailCompactionAttempted=true"));
+            closeStore(store);
+            store = null;
+        } finally {
+            closeStoreImmediately(store);
+            deleteFilesUnlessKept(base);
+        }
+    }
+
+    private void testSchedulerIsDisabledByDefault() {
+        MVStore store = null;
+        try {
+            store = new MVStore.Builder().open();
+            MVStoreReclamationScheduler scheduler = MVStoreReclamationScheduler.builder().build();
+            assertFalse(scheduler.isEnabled());
+            MVStoreOnlineReclamationResult result = scheduler.runIfEnabled(store);
+            assertEquals(MVStoreReclamationStatus.SKIPPED, result.getStatus());
+            assertEquals("RECLAMATION_SCHEDULER_DISABLED", result.getMessage());
+            closeStore(store);
+            store = null;
+        } finally {
+            closeStoreImmediately(store);
+        }
+    }
+
+    private void testSchedulerRunsWhenEnabled() {
+        String base = mvStoreFile("schedulerEnabled");
+        MVStore store = null;
+        try {
+            createBloatedStore(base);
+            store = new MVStore.Builder().fileName(base).autoCommitDisabled().autoCompactFillRate(0).open();
+            store.setRetentionTime(0);
+            store.openMap("data");
+
+            MVStoreReclamationScheduler scheduler = MVStoreReclamationScheduler.builder()
+                    .enabled(true)
+                    .request(new MVStoreReclamationRequest.Builder().targetFillRate(100).build())
+                    .build();
+            MVStoreOnlineReclamationResult result = scheduler.runIfEnabled(store);
+            assertEquals(MVStoreReclamationStatus.SUCCESS, result.getStatus());
+            assertTrue(result.isRewritten());
             closeStore(store);
             store = null;
         } finally {

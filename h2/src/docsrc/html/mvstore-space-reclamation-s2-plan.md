@@ -101,7 +101,7 @@
 
 ## 当前默认策略
 
-S2 默认保持保守：后台调度关闭；journal 默认关闭；relocation map 默认关闭且当前不会改写读路径；tail compaction 只有显式设置时间预算才执行。手动 `vacuumOnline()` 走 coordinator，先做候选分析，再按预算执行在线 partial relocation，并返回结构化诊断。
+S2 当前已具备低强度默认启动条件：MVStore housekeeping 默认启用在线回收 scheduler，但受最小间隔、失败退避、rewrite 预算和时间预算限制；可通过 `onlineReclamationEnabled(false)` 关闭。journal 默认关闭；relocation map 只有存在显式映射时才参与读页解析；tail compaction 只有显式设置时间预算才执行。手动 `vacuumOnline()` 仍走同一个 coordinator，先做候选分析，再按预算执行在线 partial relocation，并返回结构化诊断。
 
 ## 后续深化项
 

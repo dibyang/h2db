@@ -113,6 +113,8 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         runScenario("T-S2-SCHEDULER-DISABLED-01", this::testSchedulerIsDisabledByDefault);
         runScenario("T-S2-SCHEDULER-ENABLED-01", this::testSchedulerRunsWhenEnabled);
         runScenario("T-S2-SCHEDULER-BACKOFF-01", this::testSchedulerBackoffAfterRun);
+        runScenario("T-S2-DEFAULT-HOUSEKEEPING-ENABLED-01", this::testDefaultHousekeepingRunsOnlineReclamation);
+        runScenario("T-S2-DEFAULT-HOUSEKEEPING-DISABLED-01", this::testHousekeepingCanDisableOnlineReclamation);
 
         if (!failures.isEmpty()) {
             fail("MVStore space reclamation scenario failures: " + failures);
@@ -1006,6 +1008,43 @@ public class TestMVStoreSpaceReclamation extends TestBase {
             MVStoreOnlineReclamationResult second = scheduler.runIfEnabled(store);
             assertEquals(MVStoreReclamationStatus.SKIPPED, second.getStatus());
             assertEquals(MVStoreReclamationCode.RECLAMATION_SCHEDULER_BACKOFF, second.getMessage());
+            closeStore(store);
+            store = null;
+        } finally {
+            closeStoreImmediately(store);
+            deleteFilesUnlessKept(base);
+        }
+    }
+
+    private void testDefaultHousekeepingRunsOnlineReclamation() {
+        String base = mvStoreFile("defaultHousekeepingEnabled");
+        MVStore store = null;
+        try {
+            createBloatedStore(base);
+            store = new MVStore.Builder().fileName(base).autoCommitDisabled().autoCompactFillRate(0).open();
+            store.setRetentionTime(0);
+            store.openMap("data");
+            MVStoreOnlineReclamationResult result = store.runOnlineReclamationHousekeeping();
+            assertEquals(MVStoreReclamationStatus.SUCCESS, result.getStatus());
+            assertTrue(result.isRewritten());
+            closeStore(store);
+            store = null;
+        } finally {
+            closeStoreImmediately(store);
+            deleteFilesUnlessKept(base);
+        }
+    }
+
+    private void testHousekeepingCanDisableOnlineReclamation() {
+        String base = mvStoreFile("defaultHousekeepingDisabled");
+        MVStore store = null;
+        try {
+            createBloatedStore(base);
+            store = new MVStore.Builder().fileName(base).autoCommitDisabled().autoCompactFillRate(0)
+                    .onlineReclamationEnabled(false).open();
+            MVStoreOnlineReclamationResult result = store.runOnlineReclamationHousekeeping();
+            assertEquals(MVStoreReclamationStatus.SKIPPED, result.getStatus());
+            assertEquals(MVStoreReclamationCode.RECLAMATION_SCHEDULER_DISABLED, result.getMessage());
             closeStore(store);
             store = null;
         } finally {

@@ -730,6 +730,7 @@ public abstract class RandomAccessStore extends FileStore<SFChunk>
                 });
             }
         }
+        mvStore.runOnlineReclamationHousekeeping();
     }
 
     private int getTargetFillRate() {

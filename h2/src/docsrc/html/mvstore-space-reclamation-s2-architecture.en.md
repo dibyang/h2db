@@ -232,4 +232,4 @@ The current implementation provides these internal API anchors:
 | `MVStoreOnlineReclamationResult` | Reports status, before/after fill rates and file size, candidates, estimated reclaimed bytes, relocation-map flags, and tail-compaction flags. |
 | `MVStoreReclamationScheduler` | Provides a disabled-by-default scheduler facade for future background operation. |
 
-The durable-format-affecting features remain gated. Journaling is opt-in, relocation-map read redirection is not enabled, and scheduler execution is not automatic.
+The durable-format-affecting features remain gated. Journaling is opt-in, and relocation-map page resolution is used only when explicit mappings exist. The scheduler is integrated with MVStore housekeeping and is enabled by default in a low-intensity mode; it can be disabled with `onlineReclamationEnabled(false)`.

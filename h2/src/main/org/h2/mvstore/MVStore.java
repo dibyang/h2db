@@ -222,6 +222,7 @@ public class MVStore implements AutoCloseable {
      */
     private int unsavedMemory;
     private final int autoCommitMemory;
+    private final MVStoreReclamationScheduler reclamationScheduler;
     private volatile boolean saveNeeded;
 
     private volatile boolean metaChanged;
@@ -302,9 +303,21 @@ public class MVStore implements AutoCloseable {
             // setAutoCommitDelay starts the thread, but only if
             // the parameter is different from the old value
             int delay = DataUtils.getConfigParam(config, "autoCommitDelay", 1000);
+            boolean reclamationEnabled = DataUtils.getConfigParam(config, "onlineReclamationEnabled", 1) != 0;
+            reclamationScheduler = MVStoreReclamationScheduler.builder()
+                    .enabled(reclamationEnabled)
+                    .request(new MVStoreReclamationRequest.Builder()
+                            .targetFillRate(50)
+                            .maxLiveBytesToRewrite(Math.max(64 * 1024, autoCommitMemory / 4))
+                            .maxRunMillis(10)
+                            .build())
+                    .minIntervalMillis(60_000L)
+                    .failureBackoffMillis(300_000L)
+                    .build();
             setAutoCommitDelay(delay);
         } else {
             autoCommitMemory = 0;
+            reclamationScheduler = MVStoreReclamationScheduler.builder().enabled(false).build();
             meta = openMetaMap();
         }
         onVersionChange(currentVersion);
@@ -1618,6 +1631,10 @@ public class MVStore implements AutoCloseable {
         return autoCommitMemory;
     }
 
+    public MVStoreOnlineReclamationResult runOnlineReclamationHousekeeping() {
+        return reclamationScheduler.runIfEnabled(this);
+    }
+
     /**
      * Get the estimated memory (in bytes) of unsaved data. If the value exceeds
      * the auto-commit memory, the changes are committed.
@@ -1868,6 +1885,10 @@ public class MVStore implements AutoCloseable {
          */
         public Builder autoCompactFillRate(int percent) {
             return set("autoCompactFillRate", percent);
+        }
+
+        public Builder onlineReclamationEnabled(boolean enabled) {
+            return set("onlineReclamationEnabled", enabled ? 1 : 0);
         }
 
         /**

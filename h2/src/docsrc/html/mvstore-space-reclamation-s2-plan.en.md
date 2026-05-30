@@ -101,7 +101,7 @@ Run `runH2TestAllCi` when full acceptance is needed. If a known localhost networ
 
 ## Current Defaults
 
-S2 stays conservative by default: background scheduling is disabled, journaling is disabled, relocation maps are disabled and do not change the read path, and tail compaction runs only when an explicit time budget is provided. Manual `vacuumOnline()` goes through the coordinator, analyzes candidates, runs bounded online partial relocation, and returns structured diagnostics.
+S2 now has a low-intensity default-start mode: MVStore housekeeping enables the online reclamation scheduler by default, but it is limited by minimum interval, failure backoff, rewrite budget, and run-time budget; it can be disabled with `onlineReclamationEnabled(false)`. Journaling remains disabled by default. The relocation map participates in page-position resolution only when explicit mappings exist. Tail compaction runs only when an explicit time budget is provided. Manual `vacuumOnline()` still goes through the same coordinator, analyzes candidates, runs bounded online partial relocation, and returns structured diagnostics.
 
 ## Follow-up Deepening
 

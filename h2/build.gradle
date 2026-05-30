@@ -236,6 +236,32 @@ task runH2TestAllCi(type: JavaExec) {
     systemProperty 'file.encoding', 'UTF-8'
 }
 
+def legacyCiPhases = [
+        'memory',
+        'additional',
+        'utils',
+        'lazy-memory',
+        'disk',
+        'disk-additional',
+        'network-memory',
+        'network-lazy',
+        'encrypted-disk'
+]
+
+task runH2TestAllCiPhaseReport(type: JavaExec) {
+    description = 'Runs one TestAll ci phase for triage; use -Ph2CiPhase=<phase>.'
+    dependsOn legacyTestClasses
+    main = 'org.h2.test.TestAll'
+    def selectedPhase = project.hasProperty('h2CiPhase') ? project.property('h2CiPhase') : 'memory'
+    if (!legacyCiPhases.contains(selectedPhase)) {
+        throw new GradleException("Unknown h2CiPhase: ${selectedPhase}. Expected one of ${legacyCiPhases}.")
+    }
+    args 'ci', '-phase', selectedPhase
+    classpath = sourceSets.legacyTest.runtimeClasspath
+    systemProperty 'file.encoding', 'UTF-8'
+    ignoreExitValue = true
+}
+
 def legacySmokeTests = [
         'org.h2.test.db.TestAlter',
         'org.h2.test.db.TestAlterSchemaRename',

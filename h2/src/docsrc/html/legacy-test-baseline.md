@@ -11,6 +11,7 @@
 | `.\gradlew.bat runH2LegacySmoke` | 运行当前已纳入 must-pass 的 legacy smoke 分组 | 是 |
 | `.\gradlew.bat runH2LegacyBaselineReport` | 运行当前已知失败的 legacy 基线分组，便于分类和修复 | 否 |
 | `.\gradlew.bat runH2LegacyBaselineReport "-Ph2TestScript=other/conditions.sql"` | 只运行指定 `TestScript` 脚本，便于定位单个 SQL 脚本输出差异 | 否 |
+| `.\gradlew.bat runH2TestAllCiPhaseReport "-Ph2CiPhase=memory"` | 只运行原始 `TestAll ci` 的一个阶段，用于定位超时和失败；支持 `memory`、`additional`、`utils`、`lazy-memory`、`disk`、`disk-additional`、`network-memory`、`network-lazy`、`encrypted-disk` | 否 |
 | `.\gradlew.bat runH2TestAllCi` | 运行原始 `org.h2.test.TestAll ci` 完整入口 | 是 |
 | `.\gradlew.bat clean test check build` | 运行当前 Gradle 主构建和插件 JUnit 检查 | 是 |
 
@@ -27,6 +28,7 @@
 | JDBC 可更新结果集 | `The result set is not updatable`、`TYPE_SCROLL_INSENSITIVE`/`CONCUR_UPDATABLE` 断言不匹配 | 已确认主要由 metadata 表类型过滤误依赖非排序数组触发；`BASE TABLE` 过滤恢复后，相关类已迁入 smoke |
 | 兼容模式断言 | Oracle/MySQL/metadata/keywords 等期望与当前实现不一致 | metadata 表类型顺序已按当前 `SYS TABLE` 行为对齐，`TestMetaData` 已迁入 smoke；后续完整 `TestAll` 中发现的兼容模式差异继续按模式分组治理 |
 | 环境敏感断言 | 时间戳毫秒、Locale 中文月份、Web Console 输出 | 固定 locale/timezone 或调整断言为稳定语义 |
+| 完整 `TestAll ci` 运行时间 | 未拆分的 `runH2TestAllCi` 本地运行超过 15 分钟超时 | 先通过 `runH2TestAllCiPhaseReport` 定位长耗时阶段，再恢复完整入口为验收任务 |
 
 ## 推进规则
 
@@ -45,7 +47,7 @@
 | L3 | 治理 JDBC updatable result set 失败 | `TestCompatibilityOracle`、`TestResultSet`、`TestUpdatableResultSet` 已迁入 smoke |
 | L4 | 治理 `TestScript` 输出基线 | `TestScript` 已迁入 smoke，支持 `-Ph2TestScript=...` 单脚本定位 |
 | L5 | 治理兼容模式和 metadata/keywords 失败 | `TestMetaData` 已迁入 smoke，baseline report 当前无剩余类 |
-| L6 | 治理环境敏感失败 | locale、timezone、时间精度类失败稳定化 |
+| L6 | 治理环境敏感失败 | `TestAll ci` 支持按阶段运行，可以在不阻塞全量套件的情况下定位 locale、timezone、时间精度类失败 |
 | L7 | 扩大 must-pass 分组 | baseline report 中修复后的类迁入 smoke |
-| L8 | 恢复完整 `runH2TestAllCi` 作为可选验收 | 完整入口失败数为 0 或仅剩明确豁免 |
+| L8 | 恢复完整 `runH2TestAllCi` 作为可选验收 | 所有命名 `TestAll ci` 阶段通过或有明确豁免后，完整入口失败数为 0 或仅剩明确豁免 |
 | L9 | 将 legacy 分组纳入日常开发规范 | 文档、Gradle 任务和提交检查约定一致 |

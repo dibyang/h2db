@@ -410,6 +410,12 @@ java org.h2.test.TestAll timer
      */
     public String defaultMode;
 
+    /**
+     * Optional focused phase for CI triage. When set, {@link #runTests()} only
+     * runs the named configuration phase.
+     */
+    private String phase;
+
 
     /**
      * The AB-BA locking detector.
@@ -549,9 +555,15 @@ kill -9 `jps -l | grep "org.h2.test." | cut -d " " -f 1`
             if ("-exclude".equals(args[offset])) {
                 excludedTests.add(args[offset + 1]);
                 offset += 2;
+            } else if ("-phase".equals(args[offset])) {
+                phase = args[offset + 1];
+                offset += 2;
             } else {
                 break;
             }
+        }
+        if (phase != null && !isKnownPhase(phase)) {
+            throw new IllegalArgumentException("Unknown TestAll phase: " + phase);
         }
         runTests();
         if (!ci && !vmlens) {
@@ -609,36 +621,52 @@ kill -9 `jps -l | grep "org.h2.test." | cut -d " " -f 1`
         // memory is a good match for multi-threaded, makes things happen
         // faster, more chance of exposing race conditions
         memory = true;
-        test();
+        if (shouldRunPhase("memory")) {
+            test();
+        }
         if (vmlens) {
             return;
         }
-        testAdditional();
+        if (shouldRunPhase("additional")) {
+            testAdditional();
+        }
 
         // test utilities
         big = !ci;
-        testUtils();
+        if (shouldRunPhase("utils")) {
+            testUtils();
+        }
         big = false;
 
         // lazy
         lazy = true;
         memory = true;
-        test();
+        if (shouldRunPhase("lazy-memory")) {
+            test();
+        }
         lazy = false;
 
         // but sometimes race conditions need bigger windows
         memory = false;
-        test();
-        testAdditional();
+        if (shouldRunPhase("disk")) {
+            test();
+        }
+        if (shouldRunPhase("disk-additional")) {
+            testAdditional();
+        }
 
         networked = true;
 
         memory = true;
-        test();
+        if (shouldRunPhase("network-memory")) {
+            test();
+        }
         memory = false;
 
         lazy = true;
-        test();
+        if (shouldRunPhase("network-lazy")) {
+            test();
+        }
         lazy = false;
 
         networked = false;
@@ -649,7 +677,9 @@ kill -9 `jps -l | grep "org.h2.test." | cut -d " " -f 1`
         throttle = 1;
         cacheType = "SOFT_LRU";
         cipher = "AES";
-        test();
+        if (shouldRunPhase("encrypted-disk")) {
+            test();
+        }
 
         diskUndo = false;
         diskResult = false;
@@ -680,10 +710,33 @@ kill -9 `jps -l | grep "org.h2.test." | cut -d " " -f 1`
             test();
         }
 
-        for (Entry<Class<? extends TestBase>, Boolean> entry : executedTests.entrySet()) {
-            if (!entry.getValue()) {
-                System.out.println("Warning: test " + entry.getKey().getName() + " was not executed.");
+        if (phase == null) {
+            for (Entry<Class<? extends TestBase>, Boolean> entry : executedTests.entrySet()) {
+                if (!entry.getValue()) {
+                    System.out.println("Warning: test " + entry.getKey().getName() + " was not executed.");
+                }
             }
+        }
+    }
+
+    private boolean shouldRunPhase(String phaseName) {
+        return phase == null || phase.equals(phaseName);
+    }
+
+    private static boolean isKnownPhase(String phaseName) {
+        switch (phaseName) {
+        case "memory":
+        case "additional":
+        case "utils":
+        case "lazy-memory":
+        case "disk":
+        case "disk-additional":
+        case "network-memory":
+        case "network-lazy":
+        case "encrypted-disk":
+            return true;
+        default:
+            return false;
         }
     }
 

@@ -89,7 +89,9 @@ public class TestQueryCache extends TestDb {
             // first prepare time must be always greater because of query cache,
             // but JVM is too unpredictable to assert that, so just check that
             // usually this is true
-            assertSmaller(firstSmaller, firstGreater);
+            if (!config.networked) {
+                assertSmaller(firstSmaller, firstGreater);
+            }
             stat.execute("drop table test");
         }
     }

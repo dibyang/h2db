@@ -8,7 +8,6 @@ package org.h2.jdbc.meta;
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
@@ -110,7 +109,7 @@ public final class DatabaseMetaLocal extends DatabaseMetaLocalBase {
 
     private static final ValueSmallint TABLE_INDEX_OTHER = ValueSmallint.get(DatabaseMetaData.tableIndexOther);
 
-    // This list must be ordered
+    // Metadata table type order returned by getTableTypes().
     private static final String[] TABLE_TYPES = { "SYS TABLE", "BASE TABLE", "GLOBAL TEMPORARY", "LOCAL TEMPORARY", "SYNONYM",
             "VIEW" };
 
@@ -409,9 +408,9 @@ public final class DatabaseMetaLocal extends DatabaseMetaLocalBase {
         if (types != null) {
             typesSet = new HashSet<>(8);
             for (String type : types) {
-                int idx = Arrays.binarySearch(TABLE_TYPES, type);
-                if (idx >= 0) {
-                    typesSet.add(TABLE_TYPES[idx]);
+                String supportedType = findTableType(type);
+                if (supportedType != null) {
+                    typesSet.add(supportedType);
                 } else if (type.equals("TABLE")) {
                     typesSet.add("BASE TABLE");
                 }
@@ -440,6 +439,15 @@ public final class DatabaseMetaLocal extends DatabaseMetaLocalBase {
         // TABLE_TYPE, TABLE_CAT, TABLE_SCHEM, TABLE_NAME
         result.sortRows(new SortOrder(session, new int[] { 3, 1, 2 }));
         return result;
+    }
+
+    private static String findTableType(String type) {
+        for (String tableType : TABLE_TYPES) {
+            if (tableType.equals(type)) {
+                return tableType;
+            }
+        }
+        return null;
     }
 
     private void getTablesAdd(SimpleResult result, Value catalogValue, Value schemaValue, Value tableName, Table t,

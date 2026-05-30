@@ -255,6 +255,7 @@ def legacySmokeTests = [
         'org.h2.test.db.TestTransaction',
         'org.h2.test.db.TestTriggersConstraints',
         'org.h2.test.db.TestViewAlterTable',
+        'org.h2.test.db.TestCompatibilityOracle',
         'org.h2.test.jdbc.TestBatchUpdates',
         'org.h2.test.jdbc.TestCallableStatement',
         'org.h2.test.jdbc.TestConnection',
@@ -263,7 +264,9 @@ def legacySmokeTests = [
         'org.h2.test.jdbc.TestManyJdbcObjects',
         'org.h2.test.jdbc.TestNativeSQL',
         'org.h2.test.jdbc.TestPreparedStatement',
+        'org.h2.test.jdbc.TestResultSet',
         'org.h2.test.jdbc.TestStatement',
+        'org.h2.test.jdbc.TestUpdatableResultSet',
         'org.h2.test.jdbc.TestZloty',
         'org.h2.test.store.TestDataUtils',
         'org.h2.test.store.TestFreeSpace',
@@ -273,10 +276,7 @@ def legacySmokeTests = [
 
 def legacyBaselineIssueTests = [
         'org.h2.test.scripts.TestScript',
-        'org.h2.test.db.TestCompatibilityOracle',
-        'org.h2.test.jdbc.TestMetaData',
-        'org.h2.test.jdbc.TestResultSet',
-        'org.h2.test.jdbc.TestUpdatableResultSet'
+        'org.h2.test.jdbc.TestMetaData'
 ]
 
 task runH2LegacySmoke(type: JavaExec) {

@@ -23,7 +23,7 @@ The latest full `runH2TestAllCi` run can compile and start the original suite, b
 | --- | --- | --- |
 | SQL compatibility syntax | `Unknown data type: "IDENTITY"` | Confirmed to be primarily caused by the repository default MySQL mode conflicting with legacy tests that expect REGULAR mode; the grouped runner now uses REGULAR for URLs without an explicit mode, and remaining failures should be triaged per class |
 | Script output expectations | Column names, separators, and expression rendering mismatches in `TestScript` | Decide whether output behavior changed intentionally or scripts are stale, then migrate by script directory |
-| JDBC updatable result sets | `The result set is not updatable`, result set type/concurrency assertions | Align with the JDBC behavior design before changing expectations |
+| JDBC updatable result sets | `The result set is not updatable`, result set type/concurrency assertions | Confirmed to be primarily caused by metadata table type filtering depending on a non-sorted array; after restoring `BASE TABLE` filtering, related classes were moved into smoke |
 | Compatibility mode assertions | Oracle/MySQL/metadata/keywords expectations differ from current behavior | Triage by compatibility mode and preserve a minimal regression set for each mode |
 | Environment-sensitive assertions | Timestamp precision, Chinese locale month names, Web Console output | Fix locale/timezone or rewrite assertions around stable semantics |
 
@@ -41,7 +41,7 @@ The latest full `runH2TestAllCi` run can compile and start the original suite, b
 | --- | --- | --- |
 | L1 | Stabilize Gradle legacy smoke and baseline report entrypoints | `runH2LegacySmoke` passes and this workflow is documented |
 | L2 | Resolve `IDENTITY` compatibility failures | Representative db/jdbc tests no longer fail on `IDENTITY` |
-| L3 | Resolve JDBC updatable result set failures | `TestResultSet`, `TestUpdatableResultSet`, and Web-related failures are decided and closed |
+| L3 | Resolve JDBC updatable result set failures | `TestCompatibilityOracle`, `TestResultSet`, and `TestUpdatableResultSet` are moved into smoke |
 | L4 | Resolve `TestScript` output baseline | Script output diffs are cataloged by directory and migrated in batches |
 | L5 | Resolve compatibility mode and metadata/keywords failures | Oracle/MySQL/metadata failures are no longer mixed into the generic failure bucket |
 | L6 | Stabilize environment-sensitive failures | Locale, timezone, and time precision failures are stable |

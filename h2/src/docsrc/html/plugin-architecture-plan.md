@@ -55,7 +55,7 @@
 | P2 | 已完成 | 补齐 SPI 契约边界 | 检查 `H2Plugin`、provider 的 null、空 id/version、空 provider 集合和 source 契约；补 JUnit | `runPluginArchitectureCheck`、日常门禁 |
 | P3 | 已完成 | 加固插件加载诊断 | 覆盖显式 class、ServiceLoader 开关、版本范围、无效描述符、依赖缺失、循环依赖、非法 provider type | `runPluginArchitectureCheck`、日常门禁 |
 | P4 | 已完成 | 收敛内置插件路径 | 确认 MVStore storage/table engine 通过 builtin provider 注册和解析；默认建表不走 legacy `TableEngine` 缓存 | `runPluginArchitectureCheck`、`runH2LegacySmoke` |
-| P5 | 未开始 | 完善表引擎插件化 | 覆盖外部 `TableEngineProvider` 建表、schema default params、错误信息和兼容语法 | `runPluginArchitectureCheck`、相关 `TestTableEngines` |
+| P5 | 已完成 | 完善表引擎插件化 | 覆盖外部 `TableEngineProvider` SQL 建表、schema default params、内置与 legacy 路径兼容 | `runPluginArchitectureCheck`、`runH2LegacySmoke` |
 | P6 | 未开始 | 完善存储引擎插件化 | 覆盖 storage id 持久化、请求/持久化不匹配、缺失 provider、只读降级、维护能力 | `runPluginArchitectureCheck`、storage 相关专项 |
 | P7 | 未开始 | 完善可观测性 | 确认 `INFORMATION_SCHEMA.PLUGINS`、`PLUGIN_PROVIDERS`、`PLUGIN_CAPABILITIES` 输出稳定，补文档 | `runPluginArchitectureCheck` |
 | P8 | 未开始 | 阶段验收与收口 | 跑日常门禁，按风险决定是否跑完整 `TestAll ci`，更新状态并提交 | 日常门禁，必要时完整验收 |

@@ -13,10 +13,12 @@ import java.lang.reflect.Field;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+import org.h2.api.H2Plugin;
 import org.h2.api.PluginCapability;
 import org.h2.api.PluginProvider;
 import org.h2.api.StorageEngine;
@@ -143,6 +145,40 @@ public class MVStoreTableEngineProviderTest {
         }
     }
 
+    /**
+     * T-PLUGIN-P5-EXTERNAL-TABLE-PROVIDER-SQL-01.
+     */
+    @Test
+    public void createsTableThroughExternalTableProviderId() throws Exception {
+        String url = "jdbc:h2:mem:pluginExternalTableProvider;PLUGIN_CLASSES="
+                + ExternalTablePlugin.class.getName();
+        try (Connection conn = DriverManager.getConnection(url, "sa", "");
+                Statement stat = conn.createStatement()) {
+            assertNotNull(database(conn).getPluginRegistry().findProvider(TableEngineProvider.TYPE,
+                    "external_mvstore"));
+            stat.execute("create table external_table(id int) engine \"external_mvstore\" with \"p1\", \"p2\"");
+
+            stat.execute("select * from external_table");
+        }
+    }
+
+    /**
+     * T-PLUGIN-P5-SCHEMA-DEFAULT-PARAMS-01.
+     */
+    @Test
+    public void passesSchemaDefaultParamsToExternalTableProvider() throws Exception {
+        String url = "jdbc:h2:mem:pluginExternalDefaultParams;PLUGIN_CLASSES="
+                + ExternalTablePlugin.class.getName()
+                + ";DEFAULT_TABLE_ENGINE=external_mvstore";
+        try (Connection conn = DriverManager.getConnection(url, "sa", "");
+                Statement stat = conn.createStatement()) {
+            stat.execute("create schema s with \"schema_param\"");
+            stat.execute("create table s.default_params(id int)");
+
+            stat.execute("select * from s.default_params");
+        }
+    }
+
     private static CreateTableData createTableData(SessionLocal session, String tableName) {
         Database db = session.getDatabase();
         CreateTableData data = new CreateTableData();
@@ -223,6 +259,64 @@ public class MVStoreTableEngineProviderTest {
         public Table createTable(CreateTableData data) {
             createTableData = data;
             return data.session.getDatabase().getStore().createTable(data);
+        }
+    }
+
+    /**
+     * 测试用外部表引擎插件。
+     */
+    public static final class ExternalTablePlugin implements H2Plugin {
+        @Override
+        public String getId() {
+            return "test.external.table";
+        }
+
+        @Override
+        public String getVersion() {
+            return "1";
+        }
+
+        @Override
+        public String getDisplayName() {
+            return "External Table Plugin";
+        }
+
+        @Override
+        public Iterable<? extends PluginProvider> getProviders() {
+            return Arrays.asList(new ExternalTableProvider());
+        }
+    }
+
+    private static final class ExternalTableProvider implements TableEngineProvider {
+        @Override
+        public String getType() {
+            return TYPE;
+        }
+
+        @Override
+        public String getId() {
+            return "external_mvstore";
+        }
+
+        @Override
+        public boolean supports(String capability) {
+            return PluginCapability.TABLE_CREATE.equals(capability);
+        }
+
+        @Override
+        public Table createTable(CreateTableData data, TableEngineContext context) {
+            if ("external_table".equalsIgnoreCase(data.tableName)
+                    && !context.getTableEngineParams().equals(Arrays.asList("p1", "p2"))) {
+                throw new IllegalStateException("Unexpected external table params: "
+                        + context.getTableEngineParams());
+            }
+            if ("default_params".equalsIgnoreCase(data.tableName)
+                    && !context.getTableEngineParams().equals(Arrays.asList("schema_param"))) {
+                throw new IllegalStateException("Unexpected schema default params: "
+                        + context.getTableEngineParams());
+            }
+            return ((org.h2.mvstore.db.MVStoreBackedStorageEngine) context.getStorageEngine())
+                    .getStore().createTable(data);
         }
     }
 }

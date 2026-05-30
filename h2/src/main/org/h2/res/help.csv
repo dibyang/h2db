@@ -7705,10 +7705,10 @@ SYSTEM_RANGE(0, 100)
 "
 
 "Advanced","Plugins","
-PLUGIN_CLASSES = pluginClassName [,...]
-PLUGIN_PATHS = jarOrDirectory [,...]
+PLUGIN_CLASSES = classNameString [,...]
+PLUGIN_PATHS = fileNameString [,...]
 PLUGIN_SERVICE_LOADER = { TRUE | FALSE }
-STORAGE_ENGINE = storageEngineId
+STORAGE_ENGINE = classNameString
 ","
 Plugins can extend H2 with table engines and storage engines.
 

@@ -114,6 +114,26 @@ sourceSets {
         compileClasspath = sourceSets.main.output + configurations.testCompileClasspath
         runtimeClasspath = output + compileClasspath + configurations.testRuntimeClasspath
     }
+    legacyTest {
+        java {
+            srcDirs = ['src/test', 'src/tools']
+            include 'org/h2/test/**'
+            include 'org/h2/dev/cache/**'
+            include 'org/h2/dev/cluster/**'
+            include 'org/h2/dev/fs/**'
+            include 'org/h2/dev/ftp/**'
+            include 'org/h2/dev/hash/**'
+            include 'org/h2/dev/sort/**'
+            include 'org/h2/dev/util/**'
+            include 'org/h2/samples/**'
+        }
+        resources {
+            srcDirs = ['src/test']
+            exclude '**/*.java'
+        }
+        compileClasspath = sourceSets.main.output + configurations.testCompileClasspath + files('bin')
+        runtimeClasspath = output + compileClasspath + configurations.testRuntimeClasspath + files('bin')
+    }
 }
 
 
@@ -205,6 +225,15 @@ task runPluginArchitectureCheck(type: Test) {
     exclude '**/*$*.class'
     useJUnitPlatform()
     dependsOn pluginTestClasses
+}
+
+task runH2TestAllCi(type: JavaExec) {
+    description = 'Runs the original H2 TestAll ci suite through Gradle.'
+    dependsOn legacyTestClasses
+    main = 'org.h2.test.TestAll'
+    args 'ci'
+    classpath = sourceSets.legacyTest.runtimeClasspath
+    systemProperty 'file.encoding', 'UTF-8'
 }
 
 test {

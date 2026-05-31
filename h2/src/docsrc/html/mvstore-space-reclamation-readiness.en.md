@@ -4,7 +4,7 @@ This document records readiness for the S2 long-term solution. The phase boundar
 
 ## Readiness Conclusion
 
-S2 can start. Pluginization prerequisites are closed, the MVStore storage engine exposes maintenance capabilities through the built-in provider path, and the dedicated test gate is runnable. The S2 main path is chunk/page-level online reclamation inside MVStore, not full-store shadow copy and not a simple wrapper around `compactFile()`.
+S2 is implemented through the current release gate. Pluginization prerequisites are closed, the MVStore storage engine exposes maintenance capabilities through the built-in provider path, and the dedicated and full legacy gates are runnable. The S2 main path is chunk/page-level online reclamation inside MVStore, not full-store shadow copy and not a simple wrapper around `compactFile()`.
 
 ## Existing Foundation
 
@@ -28,7 +28,7 @@ S2 can start. Pluginization prerequisites are closed, the MVStore storage engine
 | S2.4 | Persistent evacuation journal | Crash recovery, continuation, or cleanup of unfinished jobs. |
 | S2.5 | Relocation map | Old-version reads for moved pages and long-retention pinning. |
 | S2.6 | Integrated tail mover | Move tail chunks and shrink file after relocation. |
-| S2.7 | Background scheduling | Default off, with idle budget, throttling, and dry-run. |
+| S2.7 | Background scheduling | Low-intensity default scheduling, with idle budget, throttling, dry-run, and disable switch. |
 | S2.8 | Operationalization | Chinese/English docs, diagnostic table, configuration guide, long-running slow tests. |
 
 ## Test Strategy
@@ -69,7 +69,7 @@ Higher-risk phases should also run the daily gate or related `TestAll ci` phase.
 | --- | --- |
 | Should relocation map be allowed? | Yes, but behind a feature flag, and old versions must reject write-open. |
 | Should reclamation work without pre-opening all maps? | Yes as the S2 final goal; start with open maps, then add lazy open / unknown-map diagnostics. |
-| Should background execution be default? | No. S2.7 is default-off after manual flow and recovery semantics are stable. |
+| Should background execution be default? | Yes, after stabilization. It now runs in low-intensity mode by default and can be disabled with `onlineReclamationEnabled(false)`. |
 | Should long transactions be forced to wait? | No. Skip pinned chunks by default; handle old-version reads after relocation map is mature. |
 
 ## Working Rules

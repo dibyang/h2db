@@ -14,15 +14,15 @@ This is the traceable task plan for the S2 long-term solution. S1, the medium-te
 
 | Phase | Status | Goal | Main Tasks | Test Gate |
 | --- | --- | --- | --- | --- |
-| S2.0 | In progress | Close the design | New long-term architecture design, plan, Chinese/English copies | `runMvStoreSpaceReclamationCheck` |
-| S2.1 | Planned | Observability and decision | `ChunkLivenessSnapshot`, candidate scoring, dry-run result, diagnostic messages | JUnit + MVStore dedicated |
-| S2.2 | Planned | Govern existing partial compact | Wire `MVStoreReclamationCoordinator` into `vacuumOnline()`, budgets, no-progress, mutual exclusion | JUnit + MVStore dedicated + plugin gate |
-| S2.3 | Planned | Page relocation main path | Live-page relocation for open maps, unknown map skip, long transaction skip | MVStore dedicated + concurrency |
-| S2.4 | Planned | Persistent evacuation journal | Layout/meta journal, phase replay, publish marker, crash recovery | Fault injection + recovery |
-| S2.5 | Planned | Relocation map | Old pos to new pos, feature flag, old-version compatibility strategy | JUnit + compatibility + recovery |
-| S2.6 | Planned | Integrated tail mover | Move tail chunks after relocation, shrink file, no-shrink diagnostics | MVStore dedicated + slow tests |
-| S2.7 | Planned | Background scheduling | Default off, idle budget, throttling, dry-run, mutual exclusion | Scheduler + concurrency |
-| S2.8 | Planned | Operational closeout | Chinese/English usage docs, configuration, diagnostic table, long-running slow baseline | Docs + daily gate |
+| S2.0 | Done | Close the design | New long-term architecture design, plan, Chinese/English copies | `runMvStoreSpaceReclamationCheck` |
+| S2.1 | Done | Observability and decision | `ChunkLivenessSnapshot`, candidate scoring, dry-run result, diagnostic messages | JUnit + MVStore dedicated |
+| S2.2 | Done | Govern existing partial compact | Wire `MVStoreReclamationCoordinator` into `vacuumOnline()`, budgets, no-progress, mutual exclusion | JUnit + MVStore dedicated + plugin gate |
+| S2.3 | Done | Page relocation main path | Live-page relocation for open maps, unknown map skip, long transaction skip | MVStore dedicated + concurrency |
+| S2.4 | Done | Persistent evacuation journal | Layout/meta journal, phase replay, publish marker, crash recovery | Fault injection + recovery |
+| S2.5 | Done | Relocation map | Old pos to new pos, feature flag, old-version compatibility strategy | JUnit + compatibility + recovery |
+| S2.6 | Done | Integrated tail mover | Move tail chunks after relocation, shrink file, no-shrink diagnostics | MVStore dedicated + slow tests |
+| S2.7 | Done | Background scheduling | Low-intensity default scheduling, idle budget, throttling, dry-run, mutual exclusion | Scheduler + concurrency |
+| S2.8 | Done | Operational closeout | Chinese/English usage docs, configuration, diagnostic table, full release gates | Docs + daily gate |
 
 ## S2.1 Details
 

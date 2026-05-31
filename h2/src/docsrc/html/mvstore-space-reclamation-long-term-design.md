@@ -160,7 +160,7 @@ final class MVStoreOnlineReclamation {
 | value | new page position、map id、source version、expire version。 |
 | 生命周期 | 当 `oldestVersionToKeep` 超过 expire version 后删除。 |
 | 兼容性 | 新字段必须有 store feature flag；旧版本打开时应拒绝或只读降级。 |
-| 性能 | 默认关闭。只有长期终极回收需要释放被旧版本 pin 的空间时才开启。 |
+| 性能 | 默认低强度后台调度，带预算和关闭开关；relocation map 和 journal 驱动行为仍保持显式门控。 |
 
 ## 状态机
 
@@ -200,7 +200,7 @@ stateDiagram-v2
 
 ### 后台调度
 
-后台调度不是第一阶段默认能力，但长期应支持：
+后台调度已经以低强度默认路径落地，并带显式控制：
 
 | 条件 | 行为 |
 | --- | --- |
@@ -238,7 +238,7 @@ stateDiagram-v2
 | S2.1-S2.3 | 不变 | 只做现有 rewrite / move 的治理增强。 |
 | S2.4 | 增加 journal keys | 旧版本忽略或拒绝未完成 job；需要 feature flag。 |
 | S2.5 | 增加 relocation map | 旧版本必须拒绝写打开，允许只读降级需单独验证。 |
-| S2.7 | 后台调度 | 不改变格式，默认关闭。 |
+| S2.7 | 后台调度 | 不改变格式；低强度默认调度，带关闭开关。 |
 
 ## 测试方案
 
@@ -276,7 +276,7 @@ stateDiagram-v2
 | S2.4 | 持久 evacuation journal | 支持 crash 后恢复/继续/清理未完成任务。 |
 | S2.5 | Relocation map | 支持迁移仍可能被旧版本读取的 page，解决 long retention 下 chunk 无法释放。 |
 | S2.6 | Tail mover 一体化 | relocation 后自动 move tail chunks 和 shrink，保持预算。 |
-| S2.7 | 后台调度 | 默认关闭，支持 idle budget、限速和诊断 dry-run。 |
+| S2.7 | 后台调度 | 低强度默认调度，支持 idle budget、限速、诊断 dry-run 和关闭开关。 |
 | S2.8 | 对外运维化 | 中英文使用文档、诊断表、配置说明、长期慢测。 |
 
 ## 需要拍板的问题
@@ -285,7 +285,7 @@ stateDiagram-v2
 | --- | --- |
 | 长期方案是否允许引入 relocation map | 允许，但必须 feature flag，且旧版本写打开要拒绝。 |
 | 是否要求不打开所有 map 也能回收 | 作为终极目标；先从 open maps 实现，后续补按需打开/unknown map 诊断。 |
-| 是否默认后台执行 | 否。手动入口稳定后再默认关闭地引入后台调度。 |
+| 是否默认后台执行 | 是。手动入口稳定后默认低强度执行；可通过 `onlineReclamationEnabled(false)` 关闭。 |
 | 是否继续保留整库 shadow compact | 保留为离线工具和兜底，不作为在线主线。 |
 | 长事务是否强制等待 | 否。默认跳过被 pin chunk；relocation map 成熟后再处理旧版本读取。 |
 

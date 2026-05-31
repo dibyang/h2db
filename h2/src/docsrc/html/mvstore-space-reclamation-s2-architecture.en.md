@@ -34,7 +34,7 @@ Reusable code anchors:
 | Budgeting | Support max chunks, max live bytes, max run millis, and IO budget. |
 | Long-transaction safety | Do not free data still readable by old versions; release pinned chunks only after relocation map is mature. |
 | Tail shrink loop | After page relocation, move tail chunks and truncate the file. |
-| Operational control | Background scheduling is default-off, with dry-run and clear diagnostics. |
+| Operational control | Background scheduling is enabled by default in a low-intensity mode, with disable switch, budgets, backoff, dry-run, and clear diagnostics. |
 
 ## Non-goals
 
@@ -150,7 +150,7 @@ S2.5 introduces relocation map to support old-version reads of moved pages.
 | Value | New page position, map id, source version, expire version. |
 | Lifecycle | Delete after `oldestVersionToKeep` passes expire version. |
 | Compatibility | Requires a feature flag; old versions must reject write-open. |
-| Default | Off by default; enabled only when reclaiming pinned chunks. |
+| Default | Explicitly gated; enabled only when reclaiming pinned chunks. |
 
 ## State Machine
 
@@ -230,6 +230,6 @@ The current implementation provides these internal API anchors:
 | `MVStoreReclamationCoordinator` | Runs one bounded online reclamation round and exposes recovery. |
 | `MVStoreReclamationRequest` | Controls dry-run, target fill rate, rewrite budget, journal, relocation-map gate, and tail budget. |
 | `MVStoreOnlineReclamationResult` | Reports status, before/after fill rates and file size, candidates, estimated reclaimed bytes, relocation-map flags, and tail-compaction flags. |
-| `MVStoreReclamationScheduler` | Provides a disabled-by-default scheduler facade for future background operation. |
+| `MVStoreReclamationScheduler` | Provides the low-intensity default scheduler integrated with MVStore housekeeping, with disable and backoff controls. |
 
 The durable-format-affecting features remain gated. Journaling is opt-in, and relocation-map page resolution is used only when explicit mappings exist. The scheduler is integrated with MVStore housekeeping and is enabled by default in a low-intensity mode; it can be disabled with `onlineReclamationEnabled(false)`.

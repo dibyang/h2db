@@ -4,7 +4,7 @@
 
 ## 启动结论
 
-可以开始 S2。插件化前置已经收口，MVStore storage engine 已通过内置 provider 暴露维护能力，专项测试门禁可运行。S2 主线是 MVStore 内部 chunk/page 级在线回收，不是整库 shadow copy，也不是简单包装 `compactFile()`。
+S2 已通过当前发布门禁实现。插件化前置已经收口，MVStore storage engine 已通过内置 provider 暴露维护能力，专项测试和完整 legacy 门禁可运行。S2 主线是 MVStore 内部 chunk/page 级在线回收，不是整库 shadow copy，也不是简单包装 `compactFile()`。
 
 ## 已具备基础
 
@@ -28,7 +28,7 @@
 | S2.4 | 持久 evacuation journal | crash 后恢复、继续或清理未完成任务。 |
 | S2.5 | Relocation map | 支持旧版本读取被迁移 page，解决 long retention pinning。 |
 | S2.6 | Tail mover 一体化 | relocation 后 move tail chunks 和 shrink file。 |
-| S2.7 | 后台调度 | 默认关闭，支持 idle budget、限速和 dry-run。 |
+| S2.7 | 后台调度 | 低强度默认调度，支持 idle budget、限速、dry-run 和关闭开关。 |
 | S2.8 | 对外运维化 | 中英文文档、诊断表、配置说明、长期慢测。 |
 
 ## 测试策略
@@ -69,7 +69,7 @@
 | --- | --- |
 | 是否允许 relocation map | 允许，但必须 feature flag，旧版本写打开要拒绝。 |
 | 是否要求不打开所有 map 也能回收 | 作为 S2 终极目标；先从 open maps 开始，后续补按需打开/unknown map 诊断。 |
-| 是否默认后台执行 | 否。S2.7 默认关闭，手动路径和恢复语义稳定后再推进。 |
+| 是否默认后台执行 | 是，稳定后默认低强度执行；可通过 `onlineReclamationEnabled(false)` 关闭。 |
 | 长事务是否强制等待 | 否。默认跳过 pinned chunks；relocation map 成熟后再处理旧版本读取。 |
 
 ## 启动规则

@@ -31,7 +31,7 @@ S2 must advance these long-term capabilities:
 | --- | --- |
 | Full-store shadow publish | Keep only as offline compact or fallback capability, not the online main path. |
 | Simple `compactFile()` wrapper | Only an early implementation path in S2.2; it does not complete S2. |
-| Automatic background scheduling | S2.7, default off, after manual flow and recovery semantics are stable. |
+| Automatic background scheduling | S2.7 is implemented as low-intensity default scheduling after manual flow and recovery semantics stabilized. |
 | SQL command | Not the S2 starting point; revisit after Java maintenance API and diagnostics are stable. |
 
 ## Phase Plan

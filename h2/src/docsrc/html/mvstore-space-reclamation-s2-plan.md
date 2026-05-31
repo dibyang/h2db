@@ -14,15 +14,15 @@
 
 | 阶段 | 状态 | 目标 | 主要任务 | 测试门禁 |
 | --- | --- | --- | --- | --- |
-| S2.0 | In progress | 设计收口 | 新建长期方案架构设计、推进计划、中英文副本 | `runMvStoreSpaceReclamationCheck` |
-| S2.1 | Planned | 观测与决策 | `ChunkLivenessSnapshot`、candidate scoring、dry-run result、诊断 message | JUnit + MVStore 专项 |
-| S2.2 | Planned | 治理现有 partial compact | `MVStoreReclamationCoordinator` 接入 `vacuumOnline()`，预算、no-progress、互斥 | JUnit + MVStore 专项 + plugin gate |
-| S2.3 | Planned | Page relocation 主路径 | 基于 open maps 的 live page relocation，unknown map/long transaction skip | MVStore 专项 + 并发 |
-| S2.4 | Planned | 持久 evacuation journal | layout/meta journal、phase replay、publish marker、崩溃恢复 | fault injection + recovery |
-| S2.5 | Planned | Relocation map | old pos -> new pos，feature flag，旧版本兼容策略 | JUnit + compatibility + recovery |
-| S2.6 | Planned | Tail mover 一体化 | relocation 后移动尾部 chunk，shrink file，no-shrink 诊断 | MVStore 专项 + slow tests |
-| S2.7 | Planned | 后台调度 | 默认关闭，idle budget、限速、dry-run、互斥 | scheduler + concurrency |
-| S2.8 | Planned | 运维化收口 | 中英文使用文档、配置、诊断表、长期慢测基线 | docs + daily gate |
+| S2.0 | Done | 设计收口 | 新建长期方案架构设计、推进计划、中英文副本 | `runMvStoreSpaceReclamationCheck` |
+| S2.1 | Done | 观测与决策 | `ChunkLivenessSnapshot`、candidate scoring、dry-run result、诊断 message | JUnit + MVStore 专项 |
+| S2.2 | Done | 治理现有 partial compact | `MVStoreReclamationCoordinator` 接入 `vacuumOnline()`，预算、no-progress、互斥 | JUnit + MVStore 专项 + plugin gate |
+| S2.3 | Done | Page relocation 主路径 | 基于 open maps 的 live page relocation，unknown map/long transaction skip | MVStore 专项 + 并发 |
+| S2.4 | Done | 持久 evacuation journal | layout/meta journal、phase replay、publish marker、崩溃恢复 | fault injection + recovery |
+| S2.5 | Done | Relocation map | old pos -> new pos，feature flag，旧版本兼容策略 | JUnit + compatibility + recovery |
+| S2.6 | Done | Tail mover 一体化 | relocation 后移动尾部 chunk，shrink file，no-shrink 诊断 | MVStore 专项 + slow tests |
+| S2.7 | Done | 后台调度 | 低强度默认调度，idle budget、限速、dry-run、互斥 | scheduler + concurrency |
+| S2.8 | Done | 运维化收口 | 中英文使用文档、配置、诊断表、完整发布门禁 | docs + daily gate |
 
 ## S2.1 详细任务
 

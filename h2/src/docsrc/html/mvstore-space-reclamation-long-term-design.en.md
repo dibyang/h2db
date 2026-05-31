@@ -160,7 +160,7 @@ This is the most sensitive part of the long-term solution and should only be ena
 | Value | New page position, map id, source version, expire version. |
 | Lifecycle | Delete after `oldestVersionToKeep` passes the expire version. |
 | Compatibility | Requires a store feature flag; old versions should reject write-open or use a separately tested read-only downgrade. |
-| Performance | Default off. Enable only for the long-term goal of freeing old-version-pinned chunks. |
+| Performance | Low-intensity background scheduling is enabled by default with budgets and a disable switch; relocation-map and journal-driven behavior stay explicitly gated. |
 
 ## State Machine
 
@@ -200,7 +200,7 @@ stateDiagram-v2
 
 ### Background Scheduling
 
-Background scheduling is not default before S2.7, but the long-term design should support it:
+Background scheduling is now implemented as a low-intensity default path with explicit controls:
 
 | Condition | Behavior |
 | --- | --- |
@@ -238,7 +238,7 @@ Background scheduling is not default before S2.7, but the long-term design shoul
 | S2.1-S2.3 | Unchanged | Only governance around existing rewrite/move capabilities. |
 | S2.4 | Adds journal keys | Old versions ignore or reject unfinished jobs; feature flag required. |
 | S2.5 | Adds relocation map | Old versions must reject write-open; read-only downgrade needs separate validation. |
-| S2.7 | Background scheduling | No format change, default off. |
+| S2.7 | Background scheduling | No format change; low-intensity default scheduling with disable switch. |
 
 ## Test Plan
 
@@ -276,7 +276,7 @@ Higher-risk phases should also run the daily gate or related `TestAll ci` phase.
 | S2.4 | Persistent evacuation journal | Crash recovery, continuation, or cleanup of unfinished jobs. |
 | S2.5 | Relocation map | Move pages that old versions may still read and free long-retention-pinned chunks. |
 | S2.6 | Integrated tail mover | Move tail chunks and shrink after relocation, within budget. |
-| S2.7 | Background scheduling | Default off; idle budgets, throttling, and diagnostic dry-run. |
+| S2.7 | Background scheduling | Low-intensity default scheduling; idle budgets, throttling, diagnostic dry-run, and disable switch. |
 | S2.8 | Operationalization | Chinese/English user docs, diagnostic table, configuration guide, long-running slow tests. |
 
 ## Decisions Needed
@@ -285,7 +285,7 @@ Higher-risk phases should also run the daily gate or related `TestAll ci` phase.
 | --- | --- |
 | Should the long-term solution allow a relocation map? | Yes, but only behind a feature flag, and old versions must reject write-open. |
 | Should reclamation work without pre-opening all maps? | Yes as the final goal; start with open maps, then add lazy open / unknown-map diagnostics. |
-| Should background execution be default? | No. Add it default-off after the manual entrypoint is stable. |
+| Should background execution be default? | Yes, as low-intensity default scheduling after the manual entrypoint is stable; disable with `onlineReclamationEnabled(false)`. |
 | Should whole-file shadow compact remain? | Yes as offline tooling and fallback, not the online main path. |
 | Should long transactions be forced to wait? | No. Skip pinned chunks by default; handle old-version reads after relocation map is mature. |
 

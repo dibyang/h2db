@@ -125,6 +125,7 @@ The following capabilities now have request/result, feature-gate, or journal-sca
 | `DRY_RUN` | Analysis-only mode, no writes. | Use for diagnostics and pre-release assessment. |
 | `RECLAMATION_SCHEDULER_DISABLED` | The scheduler is configured off. | Enable `onlineReclamationEnabled(true)` or remove the disabling configuration if background reclamation is desired. |
 | `RECLAMATION_SCHEDULER_BACKOFF` | The scheduler is in its minimum-interval or failure-backoff window. | Normal throttling; it avoids frequent foreground IO contention. |
+| `RECLAMATION_STORE_CLOSED` | The store is already closed, so background housekeeping skips this online reclamation round. | Normal close-race protection; inspect close ordering if application code still calls maintenance entrypoints. |
 | `RECLAMATION_FAILED` | This round failed with an exception. | Check the exception message, preserve files and journal state, and let the next round recover stale journal state first. |
 
 ## Formal Release Default Strategy
@@ -151,9 +152,9 @@ Latest local release-gate results:
 | `.\gradlew.bat runPluginArchitectureCheck` | PASS | Maintenance SPI and plugin capability gates are healthy. |
 | `.\gradlew.bat runMvStoreRecoveryCheck` | PASS | MVStore recovery/corruption checks passed. |
 | `.\gradlew.bat runH2LegacySmoke` | PASS | Legacy smoke passed. |
-| `.\gradlew.bat runH2TestAllCi` | ENV-FLAKY | The 2026-05-31 rerun no longer had missing-`mvn`, Maven plugin-resolution, or repeated-download noise; the full suite still hit one `localhost:9092` timeout in `lazy net` / `TestConnectionPool.testPerformance`, and the related phase passed when rerun individually. |
+| `.\gradlew.bat runH2TestAllCi` | PASS | The 2026-05-31 rerun passed; old-jar fetch noise is gone, TestAll network phases now use dynamic TCP ports, and `TestTools` shutdown assertions tolerate connection aborts during rejection. |
 | `.\gradlew.bat runH2TestAllCiPhaseReport -Ph2CiPhase=additional` | PASS | Rechecked the `TestTools` / external-tool phase. |
 | `.\gradlew.bat runH2TestAllCiPhaseReport -Ph2CiPhase=network-lazy` | PASS | Rechecked the localhost-network phase. |
 | `.\gradlew.bat runH2TestAllCiPhaseReport -Ph2CiPhase=lazy-memory` | PASS | Rechecked the `TestXA` lazy-memory phase. |
 
-Release conclusion: all S2-specific gates passed. Old-H2-jar fetching now uses cache first, direct download with cache write-back, and Maven / Maven Wrapper only as fallback. The remaining full-TestAll issue behaves like a localhost network flake and should be rerun once in a clean release CI environment before cutting the final release.
+Release conclusion: all S2-specific gates and the full local TestAll acceptance now pass. Old-H2-jar fetching uses cache first, direct download with cache write-back, and Maven / Maven Wrapper only as fallback. TestAll network phases now use dynamic ports to reduce localhost port cross-talk, and background online reclamation now skips closed stores safely.

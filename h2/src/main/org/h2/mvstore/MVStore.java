@@ -1637,6 +1637,13 @@ public class MVStore implements AutoCloseable {
     }
 
     public MVStoreOnlineReclamationResult runOnlineReclamationHousekeeping() {
+        if (isClosed()) {
+            MVStoreReclamationAnalysis analysis = new MVStoreReclamationAnalysis(0, 0L, 0, 0,
+                    new ArrayList<ChunkLivenessSnapshot>(), new ArrayList<ChunkLivenessSnapshot>());
+            return new MVStoreOnlineReclamationResult(MVStoreReclamationStatus.SKIPPED,
+                    MVStoreReclamationCode.RECLAMATION_STORE_CLOSED, analysis, analysis, false,
+                    false, false, false, false, new ArrayList<Integer>());
+        }
         return reclamationScheduler.runIfEnabled(this);
     }
 

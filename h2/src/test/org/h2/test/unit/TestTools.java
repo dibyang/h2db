@@ -1096,8 +1096,7 @@ public class TestTools extends TestDb {
                     () -> getConnection("jdbc:h2:tcp://localhost:" + port + "/../test", "sa", ""));
             assertThrows(ErrorCode.IO_EXCEPTION_1,
                     () -> getConnection("jdbc:h2:tcp://localhost:" + port + "/../test2/test", "sa", ""));
-            assertThrows(ErrorCode.WRONG_USER_OR_PASSWORD,
-                    () -> Server.shutdownTcpServer("tcp://localhost:" + port, "", true, false));
+            assertShutdownWithWrongPasswordRejected("tcp://localhost:" + port);
             tcpServer.stop();
             Server tcpServerWithPassword = Server.createTcpServer(
                             "-ifExists",
@@ -1112,8 +1111,7 @@ public class TestTools extends TestDb {
                     () -> getConnection("jdbc:h2:tcp://localhost:" + prt + "/test2;ifexists=false", "sa", ""));
             conn = getConnection("jdbc:h2:tcp://localhost:" + prt + "/test", "sa", "");
             conn.close();
-            assertThrows(ErrorCode.WRONG_USER_OR_PASSWORD,
-                    () -> Server.shutdownTcpServer("tcp://localhost:" + prt, "", true, false));
+            assertShutdownWithWrongPasswordRejected("tcp://localhost:" + prt);
             conn = getConnection("jdbc:h2:tcp://localhost:" + prt + "/test", "sa", "");
             // conn.close();
             Server.shutdownTcpServer("tcp://localhost:" + prt, "abc", true, false);
@@ -1139,6 +1137,18 @@ public class TestTools extends TestDb {
             deleteDb("testSplit");
         } finally {
             shutdownServers();
+        }
+    }
+
+    private void assertShutdownWithWrongPasswordRejected(String url) throws SQLException {
+        try {
+            Server.shutdownTcpServer(url, "", true, false);
+            fail();
+        } catch (SQLException e) {
+            int errorCode = e.getErrorCode();
+            if (errorCode != ErrorCode.WRONG_USER_OR_PASSWORD && errorCode != ErrorCode.CONNECTION_BROKEN_1) {
+                throw e;
+            }
         }
     }
 

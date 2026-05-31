@@ -20,7 +20,7 @@ Run these commands from `h2/`:
 
 ## Current Baseline Status
 
-All named phases pass: `memory`, `additional`, `utils`, `lazy-memory`, `disk`, `disk-additional`, `network-memory`, `network-lazy`, and `encrypted-disk`. The full `runH2TestAllCi` entrypoint has passed local acceptance before, but long full-suite localhost network flakes are recorded: a rerun on 2026-05-30 at 15:17 failed once in `net memory` when `TestMultiThreadedKernel` timed out connecting to `localhost:9092`, and the focused `network-memory` phase rerun passed afterwards; a rerun on 2026-05-30 at 16:42 failed once in `additional` when `TestTools.testServer` hit a TCP shutdown connection abort, and the focused `additional` phase rerun passed afterwards; a rerun on 2026-05-31 at 07:29 failed once in `lazy net` when `TestConnectionPool.testPerformance` timed out connecting to `localhost:9092`, and the focused `network-lazy` phase rerun passed afterwards. These are tracked as intermittent network items in the test foundation.
+All named phases pass: `memory`, `additional`, `utils`, `lazy-memory`, `disk`, `disk-additional`, `network-memory`, `network-lazy`, and `encrypted-disk`. The full `runH2TestAllCi` entrypoint passed locally again on 2026-05-31. Earlier long full-suite localhost network flakes included: a rerun on 2026-05-30 at 15:17 failed once in `net memory` when `TestMultiThreadedKernel` timed out connecting to `localhost:9092`, and the focused `network-memory` phase rerun passed afterwards; a rerun on 2026-05-30 at 16:42 failed once in `additional` when `TestTools.testServer` hit a TCP shutdown connection abort, and the focused `additional` phase rerun passed afterwards; a rerun on 2026-05-31 at 07:29 failed once in `lazy net` when `TestConnectionPool.testPerformance` timed out connecting to `localhost:9092`, and the focused `network-lazy` phase rerun passed afterwards. These have now been mitigated with dynamic ports and shutdown assertion governance.
 
 Historical issues that have been fixed or brought under management:
 
@@ -30,10 +30,12 @@ Historical issues that have been fixed or brought under management:
 | Script output expectations | Column names, separators, and expression rendering mismatches in `TestScript` | Related script baselines were updated to current behavior and `TestScript` was moved into smoke |
 | JDBC updatable result sets | `The result set is not updatable`, result set type/concurrency assertions | `BASE TABLE` filtering semantics were restored and related classes were moved into smoke |
 | Compatibility mode assertions | Oracle/MySQL/metadata/keywords expectations differed from current behavior | Metadata table type ordering is aligned and `TestMetaData` was moved into smoke |
-| Environment-sensitive assertions | Timestamp precision, Chinese locale month names, Web Console output, network phase port connection timeouts, TCP server shutdown connection aborts | Phase-level entrypoints make these failures isolatable; focused `network-memory` and `additional` reruns passed, while intermittent full-suite network issues remain tracked |
+| Environment-sensitive assertions | Timestamp precision, Chinese locale month names, Web Console output, network phase port connection timeouts, TCP server shutdown connection aborts | Phase-level entrypoints make these failures isolatable; TestAll network phases now use a dynamic TCP port instead of repeatedly sharing default `9092`; `TestTools` wrong-password shutdown assertions allow connection aborts during rejection; focused `network-memory`, `network-lazy`, and `additional` reruns passed |
 | Full `TestAll ci` runtime | A local full run takes about 16 minutes | Kept as full acceptance, not as the default fast feedback loop for every small change |
 
 `TestUpgrade` now uses a quieter old-H2-jar fetch path: it reads the local `.m2` cache first, downloads directly from Maven Central and writes the artifact back to the cache when missing, and only tries Maven / Maven Wrapper as a fallback when direct download fails. On 2026-05-31 the `utils` phase was verified to populate the cache on first run and avoid missing-`mvn`, Maven plugin-resolution, and repeated-download noise on rerun.
+
+TestAll network phases start the shared TCP server with `-tcpPort 0` and pass the actual port to test URLs through `config.getPort()`. This avoids full-suite contention on default `9092`, stale local ports, connection timeouts, and local environment cross-talk.
 
 ## Test Layers
 
@@ -88,7 +90,7 @@ Tests currently tracked but not included in the daily gate:
 
 ## Phases
 
-Currently passing named `TestAll ci` phases: `memory`, `additional`, `utils`, `lazy-memory`, `disk`, `disk-additional`, `network-memory`, `network-lazy`, and `encrypted-disk`. The full `runH2TestAllCi` entrypoint remains the acceptance entrypoint; intermittent full-suite localhost network issues are currently recorded for `network-memory`, `additional`, and `network-lazy`, with focused phase reruns passing.
+Currently passing named `TestAll ci` phases: `memory`, `additional`, `utils`, `lazy-memory`, `disk`, `disk-additional`, `network-memory`, `network-lazy`, and `encrypted-disk`. The full `runH2TestAllCi` entrypoint remains the acceptance entrypoint and passed locally on 2026-05-31; earlier full-suite localhost flakes in `network-memory`, `additional`, and `network-lazy` passed focused reruns and are mitigated by dynamic-port / shutdown assertion governance.
 
 | Phase | Goal | Done when |
 | --- | --- | --- |

@@ -119,6 +119,7 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         runScenario("T-S2-SCHEDULER-BACKOFF-01", this::testSchedulerBackoffAfterRun);
         runScenario("T-S2-DEFAULT-HOUSEKEEPING-ENABLED-01", this::testDefaultHousekeepingRunsOnlineReclamation);
         runScenario("T-S2-DEFAULT-HOUSEKEEPING-DISABLED-01", this::testHousekeepingCanDisableOnlineReclamation);
+        runScenario("T-S2-DEFAULT-HOUSEKEEPING-CLOSED-01", this::testHousekeepingSkipsClosedStore);
         runScenario("T-S2-CONCURRENT-WRITE-RECLAMATION-01", this::testConcurrentWriteDuringOnlineReclamation);
         runScenario("T-S2-PERF-NO-CANDIDATE-FAST-01", this::testNoCandidateReclamationReturnsQuickly);
         runScenario("T-S2-PERF-BOUNDED-SPACE-BASELINE-01", this::testBoundedReclamationDoesNotGrowFile);
@@ -1125,6 +1126,22 @@ public class TestMVStoreSpaceReclamation extends TestBase {
             assertEquals(MVStoreReclamationStatus.SKIPPED, result.getStatus());
             assertEquals(MVStoreReclamationCode.RECLAMATION_SCHEDULER_DISABLED, result.getMessage());
             closeStore(store);
+            store = null;
+        } finally {
+            closeStoreImmediately(store);
+            deleteFilesUnlessKept(base);
+        }
+    }
+
+    private void testHousekeepingSkipsClosedStore() {
+        String base = mvStoreFile("defaultHousekeepingClosed");
+        MVStore store = null;
+        try {
+            store = new MVStore.Builder().fileName(base).autoCommitDisabled().autoCompactFillRate(0).open();
+            closeStore(store);
+            MVStoreOnlineReclamationResult result = store.runOnlineReclamationHousekeeping();
+            assertEquals(MVStoreReclamationStatus.SKIPPED, result.getStatus());
+            assertEquals(MVStoreReclamationCode.RECLAMATION_STORE_CLOSED, result.getMessage());
             store = null;
         } finally {
             closeStoreImmediately(store);

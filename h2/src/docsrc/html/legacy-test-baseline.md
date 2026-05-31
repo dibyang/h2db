@@ -20,7 +20,7 @@
 
 ## 当前基线状态
 
-所有命名阶段已通过：`memory`、`additional`、`utils`、`lazy-memory`、`disk`、`disk-additional`、`network-memory`、`network-lazy`、`encrypted-disk`。完整 `runH2TestAllCi` 曾通过本地验收，但已有完整套件长跑中的 localhost 网络偶发记录：2026-05-30 15:17 在 `net memory` 的 `TestMultiThreadedKernel` 出现一次 `localhost:9092` 连接超时，单独复跑 `network-memory` 阶段通过；2026-05-30 16:42 在 `additional` 的 `TestTools.testServer` 出现一次 TCP shutdown 连接中断，单独复跑 `additional` 阶段通过；2026-05-31 07:29 在 `lazy net` 的 `TestConnectionPool.testPerformance` 出现一次 `localhost:9092` 连接超时，单独复跑 `network-lazy` 阶段通过。这类问题先作为完整套件下的网络偶发项纳入测试底座治理。
+所有命名阶段已通过：`memory`、`additional`、`utils`、`lazy-memory`、`disk`、`disk-additional`、`network-memory`、`network-lazy`、`encrypted-disk`。完整 `runH2TestAllCi` 已在 2026-05-31 本地复跑通过。此前完整套件长跑中的 localhost 网络偶发记录包括：2026-05-30 15:17 在 `net memory` 的 `TestMultiThreadedKernel` 出现一次 `localhost:9092` 连接超时，单独复跑 `network-memory` 阶段通过；2026-05-30 16:42 在 `additional` 的 `TestTools.testServer` 出现一次 TCP shutdown 连接中断，单独复跑 `additional` 阶段通过；2026-05-31 07:29 在 `lazy net` 的 `TestConnectionPool.testPerformance` 出现一次 `localhost:9092` 连接超时，单独复跑 `network-lazy` 阶段通过。当前已通过动态端口和 shutdown 断言治理收敛。
 
 已治理完成或纳入管理的历史问题：
 
@@ -30,10 +30,12 @@
 | 脚本输出预期 | `TestScript` 中列名、分隔线、表达式展示不匹配 | 已按当前行为更新相关脚本基线，`TestScript` 已迁入 smoke |
 | JDBC 可更新结果集 | `The result set is not updatable`、结果集类型/并发断言不匹配 | 已恢复 `BASE TABLE` 过滤语义，相关类已迁入 smoke |
 | 兼容模式断言 | Oracle/MySQL/metadata/keywords 等期望与当前实现不一致 | 已对齐 metadata 表类型顺序，`TestMetaData` 已迁入 smoke |
-| 环境敏感断言 | 时间戳毫秒、Locale 中文月份、Web Console 输出、network phase 端口连接超时、TCP server shutdown 连接中断 | 已通过阶段化入口隔离定位；`network-memory` 和 `additional` 单阶段复跑通过，完整套件下的偶发网络问题继续记录 |
+| 环境敏感断言 | 时间戳毫秒、Locale 中文月份、Web Console 输出、network phase 端口连接超时、TCP server shutdown 连接中断 | 已通过阶段化入口隔离定位；TestAll network phase 已改为动态 TCP 端口，避免长跑争用默认 `9092`；`TestTools` 错误密码 shutdown 断言允许拒绝过程中的连接中断；`network-memory`、`network-lazy` 和 `additional` 单阶段复跑通过 |
 | 完整 `TestAll ci` 运行时间 | 本地完整运行约 16 分钟 | 保留为完整验收，不作为每次小改动的默认快速反馈 |
 
 `TestUpgrade` 的旧版 H2 jar 获取路径已治理：先读取本地 `.m2` 缓存，缺失时直接从 Maven Central 下载并写回缓存，只有直接下载失败时才尝试 Maven / Maven Wrapper 兜底。2026-05-31 已验证 `utils` phase 首次运行会补齐缓存，随后复跑不再打印 `mvn` 缺失、Maven 插件解析或重复下载噪声。
+
+TestAll 的 network phase 使用 `-tcpPort 0` 启动共享 TCP server，并通过 `config.getPort()` 把实际端口传递给测试 URL。这样可以避免完整长跑中反复占用默认 `9092` 带来的端口残留、连接超时和本地环境串扰。
 
 ## 测试分层
 
@@ -88,7 +90,7 @@
 
 ## 分阶段任务
 
-当前已通过的 `TestAll ci` 命名阶段：`memory`、`additional`、`utils`、`lazy-memory`、`disk`、`disk-additional`、`network-memory`、`network-lazy`、`encrypted-disk`。完整 `runH2TestAllCi` 作为验收入口保留；当前已记录完整套件下 `network-memory`、`additional` 和 `network-lazy` 的 localhost 网络偶发问题，对应单阶段复跑均通过。
+当前已通过的 `TestAll ci` 命名阶段：`memory`、`additional`、`utils`、`lazy-memory`、`disk`、`disk-additional`、`network-memory`、`network-lazy`、`encrypted-disk`。完整 `runH2TestAllCi` 作为验收入口保留，2026-05-31 本地复跑通过；此前记录的 `network-memory`、`additional` 和 `network-lazy` localhost 网络偶发均已单阶段复跑通过，并通过动态端口 / shutdown 断言治理降低复现概率。
 
 | 阶段 | 目标 | 完成标准 |
 | --- | --- | --- |

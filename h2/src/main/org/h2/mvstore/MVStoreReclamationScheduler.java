@@ -32,6 +32,9 @@ public final class MVStoreReclamationScheduler {
     }
 
     public MVStoreOnlineReclamationResult runIfEnabled(MVStore store) {
+        if (store.isClosed()) {
+            return closedStoreResult(request);
+        }
         if (!enabled) {
             MVStoreReclamationAnalysis analysis = MVStoreReclamationAnalyzer.analyze(store);
             return new MVStoreOnlineReclamationResult(MVStoreReclamationStatus.SKIPPED,
@@ -49,6 +52,15 @@ public final class MVStoreReclamationScheduler {
         MVStoreOnlineReclamationResult result = MVStoreReclamationCoordinator.run(store, request);
         nextAllowedRunMillis = now + (result.isSuccess() ? minIntervalMillis : failureBackoffMillis);
         return result;
+    }
+
+    private static MVStoreOnlineReclamationResult closedStoreResult(MVStoreReclamationRequest request) {
+        MVStoreReclamationAnalysis analysis = new MVStoreReclamationAnalysis(0, 0L, 0, 0,
+                new java.util.ArrayList<ChunkLivenessSnapshot>(), new java.util.ArrayList<ChunkLivenessSnapshot>());
+        return new MVStoreOnlineReclamationResult(MVStoreReclamationStatus.SKIPPED,
+                MVStoreReclamationCode.RECLAMATION_STORE_CLOSED, analysis, analysis, false,
+                request.isRelocationMapAllowed(), false, request.isTailCompactionAllowed(), false,
+                new java.util.ArrayList<Integer>());
     }
 
     /**

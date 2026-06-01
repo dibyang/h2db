@@ -47,7 +47,7 @@ S2.0-S2.8 已完成以下基础：
 | --- | --- | --- | --- | --- |
 | S2.9 | Done | 发布暂缓和目标重置 | 文档标记暂不发布；正式目标切换为完整自动空间整理；关闭旧 release-ready 表述 | docs + `runMvStoreReclamationJUnitCheck` |
 | S2.10 | Done | 持久 journal v1 | job id、phase、candidate chunks、page progress、publish marker、幂等 recovery | JUnit + MVStore fault injection |
-| S2.11 | Planned | relocation map 真实读路径 | old page pos 到 new page pos 解析、expire version、清理、兼容拒写 | JUnit + compatibility + recovery |
+| S2.11 | Done | relocation map 真实读路径 | old page pos 到 new page pos 解析、expire version、清理、兼容拒写 | JUnit + compatibility + recovery |
 | S2.12 | Planned | crash-safe publish/free | analyze / evacuate / publish / free / shrink 全阶段崩溃恢复和回滚 | fault injection + corruption/recovery |
 | S2.13 | Planned | map ownership 自动化 | lazy-open / map ownership 解析、unknown-map 专用诊断、无需用户预打开全部 map | MVStore 专项 + concurrency |
 | S2.14 | Planned | 自动 tail shrink planner | tail 空洞识别、尾部 live chunk 搬迁计划、truncate 验证、IO 预算 | MVStore 专项 + slow baseline |

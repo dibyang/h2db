@@ -113,6 +113,9 @@ public class TestMVStoreSpaceReclamation extends TestBase {
                 this::testCoordinatorRecoversStaleJournalBeforeRun);
         runScenario("T-S2-RELOCATION-MAP-FEATURE-GATE-01", this::testRelocationMapFeatureGate);
         runScenario("T-S2-RELOCATION-MAP-RESOLVE-01", this::testRelocationMapResolvesPagePosition);
+        runScenario("T-S2-RELOCATION-MAP-STRUCTURED-RESOLVE-01",
+                this::testRelocationMapStructuredResolve);
+        runScenario("T-S2-RELOCATION-MAP-EXPIRE-01", this::testRelocationMapRemovesExpiredMappings);
         runScenario("T-S2-RELOCATION-MAP-LIFECYCLE-01", this::testRelocationMapLifecycleClear);
         runScenario("T-S2-RELOCATION-MAP-COMPAT-GATE-01", this::testRelocationMapCompatibilityGate);
         runScenario("T-S2-TAIL-MOVER-BUDGET-01", this::testTailMoverRunsOnlyWithExplicitBudget);
@@ -985,6 +988,43 @@ public class TestMVStoreSpaceReclamation extends TestBase {
             MVStoreReclamationRelocationMap.put(store, oldPosition, newPosition);
             assertTrue(MVStoreReclamationRelocationMap.hasMappings(store));
             assertEquals(newPosition, MVStoreReclamationRelocationMap.resolve(store, oldPosition));
+            closeStore(store);
+            store = null;
+        } finally {
+            closeStoreImmediately(store);
+        }
+    }
+
+    private void testRelocationMapStructuredResolve() {
+        MVStore store = null;
+        try {
+            store = new MVStore.Builder().open();
+            long oldPosition = 0x12340L;
+            long newPosition = 0x56780L;
+            MVStoreReclamationRelocationMap.put(store, oldPosition, newPosition, 7, 11L, 20L);
+            assertTrue(MVStoreReclamationRelocationMap.hasMappings(store));
+            assertEquals(newPosition, MVStoreReclamationRelocationMap.resolve(store, oldPosition, 7, 12L));
+            assertEquals(oldPosition, MVStoreReclamationRelocationMap.resolve(store, oldPosition, 8, 12L));
+            assertEquals(oldPosition, MVStoreReclamationRelocationMap.resolve(store, oldPosition, 7, 21L));
+            assertEquals(1, MVStoreReclamationRelocationMap.countMappings(store));
+            closeStore(store);
+            store = null;
+        } finally {
+            closeStoreImmediately(store);
+        }
+    }
+
+    private void testRelocationMapRemovesExpiredMappings() {
+        MVStore store = null;
+        try {
+            store = new MVStore.Builder().open();
+            MVStoreReclamationRelocationMap.put(store, 0x11110L, 0x22220L, 3, 5L, 9L);
+            MVStoreReclamationRelocationMap.put(store, 0x33330L, 0x44440L, 3, 5L, 20L);
+            assertEquals(2, MVStoreReclamationRelocationMap.countMappings(store));
+            assertEquals(1, MVStoreReclamationRelocationMap.removeExpired(store, 10L));
+            assertEquals(1, MVStoreReclamationRelocationMap.countMappings(store));
+            assertEquals(0x11110L, MVStoreReclamationRelocationMap.resolve(store, 0x11110L, 3, 10L));
+            assertEquals(0x44440L, MVStoreReclamationRelocationMap.resolve(store, 0x33330L, 3, 10L));
             closeStore(store);
             store = null;
         } finally {

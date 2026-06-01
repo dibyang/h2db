@@ -143,7 +143,7 @@ The external release note is maintained in `mvstore-space-reclamation-s2-release
 | Relocation map | Used only when explicit mappings exist | Avoids extra behavior complexity without mappings; stores with feature metadata can be rejected when the gate is disabled. |
 | Tail compaction | Triggered only with an explicit time budget | Physical tail move / truncate has higher IO impact and should not run implicitly. |
 
-Release decision: if `runMvStoreReclamationJUnitCheck`, `runMvStoreSpaceReclamationCheck`, `runPluginArchitectureCheck`, recovery/corruption checks, and full CI pass, and the performance baseline does not show a meaningful write-latency regression, S2 can ship with the strategy above.
+Conservative release-draft decision: even if `runMvStoreReclamationJUnitCheck`, `runMvStoreSpaceReclamationCheck`, `runPluginArchitectureCheck`, recovery/corruption checks, and full CI pass, do not ship the formal release with this strategy now; the formal target has moved to complete automatic space organization.
 
 ## Release Gate Record
 

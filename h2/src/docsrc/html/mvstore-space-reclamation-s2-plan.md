@@ -143,7 +143,7 @@ S2 在线回收的正式版默认策略如下：
 | relocation map | 只在显式映射存在时参与读页解析 | 避免无映射场景增加行为复杂度；存在 feature metadata 且禁用时拒绝打开。 |
 | tail compaction | 仅显式时间预算触发 | 物理 tail move / truncate 对 IO 影响更大，默认不主动执行。 |
 
-发布判断：若 `runMvStoreReclamationJUnitCheck`、`runMvStoreSpaceReclamationCheck`、`runPluginArchitectureCheck`、recovery/corruption 专项和完整 CI 通过，且性能基线未发现明显写延迟回退，可按上述策略进入正式版本。
+保守发布草案判断：即使 `runMvStoreReclamationJUnitCheck`、`runMvStoreSpaceReclamationCheck`、`runPluginArchitectureCheck`、recovery/corruption 专项和完整 CI 通过，当前也暂不按上述策略进入正式版本；正式目标已调整为完整自动空间整理。
 
 ## 发布门禁记录
 

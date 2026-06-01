@@ -50,7 +50,7 @@ S2.0-S2.8 已完成以下基础：
 | S2.11 | Done | relocation map 真实读路径 | old page pos 到 new page pos 解析、expire version、清理、兼容拒写 | JUnit + compatibility + recovery |
 | S2.12 | Done | crash-safe publish/free | analyze / evacuate / publish / free / shrink 全阶段崩溃恢复和回滚 | fault injection + corruption/recovery |
 | S2.13 | Done | map ownership 自动化 | lazy-open / map ownership 解析、unknown-map 专用诊断、无需用户预打开全部 map | MVStore 专项 + concurrency |
-| S2.14 | Planned | 自动 tail shrink planner | tail 空洞识别、尾部 live chunk 搬迁计划、truncate 验证、IO 预算 | MVStore 专项 + slow baseline |
+| S2.14 | Done | 自动 tail shrink planner | tail 空洞识别、尾部 live chunk 搬迁计划、truncate 验证、IO 预算 | MVStore 专项 + slow baseline |
 | S2.15 | Planned | 自适应后台调度 | idle 检测、写延迟保护、全局互斥、动态退避、空间压力触发 | scheduler + stress + performance |
 | S2.16 | Planned | 完整自动模式验收 | 默认自动整理策略、发布说明重写、长稳压测、完整 CI 和回归矩阵 | full release gates |
 

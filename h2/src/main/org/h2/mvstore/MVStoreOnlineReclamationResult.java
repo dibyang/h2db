@@ -31,14 +31,16 @@ public final class MVStoreOnlineReclamationResult {
     private final boolean relocationMapAllowed;
     private final boolean relocationMapUsed;
     private final boolean tailCompactionAllowed;
+    private final boolean tailCompactionPlanned;
     private final boolean tailCompactionAttempted;
+    private final long shrinkBytes;
     private final boolean rewritten;
     private final ArrayList<Integer> candidateChunks;
 
     MVStoreOnlineReclamationResult(MVStoreReclamationStatus status, String message,
             MVStoreReclamationAnalysis before, MVStoreReclamationAnalysis after, boolean rewritten,
             boolean relocationMapAllowed, boolean relocationMapUsed, boolean tailCompactionAllowed,
-            boolean tailCompactionAttempted, ArrayList<Integer> candidateChunks) {
+            boolean tailCompactionPlanned, boolean tailCompactionAttempted, ArrayList<Integer> candidateChunks) {
         this.status = status;
         this.message = message;
         beforeFileSize = before.getFileSize();
@@ -56,7 +58,9 @@ public final class MVStoreOnlineReclamationResult {
         this.relocationMapAllowed = relocationMapAllowed;
         this.relocationMapUsed = relocationMapUsed;
         this.tailCompactionAllowed = tailCompactionAllowed;
+        this.tailCompactionPlanned = tailCompactionPlanned;
         this.tailCompactionAttempted = tailCompactionAttempted;
+        shrinkBytes = Math.max(0L, beforeFileSize - afterFileSize);
         this.rewritten = rewritten;
         this.candidateChunks = candidateChunks;
     }
@@ -137,6 +141,14 @@ public final class MVStoreOnlineReclamationResult {
         return tailCompactionAttempted;
     }
 
+    public boolean isTailCompactionPlanned() {
+        return tailCompactionPlanned;
+    }
+
+    public long getShrinkBytes() {
+        return shrinkBytes;
+    }
+
     public List<Integer> getCandidateChunks() {
         return Collections.unmodifiableList(candidateChunks);
     }
@@ -163,7 +175,9 @@ public final class MVStoreOnlineReclamationResult {
                 ", relocationMapAllowed=" + relocationMapAllowed +
                 ", relocationMapUsed=" + relocationMapUsed +
                 ", tailCompactionAllowed=" + tailCompactionAllowed +
+                ", tailCompactionPlanned=" + tailCompactionPlanned +
                 ", tailCompactionAttempted=" + tailCompactionAttempted +
+                ", shrinkBytes=" + shrinkBytes +
                 ", rewritten=" + rewritten +
                 ", candidateChunks=" + candidateChunks;
     }

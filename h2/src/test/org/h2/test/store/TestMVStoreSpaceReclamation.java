@@ -755,6 +755,7 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         expectIllegalArgument(() -> new MVStoreReclamationRequest.Builder().maxLiveBytesToRewrite(-1));
         expectIllegalArgument(() -> new MVStoreReclamationRequest.Builder().maxRunMillis(-1));
         expectIllegalArgument(() -> new MVStoreReclamationRequest.Builder().maxTailCompactionMillis(-1));
+        expectIllegalArgument(() -> new MVStoreReclamationRequest.Builder().maxTailChunksToMove(-1));
     }
 
     private void testPageRelocationReportsOpenMapProgress() {
@@ -1154,11 +1155,15 @@ public class TestMVStoreSpaceReclamation extends TestBase {
                     new MVStoreReclamationRequest.Builder()
                             .targetFillRate(100)
                             .maxTailCompactionMillis(50)
+                            .maxTailChunksToMove(1)
                             .build());
             assertEquals(MVStoreReclamationStatus.SUCCESS, result.getStatus());
             assertTrue(result.isTailCompactionAllowed());
+            assertTrue(result.isTailCompactionPlanned());
             assertTrue(result.isTailCompactionAttempted());
             assertTrue(result.getAfterFileSize() <= result.getBeforeFileSize());
+            assertTrue(result.getShrinkBytes() >= 0L);
+            assertTrue(result.getDiagnosticSummary().contains("tailCompactionPlanned=true"));
             assertTrue(result.getDiagnosticSummary().contains("tailCompactionAttempted=true"));
             closeStore(store);
             store = null;

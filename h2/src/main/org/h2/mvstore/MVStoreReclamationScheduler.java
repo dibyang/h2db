@@ -39,14 +39,15 @@ public final class MVStoreReclamationScheduler {
             MVStoreReclamationAnalysis analysis = MVStoreReclamationAnalyzer.analyze(store);
             return new MVStoreOnlineReclamationResult(MVStoreReclamationStatus.SKIPPED,
                     MVStoreReclamationCode.RECLAMATION_SCHEDULER_DISABLED, analysis, analysis, false,
-                    false, false, request.isTailCompactionAllowed(), false, new java.util.ArrayList<Integer>());
+                    false, false, request.isTailCompactionAllowed(), false, false,
+                    new java.util.ArrayList<Integer>());
         }
         long now = System.currentTimeMillis();
         if (now < nextAllowedRunMillis) {
             MVStoreReclamationAnalysis analysis = MVStoreReclamationAnalyzer.analyze(store);
             return new MVStoreOnlineReclamationResult(MVStoreReclamationStatus.SKIPPED,
                     MVStoreReclamationCode.RECLAMATION_SCHEDULER_BACKOFF, analysis, analysis, false,
-                    request.isRelocationMapAllowed(), false, request.isTailCompactionAllowed(), false,
+                    request.isRelocationMapAllowed(), false, request.isTailCompactionAllowed(), false, false,
                     new java.util.ArrayList<Integer>());
         }
         MVStoreOnlineReclamationResult result = MVStoreReclamationCoordinator.run(store, request);
@@ -59,7 +60,7 @@ public final class MVStoreReclamationScheduler {
                 new java.util.ArrayList<ChunkLivenessSnapshot>(), new java.util.ArrayList<ChunkLivenessSnapshot>());
         return new MVStoreOnlineReclamationResult(MVStoreReclamationStatus.SKIPPED,
                 MVStoreReclamationCode.RECLAMATION_STORE_CLOSED, analysis, analysis, false,
-                request.isRelocationMapAllowed(), false, request.isTailCompactionAllowed(), false,
+                request.isRelocationMapAllowed(), false, request.isTailCompactionAllowed(), false, false,
                 new java.util.ArrayList<Integer>());
     }
 

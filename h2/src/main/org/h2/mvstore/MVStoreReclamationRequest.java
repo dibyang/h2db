@@ -24,6 +24,7 @@ public final class MVStoreReclamationRequest {
     private final boolean relocationMapAllowed;
     private final boolean tailCompactionAllowed;
     private final int maxTailCompactionMillis;
+    private final int maxTailChunksToMove;
 
     private MVStoreReclamationRequest(Builder builder) {
         dryRun = builder.dryRun;
@@ -35,6 +36,7 @@ public final class MVStoreReclamationRequest {
         relocationMapAllowed = builder.relocationMapAllowed;
         tailCompactionAllowed = builder.tailCompactionAllowed;
         maxTailCompactionMillis = builder.maxTailCompactionMillis;
+        maxTailChunksToMove = builder.maxTailChunksToMove;
     }
 
     public boolean isDryRun() {
@@ -73,6 +75,10 @@ public final class MVStoreReclamationRequest {
         return maxTailCompactionMillis;
     }
 
+    public int getMaxTailChunksToMove() {
+        return maxTailChunksToMove;
+    }
+
     String asJournalString() {
         return "dryRun=" + dryRun +
                 ",targetFillRate=" + targetFillRate +
@@ -82,7 +88,8 @@ public final class MVStoreReclamationRequest {
                 ",journalEnabled=" + journalEnabled +
                 ",relocationMapAllowed=" + relocationMapAllowed +
                 ",tailCompactionAllowed=" + tailCompactionAllowed +
-                ",maxTailCompactionMillis=" + maxTailCompactionMillis;
+                ",maxTailCompactionMillis=" + maxTailCompactionMillis +
+                ",maxTailChunksToMove=" + maxTailChunksToMove;
     }
 
     /**
@@ -98,6 +105,7 @@ public final class MVStoreReclamationRequest {
         private boolean relocationMapAllowed;
         private boolean tailCompactionAllowed = true;
         private int maxTailCompactionMillis;
+        private int maxTailChunksToMove;
 
         public Builder dryRun(boolean dryRun) {
             this.dryRun = dryRun;
@@ -156,6 +164,14 @@ public final class MVStoreReclamationRequest {
                 throw new IllegalArgumentException("maxTailCompactionMillis");
             }
             this.maxTailCompactionMillis = maxTailCompactionMillis;
+            return this;
+        }
+
+        public Builder maxTailChunksToMove(int maxTailChunksToMove) {
+            if (maxTailChunksToMove < 0) {
+                throw new IllegalArgumentException("maxTailChunksToMove");
+            }
+            this.maxTailChunksToMove = maxTailChunksToMove;
             return this;
         }
 

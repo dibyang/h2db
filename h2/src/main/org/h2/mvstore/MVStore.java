@@ -1642,7 +1642,7 @@ public class MVStore implements AutoCloseable {
                     new ArrayList<ChunkLivenessSnapshot>(), new ArrayList<ChunkLivenessSnapshot>());
             return new MVStoreOnlineReclamationResult(MVStoreReclamationStatus.SKIPPED,
                     MVStoreReclamationCode.RECLAMATION_STORE_CLOSED, analysis, analysis, false,
-                    false, false, false, false, new ArrayList<Integer>());
+                    false, false, false, false, false, new ArrayList<Integer>());
         }
         return reclamationScheduler.runIfEnabled(this);
     }

@@ -73,6 +73,18 @@ public final class MVStoreReclamationRequest {
         return maxTailCompactionMillis;
     }
 
+    String asJournalString() {
+        return "dryRun=" + dryRun +
+                ",targetFillRate=" + targetFillRate +
+                ",maxCandidateChunks=" + maxCandidateChunks +
+                ",maxLiveBytesToRewrite=" + maxLiveBytesToRewrite +
+                ",maxRunMillis=" + maxRunMillis +
+                ",journalEnabled=" + journalEnabled +
+                ",relocationMapAllowed=" + relocationMapAllowed +
+                ",tailCompactionAllowed=" + tailCompactionAllowed +
+                ",maxTailCompactionMillis=" + maxTailCompactionMillis;
+    }
+
     /**
      * Builder for immutable reclamation requests.
      */

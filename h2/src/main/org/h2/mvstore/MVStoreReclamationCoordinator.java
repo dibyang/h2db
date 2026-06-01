@@ -36,7 +36,7 @@ public final class MVStoreReclamationCoordinator {
                     before, before, false, request, selected);
         }
         MVStoreReclamationJournal journal = request.isJournalEnabled()
-                ? MVStoreReclamationJournal.begin(store, selected) : null;
+                ? MVStoreReclamationJournal.begin(store, selected, request) : null;
         if (request.isDryRun() || request.getMaxLiveBytesToRewrite() == 0) {
             complete(journal);
             return result(MVStoreReclamationStatus.SKIPPED, MVStoreReclamationCode.DRY_RUN, before, before,

@@ -105,6 +105,8 @@ public class TestMVStoreSpaceReclamation extends TestBase {
                 this::testReclamationJournalRecoversPublishedMarker);
         runScenario("T-S2-RECLAMATION-JOURNAL-RECOVER-UNPUBLISHED-01",
                 this::testReclamationJournalRecoversUnpublishedMarker);
+        runScenario("T-S2-RECLAMATION-JOURNAL-V1-META-01",
+                this::testReclamationJournalV1Metadata);
         runScenario("T-S2-RECLAMATION-JOURNAL-RECOVER-REOPEN-01",
                 this::testReclamationJournalRecoversAfterReopen);
         runScenario("T-S2-RECLAMATION-COORDINATOR-RECOVER-FIRST-01",
@@ -866,6 +868,35 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         }
     }
 
+    private void testReclamationJournalV1Metadata() {
+        String base = mvStoreFile("reclamationJournalV1Metadata");
+        MVStore store = null;
+        try {
+            deleteFiles(base);
+            createParentDirectories(base);
+            store = new MVStore.Builder().fileName(base).autoCommitDisabled().open();
+            writeReclamationJournalMarker(store, "EVACUATING", true);
+            MVMap<String, String> meta = store.getMetaMap();
+            assertEquals("test", meta.get("reclaim.s2.activeJob"));
+            assertEquals("EVACUATING", meta.get("reclaim.s2.job.test.phase"));
+            assertEquals("test", meta.get("reclaim.s2.job.test.request"));
+            assertEquals("index=0", meta.get("reclaim.s2.job.test.candidate.1"));
+            assertNotNull(meta.get("reclaim.s2.job.test.createdVersion"));
+            assertNotNull(meta.get("reclaim.s2.job.test.createdTime"));
+            assertNotNull(meta.get("reclaim.s2.job.test.publish"));
+            MVStoreReclamationRecovery recovery = MVStoreReclamationCoordinator.recover(store);
+            assertTrue(recovery.isRecovered());
+            assertTrue(recovery.getMessage().contains("job=test"));
+            assertTrue(recovery.getMessage().contains("phase=EVACUATING"));
+            assertNoReclamationJournal(store);
+            closeStore(store);
+            store = null;
+        } finally {
+            closeStoreImmediately(store);
+            deleteFilesUnlessKept(base);
+        }
+    }
+
     private void testReclamationJournalRecoversAfterReopen() {
         String base = mvStoreFile("reclamationJournalRecoverReopen");
         MVStore store = null;
@@ -1258,6 +1289,13 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         assertNull(meta.get("reclaim.s2.phase"));
         assertNull(meta.get("reclaim.s2.candidates"));
         assertNull(meta.get("reclaim.s2.publish"));
+        assertNull(meta.get("reclaim.s2.activeJob"));
+        assertNull(meta.get("reclaim.s2.job.test.phase"));
+        assertNull(meta.get("reclaim.s2.job.test.request"));
+        assertNull(meta.get("reclaim.s2.job.test.candidate.1"));
+        assertNull(meta.get("reclaim.s2.job.test.createdVersion"));
+        assertNull(meta.get("reclaim.s2.job.test.createdTime"));
+        assertNull(meta.get("reclaim.s2.job.test.publish"));
     }
 
     private void expectIllegalArgument(Scenario scenario) {

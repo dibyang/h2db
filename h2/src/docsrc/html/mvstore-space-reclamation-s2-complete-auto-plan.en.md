@@ -46,7 +46,7 @@ S2.0-S2.8 already provide the following foundation:
 | Phase | Status | Goal | Deliverables | Minimum gate |
 | --- | --- | --- | --- | --- |
 | S2.9 | Done | Hold release and reset target | Mark release as held; switch target to complete automatic organization; remove release-ready framing | docs + `runMvStoreReclamationJUnitCheck` |
-| S2.10 | Planned | Persistent journal v1 | Job id, phase, candidate chunks, page progress, publish marker, idempotent recovery | JUnit + MVStore fault injection |
+| S2.10 | Done | Persistent journal v1 | Job id, phase, candidate chunks, page progress, publish marker, idempotent recovery | JUnit + MVStore fault injection |
 | S2.11 | Planned | Real relocation-map read path | Old page position to new page position resolution, expire version, cleanup, compatibility rejection | JUnit + compatibility + recovery |
 | S2.12 | Planned | Crash-safe publish/free | Full crash recovery and rollback across analyze / evacuate / publish / free / shrink | fault injection + corruption/recovery |
 | S2.13 | Planned | Automatic map ownership | Lazy-open / map ownership resolution, dedicated unknown-map diagnostics, no user pre-open requirement | MVStore dedicated + concurrency |

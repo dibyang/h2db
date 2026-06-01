@@ -52,7 +52,7 @@ S2.0-S2.8 已完成以下基础：
 | S2.13 | Done | map ownership 自动化 | lazy-open / map ownership 解析、unknown-map 专用诊断、无需用户预打开全部 map | MVStore 专项 + concurrency |
 | S2.14 | Done | 自动 tail shrink planner | tail 空洞识别、尾部 live chunk 搬迁计划、truncate 验证、IO 预算 | MVStore 专项 + slow baseline |
 | S2.15 | Done | 自适应后台调度 | idle 检测、写延迟保护、全局互斥、动态退避、空间压力触发 | scheduler + stress + performance |
-| S2.16 | Planned | 完整自动模式验收 | 默认自动整理策略、发布说明重写、长稳压测、完整 CI 和回归矩阵 | full release gates |
+| S2.16 | Done | 完整自动模式验收 | 默认自动整理策略、发布说明重写、长稳压测、完整 CI 和回归矩阵 | full release gates |
 
 ## 关键接口规划
 
@@ -67,6 +67,18 @@ S2.0-S2.8 已完成以下基础：
 | `maxTailChunksToMove` | `0` | S2.14 | 单轮 tail mover 上限，避免大文件尾部整理抢占 IO。 |
 | `foregroundLatencyBudgetMillis` | `0` | S2.15 | 后台任务检测前台延迟超过预算时主动暂停。 |
 | `spacePressureThreshold` | `0` | S2.15 | 文件膨胀或 fill rate 低于阈值时提高调度优先级。 |
+
+### S2.16 默认自动模式
+
+默认 MVStore housekeeping 现在使用完整自动整理请求：
+
+| 能力 | 默认策略 |
+| --- | --- |
+| scheduler | 默认启用，可通过 `onlineReclamationEnabled(false)` 关闭。 |
+| persistent journal | 默认启用，单轮完成后清理 journal marker。 |
+| relocation map | 默认允许，为后续真实 relocation 写入/解析保留兼容读路径。 |
+| tail shrink | 默认给予极小后台预算，避免抢占前台 IO。 |
+| 安全阈值 | 继续使用低强度 rewrite budget、运行时间预算、最小调度间隔和失败退避。 |
 
 ### MVStoreOnlineReclamationResult 扩展
 

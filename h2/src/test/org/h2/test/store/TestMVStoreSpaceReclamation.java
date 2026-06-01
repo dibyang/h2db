@@ -129,6 +129,7 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         runScenario("T-S2-SCHEDULER-FOREGROUND-BUSY-01", this::testSchedulerSkipsWhenForegroundBusy);
         runScenario("T-S2-SCHEDULER-SPACE-PRESSURE-01", this::testSchedulerSpacePressureBypassesBackoff);
         runScenario("T-S2-DEFAULT-HOUSEKEEPING-ENABLED-01", this::testDefaultHousekeepingRunsOnlineReclamation);
+        runScenario("T-S2-AUTOMATIC-MODE-ACCEPTANCE-01", this::testAutomaticModeAcceptanceSignals);
         runScenario("T-S2-DEFAULT-HOUSEKEEPING-DISABLED-01", this::testHousekeepingCanDisableOnlineReclamation);
         runScenario("T-S2-DEFAULT-HOUSEKEEPING-CLOSED-01", this::testHousekeepingSkipsClosedStore);
         runScenario("T-S2-CONCURRENT-WRITE-RECLAMATION-01", this::testConcurrentWriteDuringOnlineReclamation);
@@ -1307,6 +1308,33 @@ public class TestMVStoreSpaceReclamation extends TestBase {
             MVStoreOnlineReclamationResult result = store.runOnlineReclamationHousekeeping();
             assertEquals(MVStoreReclamationStatus.SUCCESS, result.getStatus());
             assertTrue(result.isRewritten());
+            assertTrue(result.isRelocationMapAllowed());
+            closeStore(store);
+            store = null;
+        } finally {
+            closeStoreImmediately(store);
+            deleteFilesUnlessKept(base);
+        }
+    }
+
+    private void testAutomaticModeAcceptanceSignals() {
+        String base = mvStoreFile("automaticModeAcceptance");
+        MVStore store = null;
+        try {
+            createBloatedStore(base);
+            store = new MVStore.Builder().fileName(base).autoCommitDisabled().autoCompactFillRate(0).open();
+            store.setRetentionTime(0);
+            store.openMap("data");
+            MVStoreOnlineReclamationResult result = store.runOnlineReclamationHousekeeping();
+            assertEquals(MVStoreReclamationStatus.SUCCESS, result.getStatus());
+            assertTrue(result.isRewritten());
+            assertTrue(result.isRelocationMapAllowed());
+            assertTrue(result.isLazyMapOwnershipSupported());
+            assertEquals(0, result.getAfterUnknownMapChunkCount());
+            assertTrue(result.isTailCompactionAllowed());
+            assertTrue(result.getDiagnosticSummary().contains("lazyMapOwnershipSupported=true"));
+            assertTrue(result.getDiagnosticSummary().contains("shrinkBytes="));
+            assertNoReclamationJournal(store);
             closeStore(store);
             store = null;
         } finally {

@@ -52,7 +52,7 @@ S2.0-S2.8 already provide the following foundation:
 | S2.13 | Done | Automatic map ownership | Lazy-open / map ownership resolution, dedicated unknown-map diagnostics, no user pre-open requirement | MVStore dedicated + concurrency |
 | S2.14 | Done | Automatic tail shrink planner | Tail-hole detection, tail live-chunk move planning, truncate verification, IO budgets | MVStore dedicated + slow baseline |
 | S2.15 | Done | Adaptive background scheduling | Idle detection, write-latency guard, global mutual exclusion, dynamic backoff, space-pressure trigger | scheduler + stress + performance |
-| S2.16 | Planned | Complete automatic mode acceptance | Default automatic strategy, release-note rewrite, long-running stability tests, full CI and regression matrix | full release gates |
+| S2.16 | Done | Complete automatic mode acceptance | Default automatic strategy, release-note rewrite, long-running stability tests, full CI and regression matrix | full release gates |
 
 ## Interface Plan
 
@@ -67,6 +67,18 @@ S2.0-S2.8 already provide the following foundation:
 | `maxTailChunksToMove` | `0` | S2.14 | Per-round tail mover cap to avoid aggressive IO on large files. |
 | `foregroundLatencyBudgetMillis` | `0` | S2.15 | Background work pauses when foreground latency exceeds this budget. |
 | `spacePressureThreshold` | `0` | S2.15 | Raises scheduling priority when file bloat or low fill rate crosses the threshold. |
+
+### S2.16 Default Automatic Mode
+
+Default MVStore housekeeping now uses the complete automatic reclamation request:
+
+| Capability | Default strategy |
+| --- | --- |
+| scheduler | Enabled by default; can be disabled with `onlineReclamationEnabled(false)`. |
+| persistent journal | Enabled by default and cleaned after a completed round. |
+| relocation map | Allowed by default to keep the compatible read path ready for real relocation writes and resolves. |
+| tail shrink | Uses a very small background budget to avoid foreground IO pressure. |
+| safety limits | Keeps low-intensity rewrite budget, run-time budget, minimum interval, and failure backoff. |
 
 ### MVStoreOnlineReclamationResult Extensions
 

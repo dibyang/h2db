@@ -75,7 +75,32 @@ class MVStoreReclamationContractTest {
             assertEquals(MVStoreReclamationCode.RECLAMATION_SCHEDULER_DISABLED, result.getMessage());
             assertFalse(result.isSuccess());
             assertFalse(result.isRewritten());
+            assertDiagnosticSummaryContainsStableFields(result);
             assertThrows(UnsupportedOperationException.class, () -> result.getCandidateChunks().add(1));
+        } finally {
+            store.close();
+        }
+    }
+
+    @Test
+    void schedulerBackoffReturnsStableDiagnostic() {
+        MVStore store = new MVStore.Builder().open();
+        try {
+            MVStoreReclamationScheduler scheduler = MVStoreReclamationScheduler.builder()
+                    .enabled(true)
+                    .failureBackoffMillis(60_000L)
+                    .build();
+
+            MVStoreOnlineReclamationResult first = scheduler.runIfEnabled(store);
+            MVStoreOnlineReclamationResult second = scheduler.runIfEnabled(store);
+
+            assertEquals(MVStoreReclamationStatus.SKIPPED, first.getStatus());
+            assertEquals(MVStoreReclamationCode.NO_RECLAMATION_CANDIDATE, first.getMessage());
+            assertEquals(MVStoreReclamationStatus.SKIPPED, second.getStatus());
+            assertEquals(MVStoreReclamationCode.RECLAMATION_SCHEDULER_BACKOFF, second.getMessage());
+            assertFalse(second.isSuccess());
+            assertFalse(second.isRewritten());
+            assertDiagnosticSummaryContainsStableFields(second);
         } finally {
             store.close();
         }
@@ -95,5 +120,36 @@ class MVStoreReclamationContractTest {
         assertEquals(MVStoreReclamationCode.RECLAMATION_STORE_CLOSED, result.getMessage());
         assertFalse(result.isSuccess());
         assertFalse(result.isRewritten());
+        assertEquals(0L, result.getBeforeFileSize());
+        assertEquals(0L, result.getAfterFileSize());
+        assertEquals(0, result.getBeforeFillRate());
+        assertEquals(0, result.getAfterFillRate());
+        assertEquals(0, result.getBeforeChunksFillRate());
+        assertEquals(0, result.getAfterChunksFillRate());
+        assertEquals(0L, result.getBeforeEstimatedReclaimableBytes());
+        assertEquals(0L, result.getAfterEstimatedReclaimableBytes());
+        assertEquals(0L, result.getEstimatedReclaimedBytes());
+        assertDiagnosticSummaryContainsStableFields(result);
+    }
+
+    private static void assertDiagnosticSummaryContainsStableFields(MVStoreOnlineReclamationResult result) {
+        String summary = result.getDiagnosticSummary();
+        assertTrue(summary.contains("status=" + result.getStatus()));
+        assertTrue(summary.contains("message=" + result.getMessage()));
+        assertTrue(summary.contains("beforeFileSize="));
+        assertTrue(summary.contains("afterFileSize="));
+        assertTrue(summary.contains("beforeFillRate="));
+        assertTrue(summary.contains("afterFillRate="));
+        assertTrue(summary.contains("beforeChunksFillRate="));
+        assertTrue(summary.contains("afterChunksFillRate="));
+        assertTrue(summary.contains("beforeEstimatedReclaimableBytes="));
+        assertTrue(summary.contains("afterEstimatedReclaimableBytes="));
+        assertTrue(summary.contains("estimatedReclaimedBytes="));
+        assertTrue(summary.contains("relocationMapAllowed="));
+        assertTrue(summary.contains("relocationMapUsed="));
+        assertTrue(summary.contains("tailCompactionAllowed="));
+        assertTrue(summary.contains("tailCompactionAttempted="));
+        assertTrue(summary.contains("rewritten="));
+        assertTrue(summary.contains("candidateChunks="));
     }
 }

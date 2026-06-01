@@ -133,6 +133,8 @@ The following capabilities now have request/result, feature-gate, or journal-sca
 
 The formal-release default strategy for S2 online reclamation is:
 
+The external release note is maintained in `mvstore-space-reclamation-s2-release-notes.md`, with the English copy in `mvstore-space-reclamation-s2-release-notes.en.md`.
+
 | Item | Strategy | Reason |
 | --- | --- | --- |
 | Scheduler | Enabled by default in low-intensity mode | It reuses MVStore housekeeping and is limited by minimum interval, failure backoff, rewrite budget, and run-time budget. |

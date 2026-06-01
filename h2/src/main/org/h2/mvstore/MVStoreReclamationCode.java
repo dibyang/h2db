@@ -19,6 +19,7 @@ public final class MVStoreReclamationCode {
     public static final String RECLAMATION_ROUND_FINISHED = "RECLAMATION_ROUND_FINISHED";
     public static final String RECLAMATION_SCHEDULER_DISABLED = "RECLAMATION_SCHEDULER_DISABLED";
     public static final String RECLAMATION_SCHEDULER_BACKOFF = "RECLAMATION_SCHEDULER_BACKOFF";
+    public static final String RECLAMATION_SCHEDULER_FOREGROUND_BUSY = "RECLAMATION_SCHEDULER_FOREGROUND_BUSY";
     public static final String RECLAMATION_STORE_CLOSED = "RECLAMATION_STORE_CLOSED";
 
     private MVStoreReclamationCode() {

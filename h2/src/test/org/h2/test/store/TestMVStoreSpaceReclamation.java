@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
+import java.util.function.BooleanSupplier;
 
 import org.h2.mvstore.ChunkLivenessSnapshot;
 import org.h2.mvstore.MVMap;
@@ -125,6 +126,8 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         runScenario("T-S2-SCHEDULER-DISABLED-01", this::testSchedulerIsDisabledByDefault);
         runScenario("T-S2-SCHEDULER-ENABLED-01", this::testSchedulerRunsWhenEnabled);
         runScenario("T-S2-SCHEDULER-BACKOFF-01", this::testSchedulerBackoffAfterRun);
+        runScenario("T-S2-SCHEDULER-FOREGROUND-BUSY-01", this::testSchedulerSkipsWhenForegroundBusy);
+        runScenario("T-S2-SCHEDULER-SPACE-PRESSURE-01", this::testSchedulerSpacePressureBypassesBackoff);
         runScenario("T-S2-DEFAULT-HOUSEKEEPING-ENABLED-01", this::testDefaultHousekeepingRunsOnlineReclamation);
         runScenario("T-S2-DEFAULT-HOUSEKEEPING-DISABLED-01", this::testHousekeepingCanDisableOnlineReclamation);
         runScenario("T-S2-DEFAULT-HOUSEKEEPING-CLOSED-01", this::testHousekeepingSkipsClosedStore);
@@ -1232,6 +1235,59 @@ public class TestMVStoreSpaceReclamation extends TestBase {
             MVStoreOnlineReclamationResult second = scheduler.runIfEnabled(store);
             assertEquals(MVStoreReclamationStatus.SKIPPED, second.getStatus());
             assertEquals(MVStoreReclamationCode.RECLAMATION_SCHEDULER_BACKOFF, second.getMessage());
+            closeStore(store);
+            store = null;
+        } finally {
+            closeStoreImmediately(store);
+            deleteFilesUnlessKept(base);
+        }
+    }
+
+    private void testSchedulerSkipsWhenForegroundBusy() {
+        MVStore store = null;
+        try {
+            store = new MVStore.Builder().open();
+            MVStoreReclamationScheduler scheduler = MVStoreReclamationScheduler.builder()
+                    .enabled(true)
+                    .foregroundBusySupplier(new BooleanSupplier() {
+                        @Override
+                        public boolean getAsBoolean() {
+                            return true;
+                        }
+                    })
+                    .build();
+            MVStoreOnlineReclamationResult result = scheduler.runIfEnabled(store);
+            assertEquals(MVStoreReclamationStatus.SKIPPED, result.getStatus());
+            assertEquals(MVStoreReclamationCode.RECLAMATION_SCHEDULER_FOREGROUND_BUSY, result.getMessage());
+            closeStore(store);
+            store = null;
+        } finally {
+            closeStoreImmediately(store);
+        }
+    }
+
+    private void testSchedulerSpacePressureBypassesBackoff() {
+        String base = mvStoreFile("schedulerSpacePressure");
+        MVStore store = null;
+        try {
+            createBloatedStore(base);
+            store = new MVStore.Builder().fileName(base).autoCommitDisabled().autoCompactFillRate(0).open();
+            store.setRetentionTime(0);
+            MVStoreReclamationScheduler scheduler = MVStoreReclamationScheduler.builder()
+                    .enabled(true)
+                    .failureBackoffMillis(60_000L)
+                    .spacePressureThreshold(100)
+                    .request(new MVStoreReclamationRequest.Builder()
+                            .targetFillRate(100)
+                            .dryRun(true)
+                            .build())
+                    .build();
+            MVStoreOnlineReclamationResult first = scheduler.runIfEnabled(store);
+            assertEquals(MVStoreReclamationStatus.SKIPPED, first.getStatus());
+            assertEquals(MVStoreReclamationCode.DRY_RUN, first.getMessage());
+            MVStoreOnlineReclamationResult second = scheduler.runIfEnabled(store);
+            assertEquals(MVStoreReclamationStatus.SKIPPED, second.getStatus());
+            assertEquals(MVStoreReclamationCode.DRY_RUN, second.getMessage());
             closeStore(store);
             store = null;
         } finally {

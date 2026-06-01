@@ -35,7 +35,7 @@ S2 已通过当前发布门禁实现。插件化前置已经收口，MVStore sto
 
 | 层级 | 要求 |
 | --- | --- |
-| JUnit | request/result 默认值、candidate scoring、预算、message、feature flag。 |
+| JUnit | `runMvStoreReclamationJUnitCheck` 覆盖 request/result 默认值、校验、scheduler 诊断、message 和 feature flag。 |
 | MVStore 专项 | chunk bloat、page relocation、unknown map、long transaction、tail shrink、no-progress。 |
 | 故障注入 | journal publish 前后、free/shrink 中断、relocation map 缺失。 |
 | 并发 | 写入同时回收、长读事务、close/backup/compact 互斥。 |
@@ -44,6 +44,7 @@ S2 已通过当前发布门禁实现。插件化前置已经收口，MVStore sto
 每个阶段至少运行：
 
 ```powershell
+.\gradlew.bat runMvStoreReclamationJUnitCheck
 .\gradlew.bat runMvStoreSpaceReclamationCheck
 ```
 

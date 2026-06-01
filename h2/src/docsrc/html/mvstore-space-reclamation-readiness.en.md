@@ -35,7 +35,7 @@ S2 is implemented through the current release gate. Pluginization prerequisites 
 
 | Level | Requirement |
 | --- | --- |
-| JUnit | Request/result defaults, candidate scoring, budgets, messages, feature flags. |
+| JUnit | `runMvStoreReclamationJUnitCheck` covers request/result defaults, validation, scheduler diagnostics, messages, and feature flags. |
 | MVStore dedicated | Chunk bloat, page relocation, unknown map, long transaction, tail shrink, no-progress. |
 | Fault injection | Before/after journal publish, interruption during free/shrink, missing relocation map. |
 | Concurrency | Writes during reclamation, long read transactions, close/backup/compact mutual exclusion. |
@@ -44,6 +44,7 @@ S2 is implemented through the current release gate. Pluginization prerequisites 
 Minimum command for each phase:
 
 ```powershell
+.\gradlew.bat runMvStoreReclamationJUnitCheck
 .\gradlew.bat runMvStoreSpaceReclamationCheck
 ```
 

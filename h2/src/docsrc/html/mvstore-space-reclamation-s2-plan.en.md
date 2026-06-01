@@ -69,6 +69,7 @@ This is the traceable task plan for the S2 long-term solution. S1, the medium-te
 Minimum gate for each phase:
 
 ```powershell
+.\gradlew.bat runMvStoreReclamationJUnitCheck
 .\gradlew.bat runMvStoreSpaceReclamationCheck
 ```
 
@@ -140,7 +141,7 @@ The formal-release default strategy for S2 online reclamation is:
 | Relocation map | Used only when explicit mappings exist | Avoids extra behavior complexity without mappings; stores with feature metadata can be rejected when the gate is disabled. |
 | Tail compaction | Triggered only with an explicit time budget | Physical tail move / truncate has higher IO impact and should not run implicitly. |
 
-Release decision: if `runMvStoreSpaceReclamationCheck`, `runPluginArchitectureCheck`, recovery/corruption checks, and full CI pass, and the performance baseline does not show a meaningful write-latency regression, S2 can ship with the strategy above.
+Release decision: if `runMvStoreReclamationJUnitCheck`, `runMvStoreSpaceReclamationCheck`, `runPluginArchitectureCheck`, recovery/corruption checks, and full CI pass, and the performance baseline does not show a meaningful write-latency regression, S2 can ship with the strategy above.
 
 ## Release Gate Record
 
@@ -148,6 +149,7 @@ Latest local release-gate results:
 
 | Command | Result | Notes |
 | --- | --- | --- |
+| `.\gradlew.bat runMvStoreReclamationJUnitCheck` | PASS | Fast JUnit contract coverage for request defaults, validation, scheduler diagnostics, and immutable result lists. |
 | `.\gradlew.bat runMvStoreSpaceReclamationCheck` | PASS | Covers S2 candidate analysis, journal recovery, relocation map, scheduler, concurrent writes, and performance baselines. |
 | `.\gradlew.bat runPluginArchitectureCheck` | PASS | Maintenance SPI and plugin capability gates are healthy. |
 | `.\gradlew.bat runMvStoreRecoveryCheck` | PASS | MVStore recovery/corruption checks passed. |

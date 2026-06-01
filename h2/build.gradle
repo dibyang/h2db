@@ -114,6 +114,16 @@ sourceSets {
         compileClasspath = sourceSets.main.output + configurations.testCompileClasspath
         runtimeClasspath = output + compileClasspath + configurations.testRuntimeClasspath
     }
+    reclamationTest {
+        java {
+            srcDirs = ['src/test-reclamation']
+        }
+        resources {
+            srcDirs = []
+        }
+        compileClasspath = sourceSets.main.output + configurations.testCompileClasspath
+        runtimeClasspath = output + compileClasspath + configurations.testRuntimeClasspath
+    }
     legacyTest {
         java {
             srcDirs = ['src/test', 'src/tools']
@@ -225,6 +235,17 @@ task runPluginArchitectureCheck(type: Test) {
     exclude '**/*$*.class'
     useJUnitPlatform()
     dependsOn pluginTestClasses
+}
+
+task runMvStoreReclamationJUnitCheck(type: Test) {
+    description = 'Runs the MVStore online reclamation JUnit contract checks.'
+    testClassesDirs = sourceSets.reclamationTest.output.classesDirs
+    classpath = sourceSets.reclamationTest.runtimeClasspath
+    scanForTestClasses = false
+    include '**/*Test.class'
+    exclude '**/*$*.class'
+    useJUnitPlatform()
+    dependsOn reclamationTestClasses
 }
 
 task runH2TestAllCi(type: JavaExec) {

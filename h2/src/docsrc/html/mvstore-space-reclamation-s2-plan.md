@@ -69,6 +69,7 @@
 每阶段最低门禁：
 
 ```powershell
+.\gradlew.bat runMvStoreReclamationJUnitCheck
 .\gradlew.bat runMvStoreSpaceReclamationCheck
 ```
 
@@ -140,7 +141,7 @@ S2 在线回收的正式版默认策略如下：
 | relocation map | 只在显式映射存在时参与读页解析 | 避免无映射场景增加行为复杂度；存在 feature metadata 且禁用时拒绝打开。 |
 | tail compaction | 仅显式时间预算触发 | 物理 tail move / truncate 对 IO 影响更大，默认不主动执行。 |
 
-发布判断：若 `runMvStoreSpaceReclamationCheck`、`runPluginArchitectureCheck`、recovery/corruption 专项和完整 CI 通过，且性能基线未发现明显写延迟回退，可按上述策略进入正式版本。
+发布判断：若 `runMvStoreReclamationJUnitCheck`、`runMvStoreSpaceReclamationCheck`、`runPluginArchitectureCheck`、recovery/corruption 专项和完整 CI 通过，且性能基线未发现明显写延迟回退，可按上述策略进入正式版本。
 
 ## 发布门禁记录
 
@@ -148,6 +149,7 @@ S2 在线回收的正式版默认策略如下：
 
 | 命令 | 结果 | 说明 |
 | --- | --- | --- |
+| `.\gradlew.bat runMvStoreReclamationJUnitCheck` | PASS | 快速 JUnit 契约覆盖 request 默认值、校验、scheduler 诊断和 result 不可变列表。 |
 | `.\gradlew.bat runMvStoreSpaceReclamationCheck` | PASS | 覆盖 S2 候选分析、journal recovery、relocation map、scheduler、并发写入和性能基线。 |
 | `.\gradlew.bat runPluginArchitectureCheck` | PASS | 维护 SPI 与插件 capability gate 正常。 |
 | `.\gradlew.bat runMvStoreRecoveryCheck` | PASS | MVStore recovery/corruption 专项通过。 |

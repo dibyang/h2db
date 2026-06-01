@@ -107,6 +107,8 @@ public class TestMVStoreSpaceReclamation extends TestBase {
                 this::testReclamationJournalRecoversUnpublishedMarker);
         runScenario("T-S2-RECLAMATION-JOURNAL-V1-META-01",
                 this::testReclamationJournalV1Metadata);
+        runScenario("T-S2-RECLAMATION-RECOVERY-ACTION-01",
+                this::testReclamationRecoveryReportsCrashSafeAction);
         runScenario("T-S2-RECLAMATION-JOURNAL-RECOVER-REOPEN-01",
                 this::testReclamationJournalRecoversAfterReopen);
         runScenario("T-S2-RECLAMATION-COORDINATOR-RECOVER-FIRST-01",
@@ -891,6 +893,43 @@ public class TestMVStoreSpaceReclamation extends TestBase {
             assertTrue(recovery.isRecovered());
             assertTrue(recovery.getMessage().contains("job=test"));
             assertTrue(recovery.getMessage().contains("phase=EVACUATING"));
+            assertNoReclamationJournal(store);
+            closeStore(store);
+            store = null;
+        } finally {
+            closeStoreImmediately(store);
+            deleteFilesUnlessKept(base);
+        }
+    }
+
+    private void testReclamationRecoveryReportsCrashSafeAction() {
+        String base = mvStoreFile("reclamationRecoveryAction");
+        MVStore store = null;
+        try {
+            deleteFiles(base);
+            createParentDirectories(base);
+            store = new MVStore.Builder().fileName(base).autoCommitDisabled().open();
+            writeReclamationJournalMarker(store, "PUBLISHED", true);
+            MVStoreReclamationRecovery published = MVStoreReclamationCoordinator.recover(store);
+            assertTrue(published.isRecovered());
+            assertTrue(published.isPublished());
+            assertEquals("test", published.getJobId());
+            assertEquals("PUBLISHED", published.getPhase());
+            assertEquals("CONTINUE_FREE_AFTER_PUBLISH", published.getAction());
+            assertTrue(published.getMessage().contains("action=CONTINUE_FREE_AFTER_PUBLISH"));
+
+            writeReclamationJournalMarker(store, "EVACUATING", false);
+            MVStoreReclamationRecovery unpublished = MVStoreReclamationCoordinator.recover(store);
+            assertTrue(unpublished.isRecovered());
+            assertFalse(unpublished.isPublished());
+            assertEquals("test", unpublished.getJobId());
+            assertEquals("EVACUATING", unpublished.getPhase());
+            assertEquals("ROLLBACK_UNPUBLISHED_RECLAMATION", unpublished.getAction());
+            assertTrue(unpublished.getMessage().contains("action=ROLLBACK_UNPUBLISHED_RECLAMATION"));
+
+            MVStoreReclamationRecovery empty = MVStoreReclamationCoordinator.recover(store);
+            assertFalse(empty.isRecovered());
+            assertEquals("NONE", empty.getAction());
             assertNoReclamationJournal(store);
             closeStore(store);
             store = null;

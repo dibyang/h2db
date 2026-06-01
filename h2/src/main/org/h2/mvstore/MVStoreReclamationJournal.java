@@ -90,11 +90,13 @@ final class MVStoreReclamationJournal {
         if (!published && jobId != null) {
             published = metaMap.get(jobKey(jobId, "publish")) != null;
         }
+        String action = published ? "CONTINUE_FREE_AFTER_PUBLISH" : "ROLLBACK_UNPUBLISHED_RECLAMATION";
         removeJournalKeys(metaMap);
         store.markMetaChanged();
         store.commit();
         return new MVStoreReclamationRecovery(true, (published ? "RECOVERED_PUBLISHED_RECLAMATION_JOURNAL"
-                : "RECOVERED_UNPUBLISHED_RECLAMATION_JOURNAL") + " job=" + jobId + " phase=" + phase);
+                : "RECOVERED_UNPUBLISHED_RECLAMATION_JOURNAL") + " job=" + jobId + " phase=" + phase
+                + " action=" + action, jobId, phase, published, action);
     }
 
     static void writeRecoveryMarkerForTest(MVStore store, String phase, boolean published) {

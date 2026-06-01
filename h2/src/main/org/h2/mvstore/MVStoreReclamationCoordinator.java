@@ -70,6 +70,7 @@ public final class MVStoreReclamationCoordinator {
                     tailCompactionAttempted, selected);
         }
         publish(journal);
+        phase(journal, "FREEING");
         complete(journal);
         if (request.getMaxRunMillis() > 0L && System.currentTimeMillis() - start > request.getMaxRunMillis()) {
             return result(MVStoreReclamationStatus.SUCCESS,

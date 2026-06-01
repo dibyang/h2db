@@ -14,6 +14,7 @@ public final class MVStoreReclamationCode {
     public static final String DRY_RUN = "DRY_RUN";
     public static final String RECLAMATION_FAILED = "RECLAMATION_FAILED";
     public static final String NO_OPEN_MAP_RELOCATION_PROGRESS = "NO_OPEN_MAP_RELOCATION_PROGRESS";
+    public static final String NO_MAP_OWNERSHIP_RELOCATION_PROGRESS = "NO_MAP_OWNERSHIP_RELOCATION_PROGRESS";
     public static final String RECLAMATION_PAUSED_BY_TIME_BUDGET = "RECLAMATION_PAUSED_BY_TIME_BUDGET";
     public static final String RECLAMATION_ROUND_FINISHED = "RECLAMATION_ROUND_FINISHED";
     public static final String RECLAMATION_SCHEDULER_DISABLED = "RECLAMATION_SCHEDULER_DISABLED";

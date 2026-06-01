@@ -49,7 +49,7 @@ S2.0-S2.8 已完成以下基础：
 | S2.10 | Done | 持久 journal v1 | job id、phase、candidate chunks、page progress、publish marker、幂等 recovery | JUnit + MVStore fault injection |
 | S2.11 | Done | relocation map 真实读路径 | old page pos 到 new page pos 解析、expire version、清理、兼容拒写 | JUnit + compatibility + recovery |
 | S2.12 | Done | crash-safe publish/free | analyze / evacuate / publish / free / shrink 全阶段崩溃恢复和回滚 | fault injection + corruption/recovery |
-| S2.13 | Planned | map ownership 自动化 | lazy-open / map ownership 解析、unknown-map 专用诊断、无需用户预打开全部 map | MVStore 专项 + concurrency |
+| S2.13 | Done | map ownership 自动化 | lazy-open / map ownership 解析、unknown-map 专用诊断、无需用户预打开全部 map | MVStore 专项 + concurrency |
 | S2.14 | Planned | 自动 tail shrink planner | tail 空洞识别、尾部 live chunk 搬迁计划、truncate 验证、IO 预算 | MVStore 专项 + slow baseline |
 | S2.15 | Planned | 自适应后台调度 | idle 检测、写延迟保护、全局互斥、动态退避、空间压力触发 | scheduler + stress + performance |
 | S2.16 | Planned | 完整自动模式验收 | 默认自动整理策略、发布说明重写、长稳压测、完整 CI 和回归矩阵 | full release gates |
@@ -77,6 +77,8 @@ S2.0-S2.8 已完成以下基础：
 | `relocatedPages` | S2.10 | 实际迁移 page 数。 |
 | `relocationMapEntries` | S2.11 | 本轮写入或清理的 relocation map 条目数。 |
 | `freedChunks` | S2.12 | 本轮释放 chunk 数。 |
+| `unknownMapChunkCount` | S2.13 | map ownership 无法解析的 chunk 数；正常 lazy-open 路径应为 0。 |
+| `lazyMapOwnershipSupported` | S2.13 | 是否启用无需用户预打开 map 的 lazy ownership 解析能力。 |
 | `movedTailChunks` | S2.14 | 本轮移动尾部 chunk 数。 |
 | `shrinkBytes` | S2.14 | 文件 truncate 收缩字节数。 |
 | `pauseReason` | S2.15 | `TIME_BUDGET`、`IO_BUDGET`、`FOREGROUND_LATENCY`、`BACKOFF`、`CLOSED` 等。 |

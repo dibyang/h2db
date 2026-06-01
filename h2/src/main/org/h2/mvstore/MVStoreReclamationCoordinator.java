@@ -65,9 +65,11 @@ public final class MVStoreReclamationCoordinator {
         MVStoreReclamationAnalysis after = MVStoreReclamationAnalyzer.analyze(store, request.getTargetFillRate());
         if (!rewritten) {
             complete(journal);
+            String code = after.getUnknownMapChunkCount() > 0
+                    ? MVStoreReclamationCode.NO_MAP_OWNERSHIP_RELOCATION_PROGRESS
+                    : MVStoreReclamationCode.NO_OPEN_MAP_RELOCATION_PROGRESS;
             return result(MVStoreReclamationStatus.NO_PROGRESS,
-                    MVStoreReclamationCode.NO_OPEN_MAP_RELOCATION_PROGRESS, before, after, false, request,
-                    tailCompactionAttempted, selected);
+                    code, before, after, false, request, tailCompactionAttempted, selected);
         }
         publish(journal);
         phase(journal, "FREEING");

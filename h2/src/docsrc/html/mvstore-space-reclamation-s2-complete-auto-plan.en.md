@@ -49,7 +49,7 @@ S2.0-S2.8 already provide the following foundation:
 | S2.10 | Done | Persistent journal v1 | Job id, phase, candidate chunks, page progress, publish marker, idempotent recovery | JUnit + MVStore fault injection |
 | S2.11 | Done | Real relocation-map read path | Old page position to new page position resolution, expire version, cleanup, compatibility rejection | JUnit + compatibility + recovery |
 | S2.12 | Done | Crash-safe publish/free | Full crash recovery and rollback across analyze / evacuate / publish / free / shrink | fault injection + corruption/recovery |
-| S2.13 | Planned | Automatic map ownership | Lazy-open / map ownership resolution, dedicated unknown-map diagnostics, no user pre-open requirement | MVStore dedicated + concurrency |
+| S2.13 | Done | Automatic map ownership | Lazy-open / map ownership resolution, dedicated unknown-map diagnostics, no user pre-open requirement | MVStore dedicated + concurrency |
 | S2.14 | Planned | Automatic tail shrink planner | Tail-hole detection, tail live-chunk move planning, truncate verification, IO budgets | MVStore dedicated + slow baseline |
 | S2.15 | Planned | Adaptive background scheduling | Idle detection, write-latency guard, global mutual exclusion, dynamic backoff, space-pressure trigger | scheduler + stress + performance |
 | S2.16 | Planned | Complete automatic mode acceptance | Default automatic strategy, release-note rewrite, long-running stability tests, full CI and regression matrix | full release gates |
@@ -77,6 +77,8 @@ S2.0-S2.8 already provide the following foundation:
 | `relocatedPages` | S2.10 | Actual number of relocated pages. |
 | `relocationMapEntries` | S2.11 | Number of relocation-map entries written or cleaned by the round. |
 | `freedChunks` | S2.12 | Number of chunks freed by the round. |
+| `unknownMapChunkCount` | S2.13 | Number of chunks whose map ownership cannot be resolved; the normal lazy-open path should report 0. |
+| `lazyMapOwnershipSupported` | S2.13 | Whether lazy ownership resolution is enabled without requiring user pre-opened maps. |
 | `movedTailChunks` | S2.14 | Number of tail chunks moved by the round. |
 | `shrinkBytes` | S2.14 | Number of bytes truncated from the file. |
 | `pauseReason` | S2.15 | `TIME_BUDGET`, `IO_BUDGET`, `FOREGROUND_LATENCY`, `BACKOFF`, `CLOSED`, and related reasons. |

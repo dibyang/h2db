@@ -99,6 +99,7 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         runScenario("T-S2-RECLAMATION-REQUEST-VALIDATION-01", this::testReclamationRequestValidation);
         runScenario("T-S2-PAGE-RELOCATION-OPEN-MAP-01", this::testPageRelocationReportsOpenMapProgress);
         runScenario("T-S2-PAGE-RELOCATION-LAZY-MAP-01", this::testPageRelocationCanUseLazyOpenedMaps);
+        runScenario("T-S2-MAP-OWNERSHIP-DIAGNOSTICS-01", this::testMapOwnershipDiagnostics);
         runScenario("T-S2-RECLAMATION-JOURNAL-CLEANUP-01", this::testReclamationJournalIsCleanedAfterRun);
         runScenario("T-S2-RECLAMATION-JOURNAL-RECOVER-EMPTY-01", this::testReclamationJournalRecoverWithoutJournal);
         runScenario("T-S2-RECLAMATION-JOURNAL-RECOVER-PUBLISHED-01",
@@ -572,9 +573,13 @@ public class TestMVStoreSpaceReclamation extends TestBase {
             assertTrue(analysis.getChunks().size() > 0);
             assertTrue(analysis.hasCandidates());
             assertTrue(analysis.getEstimatedReclaimableBytes() > 0L);
+            assertTrue(analysis.isLazyMapOwnershipSupported());
+            assertEquals(0, analysis.getUnknownMapChunkCount());
             assertEquals(100, analysis.getTargetFillRate());
             assertEquals(store.getFileStore().size(), analysis.getFileSize());
             assertTrue(analysis.getDiagnosticSummary().contains("candidates=" + analysis.getCandidates().size()));
+            assertTrue(analysis.getDiagnosticSummary().contains("unknownMapChunks=0"));
+            assertTrue(analysis.getDiagnosticSummary().contains("lazyMapOwnershipSupported=true"));
 
             ChunkLivenessSnapshot best = analysis.getCandidates().get(0);
             assertTrue(best.isCandidate());
@@ -982,6 +987,30 @@ public class TestMVStoreSpaceReclamation extends TestBase {
             assertTrue(result.getStatus() == MVStoreReclamationStatus.SUCCESS
                     || result.getStatus() == MVStoreReclamationStatus.SKIPPED);
             assertNoReclamationJournal(store);
+            closeStore(store);
+            store = null;
+        } finally {
+            closeStoreImmediately(store);
+            deleteFilesUnlessKept(base);
+        }
+    }
+
+    private void testMapOwnershipDiagnostics() {
+        String base = mvStoreFile("mapOwnershipDiagnostics");
+        MVStore store = null;
+        try {
+            createBloatedStore(base);
+            store = new MVStore.Builder().fileName(base).autoCommitDisabled().autoCompactFillRate(0).open();
+            store.setRetentionTime(0);
+
+            MVStoreOnlineReclamationResult result = MVStoreReclamationCoordinator.run(store,
+                    new MVStoreReclamationRequest.Builder().targetFillRate(100).build());
+            assertEquals(MVStoreReclamationStatus.SUCCESS, result.getStatus());
+            assertTrue(result.isLazyMapOwnershipSupported());
+            assertEquals(0, result.getBeforeUnknownMapChunkCount());
+            assertEquals(0, result.getAfterUnknownMapChunkCount());
+            assertTrue(result.getDiagnosticSummary().contains("lazyMapOwnershipSupported=true"));
+            assertTrue(result.getDiagnosticSummary().contains("beforeUnknownMapChunkCount=0"));
             closeStore(store);
             store = null;
         } finally {

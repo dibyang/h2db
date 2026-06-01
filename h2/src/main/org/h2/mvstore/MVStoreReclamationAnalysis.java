@@ -19,11 +19,19 @@ public final class MVStoreReclamationAnalysis {
     private final int fillRate;
     private final int chunksFillRate;
     private final long estimatedReclaimableBytes;
+    private final int unknownMapChunkCount;
+    private final boolean lazyMapOwnershipSupported;
     private final ArrayList<ChunkLivenessSnapshot> chunks;
     private final ArrayList<ChunkLivenessSnapshot> candidates;
 
     MVStoreReclamationAnalysis(int targetFillRate, long fileSize, int fillRate, int chunksFillRate,
             ArrayList<ChunkLivenessSnapshot> chunks, ArrayList<ChunkLivenessSnapshot> candidates) {
+        this(targetFillRate, fileSize, fillRate, chunksFillRate, chunks, candidates, true);
+    }
+
+    MVStoreReclamationAnalysis(int targetFillRate, long fileSize, int fillRate, int chunksFillRate,
+            ArrayList<ChunkLivenessSnapshot> chunks, ArrayList<ChunkLivenessSnapshot> candidates,
+            boolean lazyMapOwnershipSupported) {
         this.targetFillRate = targetFillRate;
         this.fileSize = fileSize;
         this.fillRate = fillRate;
@@ -31,10 +39,18 @@ public final class MVStoreReclamationAnalysis {
         this.chunks = chunks;
         this.candidates = candidates;
         long bytes = 0L;
+        int unknownMaps = 0;
+        for (ChunkLivenessSnapshot chunk : chunks) {
+            if (chunk.getPinnedReason() == ChunkLivenessSnapshot.PinnedReason.UNKNOWN_MAP) {
+                unknownMaps++;
+            }
+        }
         for (ChunkLivenessSnapshot candidate : candidates) {
             bytes += candidate.getDeadBytes();
         }
         estimatedReclaimableBytes = bytes;
+        unknownMapChunkCount = unknownMaps;
+        this.lazyMapOwnershipSupported = lazyMapOwnershipSupported;
     }
 
     public int getTargetFillRate() {
@@ -57,6 +73,14 @@ public final class MVStoreReclamationAnalysis {
         return estimatedReclaimableBytes;
     }
 
+    public int getUnknownMapChunkCount() {
+        return unknownMapChunkCount;
+    }
+
+    public boolean isLazyMapOwnershipSupported() {
+        return lazyMapOwnershipSupported;
+    }
+
     public List<ChunkLivenessSnapshot> getChunks() {
         return Collections.unmodifiableList(chunks);
     }
@@ -76,6 +100,8 @@ public final class MVStoreReclamationAnalysis {
                 ", chunksFillRate=" + chunksFillRate +
                 ", chunks=" + chunks.size() +
                 ", candidates=" + candidates.size() +
-                ", estimatedReclaimableBytes=" + estimatedReclaimableBytes;
+                ", estimatedReclaimableBytes=" + estimatedReclaimableBytes +
+                ", unknownMapChunks=" + unknownMapChunkCount +
+                ", lazyMapOwnershipSupported=" + lazyMapOwnershipSupported;
     }
 }

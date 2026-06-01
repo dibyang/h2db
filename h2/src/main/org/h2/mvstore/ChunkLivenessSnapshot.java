@@ -19,6 +19,7 @@ public final class ChunkLivenessSnapshot {
         NOT_REWRITABLE,
         NOT_ALLOCATED,
         NOT_LIVE,
+        UNKNOWN_MAP,
         RECENT_CHUNK,
         LOW_VALUE
     }

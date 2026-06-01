@@ -25,6 +25,9 @@ public final class MVStoreOnlineReclamationResult {
     private final long beforeEstimatedReclaimableBytes;
     private final long afterEstimatedReclaimableBytes;
     private final long estimatedReclaimedBytes;
+    private final int beforeUnknownMapChunkCount;
+    private final int afterUnknownMapChunkCount;
+    private final boolean lazyMapOwnershipSupported;
     private final boolean relocationMapAllowed;
     private final boolean relocationMapUsed;
     private final boolean tailCompactionAllowed;
@@ -47,6 +50,9 @@ public final class MVStoreOnlineReclamationResult {
         beforeEstimatedReclaimableBytes = before.getEstimatedReclaimableBytes();
         afterEstimatedReclaimableBytes = after.getEstimatedReclaimableBytes();
         estimatedReclaimedBytes = Math.max(0L, beforeEstimatedReclaimableBytes - afterEstimatedReclaimableBytes);
+        beforeUnknownMapChunkCount = before.getUnknownMapChunkCount();
+        afterUnknownMapChunkCount = after.getUnknownMapChunkCount();
+        lazyMapOwnershipSupported = before.isLazyMapOwnershipSupported() && after.isLazyMapOwnershipSupported();
         this.relocationMapAllowed = relocationMapAllowed;
         this.relocationMapUsed = relocationMapUsed;
         this.tailCompactionAllowed = tailCompactionAllowed;
@@ -99,6 +105,18 @@ public final class MVStoreOnlineReclamationResult {
         return estimatedReclaimedBytes;
     }
 
+    public int getBeforeUnknownMapChunkCount() {
+        return beforeUnknownMapChunkCount;
+    }
+
+    public int getAfterUnknownMapChunkCount() {
+        return afterUnknownMapChunkCount;
+    }
+
+    public boolean isLazyMapOwnershipSupported() {
+        return lazyMapOwnershipSupported;
+    }
+
     public boolean isRewritten() {
         return rewritten;
     }
@@ -139,6 +157,9 @@ public final class MVStoreOnlineReclamationResult {
                 ", beforeEstimatedReclaimableBytes=" + beforeEstimatedReclaimableBytes +
                 ", afterEstimatedReclaimableBytes=" + afterEstimatedReclaimableBytes +
                 ", estimatedReclaimedBytes=" + estimatedReclaimedBytes +
+                ", beforeUnknownMapChunkCount=" + beforeUnknownMapChunkCount +
+                ", afterUnknownMapChunkCount=" + afterUnknownMapChunkCount +
+                ", lazyMapOwnershipSupported=" + lazyMapOwnershipSupported +
                 ", relocationMapAllowed=" + relocationMapAllowed +
                 ", relocationMapUsed=" + relocationMapUsed +
                 ", tailCompactionAllowed=" + tailCompactionAllowed +

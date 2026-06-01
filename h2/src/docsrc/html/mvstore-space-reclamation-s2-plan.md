@@ -147,7 +147,7 @@ S2 在线回收的正式版默认策略如下：
 
 ## 发布门禁记录
 
-最近一次本地发布门禁结果：
+2026-06-01 最近一次本地发布门禁结果：
 
 | 命令 | 结果 | 说明 |
 | --- | --- | --- |
@@ -156,9 +156,10 @@ S2 在线回收的正式版默认策略如下：
 | `.\gradlew.bat runPluginArchitectureCheck` | PASS | 维护 SPI 与插件 capability gate 正常。 |
 | `.\gradlew.bat runMvStoreRecoveryCheck` | PASS | MVStore recovery/corruption 专项通过。 |
 | `.\gradlew.bat runH2LegacySmoke` | PASS | legacy smoke 通过。 |
-| `.\gradlew.bat runH2TestAllCi` | PASS | 2026-05-31 复跑通过；旧版 jar 获取噪声已消除，TestAll network phase 已改为动态 TCP 端口，`TestTools` shutdown 断言已兼容拒绝过程中的连接中断。 |
+| `.\gradlew.bat runH2TestAllCi` | PASS | 2026-06-01 首次完整运行在 `TestMultiThread.testCheckConstraint` 遇到 localhost `network-memory` 连接超时；`network-memory` phase 复跑通过，第二次完整运行通过。 |
 | `.\gradlew.bat runH2TestAllCiPhaseReport -Ph2CiPhase=additional` | PASS | 复核 `TestTools` / 外部工具相关 phase。 |
+| `.\gradlew.bat runH2TestAllCiPhaseReport -Ph2CiPhase=network-memory` | PASS | 首次完整运行超时后复核 localhost `network-memory` phase。 |
 | `.\gradlew.bat runH2TestAllCiPhaseReport -Ph2CiPhase=network-lazy` | PASS | 复核 localhost 网络相关 phase。 |
 | `.\gradlew.bat runH2TestAllCiPhaseReport -Ph2CiPhase=lazy-memory` | PASS | 复核 `TestXA` lazy-memory phase。 |
 
-发布结论：S2 相关门禁和完整 TestAll 本地验收均已通过；旧版 H2 jar 获取路径已经收敛为缓存优先、直接下载并写回缓存、Maven / Maven Wrapper 兜底。TestAll network phase 已改为动态端口以降低 localhost 端口串扰，后台在线回收也已增加 closed-store 跳过保护。
+发布结论：2026-06-01 S2 相关门禁和完整 TestAll 本地验收均已通过。首次完整运行出现一次 localhost `network-memory` 超时，经 focused phase 复跑和第二次完整 CI 通过确认可按网络偶发记录。旧版 H2 jar 获取路径已经收敛为缓存优先、直接下载并写回缓存、Maven / Maven Wrapper 兜底。TestAll network phase 已改为动态端口以降低 localhost 端口串扰，后台在线回收也已增加 closed-store 跳过保护。

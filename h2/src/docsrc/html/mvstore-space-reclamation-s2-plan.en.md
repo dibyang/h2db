@@ -147,7 +147,7 @@ Release decision: if `runMvStoreReclamationJUnitCheck`, `runMvStoreSpaceReclamat
 
 ## Release Gate Record
 
-Latest local release-gate results:
+Latest local release-gate results on 2026-06-01:
 
 | Command | Result | Notes |
 | --- | --- | --- |
@@ -156,9 +156,10 @@ Latest local release-gate results:
 | `.\gradlew.bat runPluginArchitectureCheck` | PASS | Maintenance SPI and plugin capability gates are healthy. |
 | `.\gradlew.bat runMvStoreRecoveryCheck` | PASS | MVStore recovery/corruption checks passed. |
 | `.\gradlew.bat runH2LegacySmoke` | PASS | Legacy smoke passed. |
-| `.\gradlew.bat runH2TestAllCi` | PASS | The 2026-05-31 rerun passed; old-jar fetch noise is gone, TestAll network phases now use dynamic TCP ports, and `TestTools` shutdown assertions tolerate connection aborts during rejection. |
+| `.\gradlew.bat runH2TestAllCi` | PASS | The first 2026-06-01 run hit a localhost `network-memory` connect timeout in `TestMultiThread.testCheckConstraint`; `network-memory` phase rerun passed, and the second full run passed. |
 | `.\gradlew.bat runH2TestAllCiPhaseReport -Ph2CiPhase=additional` | PASS | Rechecked the `TestTools` / external-tool phase. |
+| `.\gradlew.bat runH2TestAllCiPhaseReport -Ph2CiPhase=network-memory` | PASS | Rechecked the localhost `network-memory` phase after the first full-run timeout. |
 | `.\gradlew.bat runH2TestAllCiPhaseReport -Ph2CiPhase=network-lazy` | PASS | Rechecked the localhost-network phase. |
 | `.\gradlew.bat runH2TestAllCiPhaseReport -Ph2CiPhase=lazy-memory` | PASS | Rechecked the `TestXA` lazy-memory phase. |
 
-Release conclusion: all S2-specific gates and the full local TestAll acceptance now pass. Old-H2-jar fetching uses cache first, direct download with cache write-back, and Maven / Maven Wrapper only as fallback. TestAll network phases now use dynamic ports to reduce localhost port cross-talk, and background online reclamation now skips closed stores safely.
+Release conclusion: all S2-specific gates and the full local TestAll acceptance pass on 2026-06-01. One first-run localhost `network-memory` timeout was reproduced as a phase-specific flake and cleared by focused rerun plus a second full CI run. Old-H2-jar fetching uses cache first, direct download with cache write-back, and Maven / Maven Wrapper only as fallback. TestAll network phases now use dynamic ports to reduce localhost port cross-talk, and background online reclamation skips closed stores safely.

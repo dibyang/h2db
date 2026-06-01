@@ -1,5 +1,7 @@
 # MVStore Space Reclamation S2 Release Notes
 
+> Current status: release is held. This file remains the conservative S2.0-S2.8 release-note draft; the new release target is complete automatic space organization, tracked in `mvstore-space-reclamation-s2-complete-auto-plan.md`.
+
 This document records the user-visible behavior, default strategy, diagnostics, and deferred capabilities for the S2 online space reclamation release. S2 is chunk/page-level online partial reclamation inside MVStore. It is not whole-store shadow copy and not a simple wrapper around `compactFile()`.
 
 ## Default Strategy

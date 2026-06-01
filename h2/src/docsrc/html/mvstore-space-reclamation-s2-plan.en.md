@@ -163,3 +163,9 @@ Latest local release-gate results on 2026-06-01:
 | `.\gradlew.bat runH2TestAllCiPhaseReport -Ph2CiPhase=lazy-memory` | PASS | Rechecked the `TestXA` lazy-memory phase. |
 
 Release conclusion: all S2-specific gates and the full local TestAll acceptance pass on 2026-06-01. One first-run localhost `network-memory` timeout was reproduced as a phase-specific flake and cleared by focused rerun plus a second full CI run. Old-H2-jar fetching uses cache first, direct download with cache write-back, and Maven / Maven Wrapper only as fallback. TestAll network phases now use dynamic ports to reduce localhost port cross-talk, and background online reclamation skips closed stores safely.
+
+## Release Hold
+
+Current decision: do not ship a formal release with the conservative S2.0-S2.8 strategy. The new target is complete automatic space organization, including the real relocation-map read path, full crash-safe publish/free, automatic map ownership, automatic tail shrink planner, and adaptive background scheduling.
+
+The following phases are tracked in `mvstore-space-reclamation-s2-complete-auto-plan.md`; the English copy is `mvstore-space-reclamation-s2-complete-auto-plan.en.md`.

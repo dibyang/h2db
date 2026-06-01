@@ -1,5 +1,7 @@
 # MVStore 空间回收 S2 发布说明
 
+> 当前状态：暂不发布。本文件保留为 S2.0-S2.8 保守发布草案；新的发布目标已调整为“完整自动空间整理”，后续按 `mvstore-space-reclamation-s2-complete-auto-plan.md` 推进。
+
 本文记录 S2 在线空间回收进入正式版前的用户可见行为、默认策略、诊断方式和延后能力。S2 是 MVStore 内部的 chunk/page 级在线部分回收能力，不是整库 shadow copy，也不是简单包装 `compactFile()`。
 
 ## 默认策略

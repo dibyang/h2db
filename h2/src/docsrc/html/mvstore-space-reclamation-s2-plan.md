@@ -163,3 +163,9 @@ S2 在线回收的正式版默认策略如下：
 | `.\gradlew.bat runH2TestAllCiPhaseReport -Ph2CiPhase=lazy-memory` | PASS | 复核 `TestXA` lazy-memory phase。 |
 
 发布结论：2026-06-01 S2 相关门禁和完整 TestAll 本地验收均已通过。首次完整运行出现一次 localhost `network-memory` 超时，经 focused phase 复跑和第二次完整 CI 通过确认可按网络偶发记录。旧版 H2 jar 获取路径已经收敛为缓存优先、直接下载并写回缓存、Maven / Maven Wrapper 兜底。TestAll network phase 已改为动态端口以降低 localhost 端口串扰，后台在线回收也已增加 closed-store 跳过保护。
+
+## 发布暂缓
+
+当前人工拍板结果：暂不按 S2.0-S2.8 的保守策略发布正式版本。新的目标是完整自动空间整理，包括真实 relocation map 读路径、完整 crash-safe publish/free、自动 map ownership、自动 tail shrink planner 和自适应后台调度。
+
+后续阶段按 `mvstore-space-reclamation-s2-complete-auto-plan.md` 追踪；英文副本为 `mvstore-space-reclamation-s2-complete-auto-plan.en.md`。

@@ -44,7 +44,7 @@ The long-term solution should compose these capabilities into a clear chunk clea
 
 | Non-goal | Notes |
 | --- | --- |
-| Default background execution during S2.0-S2.6 | Automatic scheduling waits until manual flow and recovery semantics are stable. |
+| Aggressive background execution during S2.0-S2.6 | Automatic scheduling stays low-intensity and budgeted until manual flow, recovery semantics, and release gates are stable. |
 | Replacing online reclamation with whole-file shadow publish | Whole-file shadow remains offline/fallback, not the long-term main path. |
 | Bypassing MVCC and retention | Data referenced by old versions must not be deleted directly. |
 | Completing all reclamation in one run | The long-term system must support small, multi-run, interruptible progress. |

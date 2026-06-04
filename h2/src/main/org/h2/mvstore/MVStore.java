@@ -309,19 +309,36 @@ public class MVStore implements AutoCloseable {
             // the parameter is different from the old value
             int delay = DataUtils.getConfigParam(config, "autoCommitDelay", 1000);
             boolean reclamationEnabled = DataUtils.getConfigParam(config, "onlineReclamationEnabled", 1) != 0;
+            int reclamationTargetFillRate = DataUtils.getConfigParam(config,
+                    "onlineReclamationTargetFillRate", 85);
+            int reclamationMaxLiveBytesToRewrite = DataUtils.getConfigParam(config,
+                    "onlineReclamationMaxLiveBytesToRewrite", Math.max(16 * 1024 * 1024, autoCommitMemory / 2));
+            int reclamationMaxRunMillis = DataUtils.getConfigParam(config, "onlineReclamationMaxRunMillis", 50);
+            int reclamationMaxCandidateChunks = DataUtils.getConfigParam(config,
+                    "onlineReclamationMaxCandidateChunks", 8);
+            int reclamationMaxTailCompactionMillis = DataUtils.getConfigParam(config,
+                    "onlineReclamationMaxTailCompactionMillis", 50);
+            long reclamationMinIntervalMillis = DataUtils.getConfigParam(config,
+                    "onlineReclamationMinIntervalMillis", 30_000);
+            long reclamationFailureBackoffMillis = DataUtils.getConfigParam(config,
+                    "onlineReclamationFailureBackoffMillis", 30_000);
+            int reclamationSpacePressureThreshold = DataUtils.getConfigParam(config,
+                    "onlineReclamationSpacePressureThreshold", reclamationTargetFillRate);
             reclamationScheduler = MVStoreReclamationScheduler.builder()
                     .enabled(reclamationEnabled)
                     .request(new MVStoreReclamationRequest.Builder()
-                            .targetFillRate(50)
-                            .maxLiveBytesToRewrite(Math.max(64 * 1024, autoCommitMemory / 4))
-                            .maxRunMillis(10)
+                            .targetFillRate(reclamationTargetFillRate)
+                            .maxCandidateChunks(reclamationMaxCandidateChunks)
+                            .maxLiveBytesToRewrite(reclamationMaxLiveBytesToRewrite)
+                            .maxRunMillis(reclamationMaxRunMillis)
                             .journalEnabled(true)
                             .relocationMapAllowed(true)
-                            .maxTailCompactionMillis(5)
+                            .maxTailCompactionMillis(reclamationMaxTailCompactionMillis)
                             .maxTailChunksToMove(1)
                             .build())
-                    .minIntervalMillis(60_000L)
-                    .failureBackoffMillis(300_000L)
+                    .minIntervalMillis(reclamationMinIntervalMillis)
+                    .failureBackoffMillis(reclamationFailureBackoffMillis)
+                    .spacePressureThreshold(reclamationSpacePressureThreshold)
                     .build();
             setAutoCommitDelay(delay);
         } else {
@@ -999,6 +1016,14 @@ public class MVStore implements AutoCloseable {
             } finally {
                 unlockAndCheckPanicCondition();
             }
+        }
+    }
+
+    void compactTailFile(int targetFillRate, long moveSize) {
+        checkOpen();
+        if (fileStore instanceof RandomAccessStore) {
+            setRetentionTime(0);
+            ((RandomAccessStore) fileStore).compactMoveChunks(targetFillRate, moveSize, this);
         }
     }
 
@@ -1905,6 +1930,38 @@ public class MVStore implements AutoCloseable {
 
         public Builder onlineReclamationEnabled(boolean enabled) {
             return set("onlineReclamationEnabled", enabled ? 1 : 0);
+        }
+
+        public Builder onlineReclamationTargetFillRate(int percent) {
+            return set("onlineReclamationTargetFillRate", percent);
+        }
+
+        public Builder onlineReclamationMaxLiveBytesToRewrite(int bytes) {
+            return set("onlineReclamationMaxLiveBytesToRewrite", bytes);
+        }
+
+        public Builder onlineReclamationMaxRunMillis(int millis) {
+            return set("onlineReclamationMaxRunMillis", millis);
+        }
+
+        public Builder onlineReclamationMaxCandidateChunks(int chunks) {
+            return set("onlineReclamationMaxCandidateChunks", chunks);
+        }
+
+        public Builder onlineReclamationMaxTailCompactionMillis(int millis) {
+            return set("onlineReclamationMaxTailCompactionMillis", millis);
+        }
+
+        public Builder onlineReclamationMinIntervalMillis(int millis) {
+            return set("onlineReclamationMinIntervalMillis", millis);
+        }
+
+        public Builder onlineReclamationFailureBackoffMillis(int millis) {
+            return set("onlineReclamationFailureBackoffMillis", millis);
+        }
+
+        public Builder onlineReclamationSpacePressureThreshold(int percent) {
+            return set("onlineReclamationSpacePressureThreshold", percent);
         }
 
         public Builder allowReclamationRelocationMap(boolean allow) {

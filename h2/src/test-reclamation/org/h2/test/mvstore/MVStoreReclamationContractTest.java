@@ -10,6 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.File;
 import org.h2.mvstore.MVStore;
 import org.h2.mvstore.MVStoreOnlineReclamationResult;
 import org.h2.mvstore.MVStoreReclamationCode;
@@ -17,11 +18,15 @@ import org.h2.mvstore.MVStoreReclamationRequest;
 import org.h2.mvstore.MVStoreReclamationScheduler;
 import org.h2.mvstore.MVStoreReclamationStatus;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * Fast JUnit contract checks for MVStore online reclamation.
  */
 class MVStoreReclamationContractTest {
+
+    @TempDir
+    File tempDir;
 
     @Test
     void defaultRequestKeepsStableOperationalDefaults() {
@@ -61,6 +66,35 @@ class MVStoreReclamationContractTest {
                 () -> MVStoreReclamationScheduler.builder().minIntervalMillis(-1L));
         assertThrows(IllegalArgumentException.class,
                 () -> MVStoreReclamationScheduler.builder().failureBackoffMillis(-1L));
+        assertThrows(IllegalArgumentException.class,
+                () -> MVStoreReclamationScheduler.builder().spacePressureThreshold(-1));
+        assertThrows(IllegalArgumentException.class,
+                () -> MVStoreReclamationScheduler.builder().spacePressureThreshold(101));
+    }
+
+    @Test
+    void mvStoreBuilderAcceptsAutomaticReclamationTuningOptions() {
+        File file = new File(tempDir, "automatic-options.mv.db");
+        MVStore store = new MVStore.Builder()
+                .fileName(file.getPath())
+                .autoCommitDisabled()
+                .autoCompactFillRate(0)
+                .onlineReclamationTargetFillRate(85)
+                .onlineReclamationMaxLiveBytesToRewrite(1024 * 1024)
+                .onlineReclamationMaxRunMillis(25)
+                .onlineReclamationMaxCandidateChunks(4)
+                .onlineReclamationMaxTailCompactionMillis(25)
+                .onlineReclamationMinIntervalMillis(10)
+                .onlineReclamationFailureBackoffMillis(10)
+                .onlineReclamationSpacePressureThreshold(85)
+                .open();
+        try {
+            MVStoreOnlineReclamationResult result = store.runOnlineReclamationHousekeeping();
+            assertEquals(MVStoreReclamationStatus.SKIPPED, result.getStatus());
+            assertEquals(MVStoreReclamationCode.NO_RECLAMATION_CANDIDATE, result.getMessage());
+        } finally {
+            store.close();
+        }
     }
 
     @Test

@@ -1165,8 +1165,10 @@ public class TestMVStoreSpaceReclamation extends TestBase {
             assertTrue(result.isTailCompactionAllowed());
             assertTrue(result.isTailCompactionPlanned());
             assertTrue(result.isTailCompactionAttempted());
-            assertTrue(result.getAfterFileSize() <= result.getBeforeFileSize());
-            assertTrue(result.getShrinkBytes() >= 0L);
+            assertTrue("tail compaction should shrink bloated files: " + result.getDiagnosticSummary(),
+                    result.getAfterFileSize() < result.getBeforeFileSize());
+            assertTrue("tail compaction should report positive shrink bytes: " + result.getDiagnosticSummary(),
+                    result.getShrinkBytes() > 0L);
             assertTrue(result.getDiagnosticSummary().contains("tailCompactionPlanned=true"));
             assertTrue(result.getDiagnosticSummary().contains("tailCompactionAttempted=true"));
             closeStore(store);

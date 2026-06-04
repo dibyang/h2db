@@ -61,7 +61,7 @@ public final class MVStoreReclamationCoordinator {
             tailCompactionPlanned = true;
             publish(journal);
             phase(journal, "SHRINKING");
-            store.compactFile(request.getMaxTailCompactionMillis());
+            store.compactTailFile(100, request.getMaxLiveBytesToRewrite());
             tailCompactionAttempted = true;
         }
         MVStoreReclamationAnalysis after = MVStoreReclamationAnalyzer.analyze(store, request.getTargetFillRate());

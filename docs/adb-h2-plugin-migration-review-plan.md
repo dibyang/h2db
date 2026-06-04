@@ -314,7 +314,8 @@ cd D:\work\java\h2db\h2
 - [x] 明确当前 storage provider 已完成注册、加载、诊断、storage id、缺失 provider、只读降级和 MVStore-backed 多 provider 验证。
 - [x] 明确任意非 MVStore 替代主路径还缺 system catalog provider 契约，因为系统元数据表、LOB、事务日志、临时结果仍依赖 `Store`。
 - [x] 将非 MVStore 主路径从“隐含缺口”转为单独实施阶段，不混入 ADB-P1。
-- [ ] 后续实施 `system catalog provider` 或等价接口后，再允许生产主路径 storage engine 摆脱 MVStore-backed 约束。
+- [x] 新增 `SystemCatalogProvider` / `SystemCatalogContext` 前置 SPI，允许 system catalog provider 注册和诊断。
+- [ ] 后续补系统表、LOB、事务日志和临时结果契约后，再允许生产主路径 storage engine 摆脱 MVStore-backed 约束。
 
 验收：
 

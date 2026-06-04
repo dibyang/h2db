@@ -11,6 +11,7 @@ H2 plugins expose their plugin descriptor through `org.h2.api.H2Plugin` and exte
 - `TableEngineProvider`: extends the table engine creation entry point.
 - `StorageEngineProvider`: extends the database-level storage engine.
 - `StorageMaintenance`: exposes maintenance capabilities such as compact and vacuum.
+- `SystemCatalogProvider`: a prerequisite extension point for non-MVStore main paths and system catalog ownership.
 - Explicit class loading: `PLUGIN_CLASSES=a.b.Plugin`.
 - Isolated path loading: `PLUGIN_PATHS=/path/to/plugin.jar`.
 - Optional discovery: `PLUGIN_SERVICE_LOADER=TRUE` discovers `META-INF/services/org.h2.api.H2Plugin`.
@@ -25,11 +26,11 @@ The current plugin API has three layers:
 
 | Layer | Scope | Commitment |
 | --- | --- | --- |
-| Stable SPI | `H2Plugin`, `PluginProvider`, `TableEngineProvider`, `StorageEngineProvider`, `StorageMaintenance`, capability strings | Kept source-compatible as plugin entry points. New behavior should normally be added through default methods or new capabilities. |
+| Stable SPI | `H2Plugin`, `PluginProvider`, `TableEngineProvider`, `StorageEngineProvider`, `SystemCatalogProvider`, `StorageMaintenance`, capability strings | Kept source-compatible as plugin entry points. New behavior should normally be added through default methods or new capabilities. |
 | Managed migration API | `TableEngineContext`, `StorageEngineContext`, `CreateTableData`, `Table` / `Index` related internal types | Usable during the ADB migration period, but contract tests must run before upgrading H2 minor versions. Long-term binary compatibility is not promised. |
 | Internal implementation | parser, optimizer, JDBC server, MVStore physical structures, deep `Database` lifecycle | Not exposed as plugin APIs. Plugins must not depend on call order or field layout here. |
 
-Non-MVStore storage engines can currently be registered, diagnosed, and managed through `StorageEngineProvider` capabilities. Full replacement of the H2 main storage path still requires system catalog tables, LOBs, transaction logs, and temporary results to be separated from `Store`. Therefore the first stable commitment remains: production main-path storage engines must be MVStore-backed. A non-MVStore main path should enter implementation separately after a system catalog provider contract is defined.
+Non-MVStore storage engines can currently be registered, diagnosed, and managed through `StorageEngineProvider` capabilities, and `SystemCatalogProvider` is now part of the provider whitelist and diagnostics as the prerequisite SPI for system catalog ownership. Full replacement of the H2 main storage path still requires system catalog tables, LOBs, transaction logs, and temporary results to be separated from `Store`. Therefore the first stable commitment remains: production main-path storage engines must be MVStore-backed. A non-MVStore main path should enter implementation separately after system catalog table contracts are defined.
 
 ## Plugin Descriptor
 
@@ -79,7 +80,7 @@ Plugin classes must provide a public no-argument constructor. Plugin id, version
 
 ## Provider Constraints
 
-External plugins can currently register only table and storage providers. SQL parser, optimizer, wire protocol, and other core extension points are not open yet.
+External plugins can currently register only table, storage, and system catalog providers. SQL parser, optimizer, wire protocol, and other core extension points are not open yet.
 
 Provider ids must be unique within the same provider type. Built-in providers cannot be overridden by external plugins.
 
@@ -90,6 +91,7 @@ Use a reverse-DNS or clear product prefix for plugin ids, such as `com.acme.plug
 | Capability | Meaning |
 | --- | --- |
 | `table.create` | Provider can create tables |
+| `system.catalog` | Provider can own the system catalog |
 | `storage.persistent` | Storage supports persistent databases |
 | `storage.transactional` | Storage supports transactions |
 | `storage.mvcc` | Storage supports MVCC |
@@ -184,6 +186,24 @@ If the ADB prototype shows that `TableEngineContext` does not expose enough info
 4. `createTable()` failures should preserve the original cause and include provider id, table name, and a short parameter summary in the message.
 
 ## Storage Engine Constraints
+
+## System Catalog Provider Constraints
+
+`SystemCatalogProvider` is the prerequisite SPI for non-MVStore main paths. Its provider type is `system_catalog`. It is intended to move ownership of system catalog tables, LOBs, transaction logs, and temporary results away from the MVStore `Store` dependency in the `Database` main path.
+
+The current version stabilizes these boundaries:
+
+- External plugins may register a `system_catalog` provider.
+- Diagnostic tables expose the provider and the `system.catalog` capability.
+- Providers can use `validate(SystemCatalogContext)` to declare whether they can serve the current database context.
+
+The current version does not yet promise:
+
+- Automatic ownership of H2 system table creation.
+- Replacement of `Database.getStore()`.
+- Running arbitrary non-MVStore storage engines as the production main path.
+
+Therefore the next non-MVStore main-path implementation must first add contract tests for system tables, LOBs, transaction logs, and temporary results before removing the hard dependency on the MVStore `Store` from `Database`.
 
 The storage engine id is persisted in a sidecar metadata file next to the database. When opening a database, the requested `STORAGE_ENGINE` must match the persisted id.
 

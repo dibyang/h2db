@@ -18,6 +18,7 @@ import java.util.Set;
 import org.h2.api.H2Plugin;
 import org.h2.api.PluginProvider;
 import org.h2.api.StorageEngineProvider;
+import org.h2.api.SystemCatalogProvider;
 import org.h2.api.TableEngineProvider;
 import org.h2.message.DbException;
 
@@ -28,6 +29,7 @@ public final class PluginSecurity {
 
     private static final Set<String> ALLOWED_PROVIDER_TYPES = new HashSet<>(Arrays.asList(
             TableEngineProvider.TYPE,
+            SystemCatalogProvider.TYPE,
             StorageEngineProvider.TYPE));
 
     private PluginSecurity() {

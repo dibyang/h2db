@@ -16,8 +16,8 @@ import org.h2.mvstore.MVStoreReclamationStatus;
 /**
  * MVStore 存储维护能力边界。
  * <p>
- * 当前阶段只固定维护入口边界；在线回收和 crash-safe publish 留给 S2
- * 阶段实现，并通过 capability gate 明确返回不支持。
+ * compact 和在线空间回收都通过 capability gate 暴露，调用方不应绕过
+ * {@link StorageMaintenance} 直接进入 MVStore 私有维护逻辑。
  */
 final class MVStoreMaintenance implements StorageMaintenance {
 

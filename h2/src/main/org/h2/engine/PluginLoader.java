@@ -19,7 +19,8 @@ import org.h2.util.StringUtils;
 /**
  * 显式外部插件加载器。
  * <p>
- * 第一版只接受配置中明确列出的 {@link H2Plugin} 类名，不做自动发现。
+ * 支持配置中明确列出的 {@link H2Plugin} 类名，也支持按开关启用
+ * {@link ServiceLoader} 自动发现。
  */
 public final class PluginLoader {
 

@@ -16,11 +16,10 @@ import org.h2.mvstore.db.MVStoreStorageEngineProvider;
 import org.h2.store.fs.FileUtils;
 
 /**
- * 解析数据库 storage engine id 的阶段性入口。
+ * 解析数据库 storage engine id。
  * <p>
- * 当前阶段不写入磁盘元数据，旧库和未声明 storage id 的数据库都按内置
- * {@code mvstore} 处理。后续真正支持第二 storage engine 时，应在这里接入
- * 持久化 id 读取和兼容校验。
+ * 旧库和未声明 storage id 的数据库按内置 {@code mvstore} 处理；新库会把
+ * storage id 写入数据库旁路元数据文件，后续打开时校验请求 id 与持久化 id。
  */
 public final class StorageEngineResolver {
 

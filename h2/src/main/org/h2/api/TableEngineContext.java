@@ -37,6 +37,18 @@ public interface TableEngineContext {
     StorageEngine getStorageEngine();
 
     /**
+     * 获取当前存储引擎标识。
+     * <p>
+     * 默认实现委托当前 {@link #getStorageEngine()}，用于避免 table provider
+     * 为了诊断或路由直接访问更深层的数据库内部状态。
+     *
+     * @return 存储引擎标识
+     */
+    default String getStorageEngineId() {
+        return getStorageEngine().getEngineId();
+    }
+
+    /**
      * 获取诊断日志。
      *
      * @return 诊断日志

@@ -137,9 +137,9 @@ h2-longrun/
     h2-longrun
     h2-longrun.bat
   config/
-    longrun-smoke.properties
-    longrun-nightly.properties
-    longrun-soak-30d.properties
+    smoke.properties
+    nightly.properties
+    soak-30d.properties
   lib/
     h2-longrun.jar
   README.md
@@ -151,13 +151,13 @@ Linux run command from an unpacked tar.gz distribution:
 ```sh
 tar -xzf h2-longrun.tar.gz
 cd h2-longrun
-./bin/h2-longrun start --config config/longrun-smoke.properties
+./bin/h2-longrun start --config config/smoke.properties
 ```
 
 Windows run command from an unpacked zip distribution:
 
 ```powershell
-bin\h2-longrun.bat --config config\longrun-smoke.properties
+bin\h2-longrun.bat --config config\smoke.properties
 ```
 
 Linux / macOS `bin/h2-longrun` is a small background-process wrapper. `start` is the default action, `run` keeps the process in the foreground, `watch` starts or reuses a background process and follows its log, and `status`, `logs`, `stop`, and `restart` manage the background process. `watch` exits only the log follower on Ctrl-C; the background longrun keeps running. The default log and pid files are:
@@ -428,7 +428,7 @@ The long-running test app does not change production storage formats and does no
 | LR8 | External mode | `--h2-jar` candidate validation | Smoke can target a specified jar. |
 | LR9 | Distribution packages | `h2-longrun.zip` and `h2-longrun.tar.gz` with jar, scripts, configs, and README files | Unpacked script runs smoke. |
 | LR10 | Report analyzer | PASS/WARN/FAIL summaries from final report, metrics, and logs | Completed smoke automatically produces report files. |
-| LR11 | Copy-based file corruption injection | `longrun-fault-injection.properties`, `runLongRunFaultInjection`, fault metrics, and read-only verification of corrupted copies | Fault profile records recovered/detected/unexpected outcomes without damaging the primary workload file; enabled profiles with zero fault events return WARN. |
+| LR11 | Copy-based file corruption injection | `fault-injection.properties`, `runLongRunFaultInjection`, fault metrics, and read-only verification of corrupted copies | Fault profile records recovered/detected/unexpected outcomes without damaging the primary workload file; enabled profiles with zero fault events return WARN. |
 
 ## File Corruption Injection
 

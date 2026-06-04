@@ -47,8 +47,11 @@
 | Profile | 命令 | 结果 | 关键指标 |
 | --- | --- | --- | --- |
 | smoke |  |  |  |
+| performance | `./bin/h2-longrun watch -c config/performance.properties` | PASS | 启用在线空间回收后有中等幅度吞吐开销，同时显著降低最终文件大小和 MVStore 空间放大。 |
 | crash/recovery |  |  |  |
 | fault-injection |  |  |  |
+
+performance profile 结果说明：本次 release 的在线空间回收带来中等幅度吞吐开销，但显著降低 MVStore 文件增长和空间放大；该取舍符合长稳运行目标。
 
 ## 已知问题
 

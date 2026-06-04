@@ -8,9 +8,9 @@
 
 | Profile | 命令 | 结果 | 关键指标 |
 | --- | --- | --- | --- |
-| smoke | `./bin/h2-longrun watch --duration 10m --config config/longrun-smoke.properties` | PASS | 约 1409 万操作，4 次 reopen，60 次 reclamation success，0 warnings，0 suspicious log lines。 |
-| crash/recovery | `./bin/h2-longrun watch --config config/longrun-crash.properties` | PASS | 15 个 crash cycle，29 次 recovery check，约 3614 万操作，165 次 reclamation success，0 warnings，0 suspicious log lines。 |
-| fault-injection | `./bin/h2-longrun watch --config config/longrun-fault-injection.properties` | PASS | 14 次 fault injection，11 次 recovered，3 次 detected / detected by verify，0 unexpected，0 warnings，0 suspicious log lines。 |
+| smoke | `./bin/h2-longrun watch --duration 10m --config config/smoke.properties` | PASS | 约 1409 万操作，4 次 reopen，60 次 reclamation success，0 warnings，0 suspicious log lines。 |
+| crash/recovery | `./bin/h2-longrun watch --config config/crash.properties` | PASS | 15 个 crash cycle，29 次 recovery check，约 3614 万操作，165 次 reclamation success，0 warnings，0 suspicious log lines。 |
+| fault-injection | `./bin/h2-longrun watch --config config/fault-injection.properties` | PASS | 14 次 fault injection，11 次 recovered，3 次 detected / detected by verify，0 unexpected，0 warnings，0 suspicious log lines。 |
 
 ## 已确认行为
 
@@ -24,7 +24,7 @@
 
 | Profile | 建议 |
 | --- | --- |
-| nightly | 发布前至少运行一次缩短版，例如 `./bin/h2-longrun watch --duration 2h --config config/longrun-nightly.properties`。 |
+| nightly | 发布前至少运行一次缩短版，例如 `./bin/h2-longrun watch --duration 2h --config config/nightly.properties`。 |
 | comprehensive | 如发布窗口允许，运行一次综合 profile 的缩短版，覆盖常压、reopen、crash/recovery 与 S2 的组合路径。 |
 | dist tar/zip | 从干净目录解压 `h2-longrun.zip` 和 `h2-longrun.tar.gz`，确认脚本权限、配置文件、README 和 jar 布局正确。 |
 

@@ -25,6 +25,7 @@
 ### 验证
 
 - LongRun smoke 10 分钟验收通过：`PASS`，约 1409 万操作，4 次 reopen，60 次 reclamation success，0 suspicious log lines。
+- LongRun performance 3 分钟预发布对比显示，启用在线空间回收后有中等幅度吞吐开销，同时显著降低最终文件大小和 MVStore 空间放大。
 - LongRun crash/recovery 30 分钟验收通过：`PASS`，15 个 crash cycle，29 次 recovery check，0 warnings，0 suspicious log lines。
 - LongRun fault-injection 30 分钟验收通过：`PASS`，14 次 fault injection，11 次 recovered，3 次 detected / detected by verify，0 unexpected，0 suspicious log lines。
 

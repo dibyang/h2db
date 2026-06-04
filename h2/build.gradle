@@ -297,7 +297,7 @@ task longRunTestDistZip(type: Zip) {
             into 'lib'
         }
         from('src/longrun/resources') {
-            include 'longrun-*.properties'
+            include '*.properties'
             into 'config'
         }
         from('src/longrun/dist/bin') {
@@ -323,7 +323,7 @@ task longRunTestDistTar(type: Tar) {
             into 'lib'
         }
         from('src/longrun/resources') {
-            include 'longrun-*.properties'
+            include '*.properties'
             into 'config'
         }
         from('src/longrun/dist/bin') {
@@ -350,7 +350,7 @@ task runLongRunSmoke(type: JavaExec) {
     classpath = project.hasProperty('longRunH2Jar') ?
             files(project.property('longRunH2Jar')) + sourceSets.longrun.runtimeClasspath :
             sourceSets.longrun.runtimeClasspath
-    args '--config', file('src/longrun/resources/longrun-smoke.properties').absolutePath
+    args '--config', file('src/longrun/resources/smoke.properties').absolutePath
     if (project.hasProperty('longRunDuration')) {
         args '--duration', project.property('longRunDuration')
     }
@@ -392,6 +392,28 @@ task runLongRunSmoke(type: JavaExec) {
     }
 }
 
+task runLongRunPerformance(type: JavaExec) {
+    description = 'Runs the standalone longrun performance metrics profile. Defaults to 3 minutes.'
+    dependsOn longrunClasses
+    main = 'org.h2.test.longrun.LongRunTestApp'
+    classpath = project.hasProperty('longRunH2Jar') ?
+            files(project.property('longRunH2Jar')) + sourceSets.longrun.runtimeClasspath :
+            sourceSets.longrun.runtimeClasspath
+    args '--config', file('src/longrun/resources/performance.properties').absolutePath
+    if (project.hasProperty('longRunDuration')) {
+        args '--duration', project.property('longRunDuration')
+    }
+    if (project.hasProperty('longRunMode')) {
+        args '--mode', project.property('longRunMode')
+    }
+    if (project.hasProperty('longRunH2Jar')) {
+        args '--h2-jar', file(project.property('longRunH2Jar')).absolutePath
+    }
+    if (project.hasProperty('longRunReclamationInterval')) {
+        systemProperty 'h2.longrun.reclamation.interval', project.property('longRunReclamationInterval')
+    }
+}
+
 task runLongRunFaultInjection(type: JavaExec) {
     description = 'Runs the standalone longrun file corruption injection profile.'
     dependsOn longrunClasses
@@ -399,7 +421,7 @@ task runLongRunFaultInjection(type: JavaExec) {
     classpath = project.hasProperty('longRunH2Jar') ?
             files(project.property('longRunH2Jar')) + sourceSets.longrun.runtimeClasspath :
             sourceSets.longrun.runtimeClasspath
-    args '--config', file('src/longrun/resources/longrun-fault-injection.properties').absolutePath
+    args '--config', file('src/longrun/resources/fault-injection.properties').absolutePath
     if (project.hasProperty('longRunDuration')) {
         args '--duration', project.property('longRunDuration')
     }

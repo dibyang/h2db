@@ -7,6 +7,8 @@ package org.h2.test.longrun.mvstore;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.Properties;
@@ -29,6 +31,17 @@ import org.h2.test.longrun.ReclamationObserver;
  */
 public final class MVStoreWorkload implements LongRunWorkload {
 
+    private static final Method ONLINE_RECLAMATION_MAX_CANDIDATE_CHUNKS = lookupBuilderIntOption(
+            "onlineReclamationMaxCandidateChunks");
+    private static final Method ONLINE_RECLAMATION_MAX_LIVE_BYTES_TO_REWRITE = lookupBuilderIntOption(
+            "onlineReclamationMaxLiveBytesToRewrite");
+    private static final Method ONLINE_RECLAMATION_MAX_RUN_MILLIS = lookupBuilderIntOption(
+            "onlineReclamationMaxRunMillis");
+    private static final Method ONLINE_RECLAMATION_MAX_TAIL_COMPACTION_MILLIS = lookupBuilderIntOption(
+            "onlineReclamationMaxTailCompactionMillis");
+    private static final Method ONLINE_RECLAMATION_MIN_INTERVAL_MILLIS = lookupBuilderIntOption(
+            "onlineReclamationMinIntervalMillis");
+
     private final LongRunConfig config;
     private final LongRunState state;
     private final Random random;
@@ -38,6 +51,7 @@ public final class MVStoreWorkload implements LongRunWorkload {
     private MVMap<Long, String> data;
     private MVMap<Long, String> ledger;
     private MVMap<String, Long> counters;
+    private boolean onlineReclamationBuilderOptionsApplied;
     private int faultKindIndex;
 
     public MVStoreWorkload(LongRunConfig config, LongRunState state) {
@@ -100,6 +114,8 @@ public final class MVStoreWorkload implements LongRunWorkload {
         properties.setProperty("mvstore.estimatedLiveDataBytes", Long.toString(estimatedLiveDataBytes));
         properties.setProperty("mvstore.sizeAmplification",
                 Double.toString(file.length() / (double) estimatedLiveDataBytes));
+        properties.setProperty("mvstore.onlineReclamationBuilderOptionsApplied",
+                Boolean.toString(onlineReclamationBuilderOptionsApplied));
     }
 
     private void put(long key) {
@@ -339,15 +355,21 @@ public final class MVStoreWorkload implements LongRunWorkload {
     }
 
     private void openStore() {
-        store = new MVStore.Builder()
+        MVStore.Builder builder = new MVStore.Builder()
                 .fileName(file.getPath())
-                .autoCommitDisabled()
-                .onlineReclamationMaxCandidateChunks(config.getReclamationMaxCandidateChunks())
-                .onlineReclamationMaxLiveBytesToRewrite(config.getReclamationMaxLiveBytesToRewrite())
-                .onlineReclamationMaxRunMillis(config.getReclamationMaxRunMillis())
-                .onlineReclamationMaxTailCompactionMillis(config.getReclamationMaxTailCompactionMillis())
-                .onlineReclamationMinIntervalMillis(config.getReclamationMinSchedulerIntervalMillis())
-                .open();
+                .autoCommitDisabled();
+        boolean applied = applyBuilderIntOption(builder, ONLINE_RECLAMATION_MAX_CANDIDATE_CHUNKS,
+                config.getReclamationMaxCandidateChunks());
+        applied &= applyBuilderIntOption(builder, ONLINE_RECLAMATION_MAX_LIVE_BYTES_TO_REWRITE,
+                config.getReclamationMaxLiveBytesToRewrite());
+        applied &= applyBuilderIntOption(builder, ONLINE_RECLAMATION_MAX_RUN_MILLIS,
+                config.getReclamationMaxRunMillis());
+        applied &= applyBuilderIntOption(builder, ONLINE_RECLAMATION_MAX_TAIL_COMPACTION_MILLIS,
+                config.getReclamationMaxTailCompactionMillis());
+        applied &= applyBuilderIntOption(builder, ONLINE_RECLAMATION_MIN_INTERVAL_MILLIS,
+                config.getReclamationMinSchedulerIntervalMillis());
+        onlineReclamationBuilderOptionsApplied = applied;
+        store = builder.open();
         store.setRetentionTime(config.getRetentionTimeMillis());
         store.setVersionsToKeep(config.getVersionsToKeep());
         data = store.openMap("data");
@@ -392,6 +414,51 @@ public final class MVStoreWorkload implements LongRunWorkload {
             } catch (RuntimeException ignore) {
                 // ignore
             }
+        }
+    }
+
+    /**
+     * Applies an optional integer MVStore builder method when the tested H2 jar provides it.
+     *
+     * @param builder MVStore builder instance
+     * @param methodName optional method name
+     * @param value integer option value
+     * @return whether the method existed and was invoked
+     */
+    public static boolean applyBuilderIntOption(Object builder, String methodName, int value) {
+        return applyBuilderIntOption(builder, lookupBuilderIntOption(builder.getClass(), methodName), value);
+    }
+
+    private static Method lookupBuilderIntOption(String methodName) {
+        return lookupBuilderIntOption(MVStore.Builder.class, methodName);
+    }
+
+    private static Method lookupBuilderIntOption(Class<?> builderClass, String methodName) {
+        try {
+            return builderClass.getMethod(methodName, Integer.TYPE);
+        } catch (NoSuchMethodException e) {
+            return null;
+        }
+    }
+
+    private static boolean applyBuilderIntOption(Object builder, Method method, int value) {
+        if (method == null) {
+            return false;
+        }
+        try {
+            method.invoke(builder, Integer.valueOf(value));
+            return true;
+        } catch (IllegalAccessException e) {
+            throw new IllegalStateException("Could not access MVStore builder method " + method.getName(), e);
+        } catch (InvocationTargetException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof RuntimeException) {
+                throw (RuntimeException) cause;
+            }
+            if (cause instanceof Error) {
+                throw (Error) cause;
+            }
+            throw new IllegalStateException("Could not invoke MVStore builder method " + method.getName(), cause);
         }
     }
 }

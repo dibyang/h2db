@@ -8,9 +8,9 @@ This document records manual pre-release acceptance results for the standalone L
 
 | Profile | Command | Result | Key Metrics |
 | --- | --- | --- | --- |
-| smoke | `./bin/h2-longrun watch --duration 10m --config config/longrun-smoke.properties` | PASS | About 14.09 million operations, 4 reopen checks, 60 reclamation success events, 0 warnings, and 0 suspicious log lines. |
-| crash/recovery | `./bin/h2-longrun watch --config config/longrun-crash.properties` | PASS | 15 crash cycles, 29 recovery checks, about 36.14 million operations, 165 reclamation success events, 0 warnings, and 0 suspicious log lines. |
-| fault-injection | `./bin/h2-longrun watch --config config/longrun-fault-injection.properties` | PASS | 14 fault injection events, 11 recovered, 3 detected or detected by verify, 0 unexpected, 0 warnings, and 0 suspicious log lines. |
+| smoke | `./bin/h2-longrun watch --duration 10m --config config/smoke.properties` | PASS | About 14.09 million operations, 4 reopen checks, 60 reclamation success events, 0 warnings, and 0 suspicious log lines. |
+| crash/recovery | `./bin/h2-longrun watch --config config/crash.properties` | PASS | 15 crash cycles, 29 recovery checks, about 36.14 million operations, 165 reclamation success events, 0 warnings, and 0 suspicious log lines. |
+| fault-injection | `./bin/h2-longrun watch --config config/fault-injection.properties` | PASS | 14 fault injection events, 11 recovered, 3 detected or detected by verify, 0 unexpected, 0 warnings, and 0 suspicious log lines. |
 
 ## Confirmed Behavior
 
@@ -24,7 +24,7 @@ This document records manual pre-release acceptance results for the standalone L
 
 | Profile | Recommendation |
 | --- | --- |
-| nightly | Run at least one shortened pre-release run, for example `./bin/h2-longrun watch --duration 2h --config config/longrun-nightly.properties`. |
+| nightly | Run at least one shortened pre-release run, for example `./bin/h2-longrun watch --duration 2h --config config/nightly.properties`. |
 | comprehensive | If the release window allows it, run a shortened comprehensive profile to cover combined pressure, reopen, crash/recovery, and S2 paths. |
 | dist tar/zip | Unpack `h2-longrun.zip` and `h2-longrun.tar.gz` in a clean directory and confirm script permissions, config files, README files, and jar layout. |
 

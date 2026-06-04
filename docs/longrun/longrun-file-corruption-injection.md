@@ -59,7 +59,7 @@ fault.retainedCopies=5
 运行方式：
 
 ```sh
-./bin/h2-longrun start --config config/longrun-fault-injection.properties
+./bin/h2-longrun start --config config/fault-injection.properties
 ```
 
 本地 Gradle 快速验证：

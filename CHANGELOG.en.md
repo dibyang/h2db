@@ -25,6 +25,7 @@ This file records public h2db release changes for external users. Keep one secti
 ### Verification
 
 - LongRun 10-minute smoke acceptance passed: `PASS`, about 14.09 million operations, 4 reopen checks, 60 reclamation success events, and 0 suspicious log lines.
+- LongRun 3-minute pre-release performance comparisons showed moderate throughput overhead with online reclamation enabled, while significantly reducing final file size and MVStore size amplification.
 - LongRun 30-minute crash/recovery acceptance passed: `PASS`, 15 crash cycles, 29 recovery checks, 0 warnings, and 0 suspicious log lines.
 - LongRun 30-minute fault-injection acceptance passed: `PASS`, 14 fault injection events, 11 recovered, 3 detected or detected by verify, 0 unexpected, and 0 suspicious log lines.
 

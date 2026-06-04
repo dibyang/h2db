@@ -25,7 +25,7 @@ Usage:
   h2-longrun report -w <dir> [-l <file>]     Analyze a completed run.
 
 Common options are passed to LongRunTestApp, for example:
-  -c config/longrun-smoke.properties -d 10m
+  -c config/smoke.properties -d 10m
   -j /path/to/h2.jar
   --rotate-log           Rotate an existing log before starting. This is the default.
   --append-log           Append to an existing log when starting.
@@ -234,10 +234,11 @@ status_background() {
 }
 
 follow_logs() {
+    follow_pid=${1:-}
     mkdir -p "$log_dir"
     touch "$log_file"
     if [ -t 1 ]; then
-        tail -f "$log_file" | awk '
+        tail_log "$follow_pid" | awk '
             function value_from_line(line, key,     n, i, parts, prefix) {
                 prefix = key "="
                 n = split(line, parts, /[, ]+/)
@@ -298,13 +299,48 @@ follow_logs() {
             }
         '
     else
+        tail_log "$follow_pid"
+    fi
+}
+
+tail_log() {
+    follow_pid=${1:-}
+    if [ -n "$follow_pid" ] && tail_supports_pid; then
+        tail --pid="$follow_pid" -f "$log_file"
+    else
         tail -f "$log_file"
     fi
 }
 
+tail_supports_pid() {
+    tail --pid="$$" -f /dev/null >/dev/null 2>&1 &
+    probe_pid=$!
+    sleep 0.1
+    if kill -0 "$probe_pid" 2>/dev/null; then
+        kill "$probe_pid" 2>/dev/null || true
+        wait "$probe_pid" 2>/dev/null || true
+        return 0
+    fi
+    wait "$probe_pid" 2>/dev/null || true
+    return 1
+}
+
 watch_background() {
     start_background "$@"
-    follow_logs
+    follow_pid=
+    if is_running; then
+        follow_pid=$(cat "$pid_file")
+    fi
+    follow_logs "$follow_pid"
+    if [ -n "$follow_pid" ] && ! kill -0 "$follow_pid" 2>/dev/null; then
+        current_pid=
+        if [ -f "$pid_file" ]; then
+            current_pid=$(cat "$pid_file")
+        fi
+        if [ "$current_pid" = "$follow_pid" ]; then
+            rm -f "$pid_file"
+        fi
+    fi
 }
 
 main() {
@@ -367,7 +403,11 @@ main() {
         logs)
             shift
             set_instance_files "$@"
-            follow_logs
+            follow_pid=
+            if is_running; then
+                follow_pid=$(cat "$pid_file")
+            fi
+            follow_logs "$follow_pid"
             ;;
         watch)
             shift

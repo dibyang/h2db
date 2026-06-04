@@ -15,7 +15,7 @@ LongRun 默认保护用户不要重复启动同一套测试。默认情况下，
 需要“像前台运行一样观察、但进程实际留在后台”时，使用 `watch`：
 
 ```sh
-./bin/h2-longrun watch --config config/longrun-crash.properties
+./bin/h2-longrun watch --config config/crash.properties
 ```
 
 实例未运行时，`watch` 会先后台启动再跟随该实例日志；实例已运行时，`watch` 只跟随日志。按 Ctrl-C 只会停止日志跟随，不会停止后台 longrun 进程。
@@ -27,21 +27,21 @@ LongRun 默认保护用户不要重复启动同一套测试。默认情况下，
 内置 profile 已经带有实例名，例如 `crash`、`reopen`、`smoke`。启动和停止时使用同一份配置即可定位对应 pid/log：
 
 ```sh
-./bin/h2-longrun start --config config/longrun-crash.properties
-./bin/h2-longrun status --config config/longrun-crash.properties
-./bin/h2-longrun stop --config config/longrun-crash.properties
+./bin/h2-longrun start --config config/crash.properties
+./bin/h2-longrun status --config config/crash.properties
+./bin/h2-longrun stop --config config/crash.properties
 ```
 
 并行运行必须显式隔离：
 
 ```sh
 H2_LONGRUN_INSTANCE=reopen \
-./bin/h2-longrun start --config config/longrun-reopen.properties --work-dir work/reopen
+./bin/h2-longrun start --config config/reopen.properties --work-dir work/reopen
 ```
 
 ```sh
 H2_LONGRUN_INSTANCE=crash \
-./bin/h2-longrun start --config config/longrun-crash.properties --work-dir work/crash
+./bin/h2-longrun start --config config/crash.properties --work-dir work/crash
 ```
 
 配置里的 `run.instance` 或 `H2_LONGRUN_INSTANCE` 会让 Linux 脚本自动使用独立 pid/log 文件：
@@ -58,7 +58,7 @@ logs/longrun-crash.out
 ```sh
 H2_LONGRUN_PID_FILE=logs/custom.pid \
 H2_LONGRUN_LOG_FILE=logs/custom.out \
-./bin/h2-longrun start --config config/longrun-smoke.properties --work-dir work/custom
+./bin/h2-longrun start --config config/smoke.properties --work-dir work/custom
 ```
 
 ## 约束

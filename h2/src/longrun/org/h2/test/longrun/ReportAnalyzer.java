@@ -36,6 +36,7 @@ public final class ReportAnalyzer {
     private static final double DEFAULT_MAX_RECLAMATION_BACKOFF_RATIO = 0.60D;
     private static final int DEFAULT_MIN_RECLAMATION_EVENTS = 1;
     private static final int MIN_SAMPLES_FOR_RECLAMATION_CHECK = 10;
+    private static final int MIN_SAMPLES_FOR_PERCENTILE_THROUGHPUT = 20;
 
     private final File workDir;
     private final File logFile;
@@ -117,6 +118,7 @@ public final class ReportAnalyzer {
             calculateSteadyThroughput(analysis);
             double warningDropRatio = analysis.steadyMetricSamples > 0
                     ? analysis.steadySustainedThroughputDropRatio : analysis.throughputDropRatio;
+            analysis.throughputWarningDropRatio = warningDropRatio;
             if (warningDropRatio > maxThroughputDropRatio) {
                 analysis.warnings.add("Throughput drop ratio " + warningDropRatio
                         + " exceeded threshold " + maxThroughputDropRatio);
@@ -125,6 +127,7 @@ public final class ReportAnalyzer {
         long finalSizeBytes = parseLong(analysis.finalReport.getProperty("finalSizeBytes"));
         long operations = parseLong(analysis.finalReport.getProperty("operations"));
         analysis.finalSizeGb = toGb(finalSizeBytes);
+        analysis.maxSizeAmplificationThreshold = maxSizeAmplification;
         if (maxFinalSizeGb > 0D && analysis.finalSizeGb > maxFinalSizeGb) {
             analysis.warnings.add("Final size " + analysis.finalSizeGb + " GB exceeded threshold "
                     + maxFinalSizeGb + " GB");
@@ -137,9 +140,9 @@ public final class ReportAnalyzer {
             }
         }
         double sizeAmplification = parseDouble(analysis.finalReport.getProperty("mvstore.sizeAmplification"));
-        if (maxSizeAmplification > 0D && sizeAmplification > maxSizeAmplification) {
+        if (analysis.maxSizeAmplificationThreshold > 0D && sizeAmplification > analysis.maxSizeAmplificationThreshold) {
             analysis.warnings.add("MVStore size amplification " + sizeAmplification
-                    + " exceeded threshold " + maxSizeAmplification);
+                    + " exceeded threshold " + analysis.maxSizeAmplificationThreshold);
         }
         if ("MVSTORE".equals(analysis.finalReport.getProperty("mode"))
                 && parseLong(analysis.finalReport.getProperty("keySpace")) <= 10_000L
@@ -147,7 +150,8 @@ public final class ReportAnalyzer {
             analysis.warnings.add("MVStore smoke final size " + analysis.finalSizeGb
                     + " GB is too large for keySpace <= 10000");
         }
-        if (minReclamationEvents > 0 && analysis.metricSamples >= MIN_SAMPLES_FOR_RECLAMATION_CHECK
+        if (onlineReclamationExpected(analysis) && minReclamationEvents > 0
+                && analysis.metricSamples >= MIN_SAMPLES_FOR_RECLAMATION_CHECK
                 && analysis.reclamationEvents < minReclamationEvents) {
             analysis.warnings.add("Reclamation events " + analysis.reclamationEvents
                     + " is lower than threshold " + minReclamationEvents);
@@ -316,6 +320,7 @@ public final class ReportAnalyzer {
             writer.println("| Steady Sustained Ops/s | " + analysis.steadySustainedOpsPerSecond + " |");
             writer.println("| Steady Sustained Throughput Drop Ratio | "
                     + analysis.steadySustainedThroughputDropRatio + " |");
+            writer.println("| Throughput Warning Drop Ratio | " + analysis.throughputWarningDropRatio + " |");
             writer.println("| Reclamation Events | " + analysis.reclamationEvents + " |");
             writer.println("| Reclamation Success Events | " + analysis.reclamationSuccessEvents + " |");
             writer.println("| Reclamation Backoff Events | " + analysis.reclamationBackoffEvents + " |");
@@ -392,7 +397,7 @@ public final class ReportAnalyzer {
             writer.println("| Max Throughput Drop Ratio Threshold | " + maxThroughputDropRatio + " |");
             writer.println("| Max Final Size GB Threshold | " + maxFinalSizeGb + " |");
             writer.println("| Max Size Per Million Ops GB Threshold | " + maxSizePerMillionOpsGb + " |");
-            writer.println("| Max Size Amplification Threshold | " + maxSizeAmplification + " |");
+            writer.println("| Max Size Amplification Threshold | " + analysis.maxSizeAmplificationThreshold + " |");
             writer.println("| Min Reclamation Events Threshold | " + minReclamationEvents + " |");
             writeSection(writer, "Failures", analysis.failures);
             writeSection(writer, "Warnings", analysis.warnings);
@@ -435,6 +440,7 @@ public final class ReportAnalyzer {
                 Double.toString(analysis.steadySustainedOpsPerSecond));
         properties.setProperty("steadySustainedThroughputDropRatio",
                 Double.toString(analysis.steadySustainedThroughputDropRatio));
+        properties.setProperty("throughputWarningDropRatio", Double.toString(analysis.throughputWarningDropRatio));
         properties.setProperty("reclamationEvents", Integer.toString(analysis.reclamationEvents));
         properties.setProperty("reclamationSuccessEvents", Integer.toString(analysis.reclamationSuccessEvents));
         properties.setProperty("reclamationSkippedEvents", Integer.toString(analysis.reclamationSkippedEvents));
@@ -492,7 +498,7 @@ public final class ReportAnalyzer {
         properties.setProperty("maxThroughputDropRatioThreshold", Double.toString(maxThroughputDropRatio));
         properties.setProperty("maxFinalSizeGbThreshold", Double.toString(maxFinalSizeGb));
         properties.setProperty("maxSizePerMillionOpsGbThreshold", Double.toString(maxSizePerMillionOpsGb));
-        properties.setProperty("maxSizeAmplificationThreshold", Double.toString(maxSizeAmplification));
+        properties.setProperty("maxSizeAmplificationThreshold", Double.toString(analysis.maxSizeAmplificationThreshold));
         properties.setProperty("minReclamationEventsThreshold", Integer.toString(minReclamationEvents));
         copyIfPresent(properties, analysis.finalReport, "mvstore.activeKeys");
         copyIfPresent(properties, analysis.finalReport, "mvstore.dataEntries");
@@ -514,6 +520,7 @@ public final class ReportAnalyzer {
         copyIfPresent(properties, analysis.finalReport, "mvstore.fileSizeBytes");
         copyIfPresent(properties, analysis.finalReport, "mvstore.estimatedLiveDataBytes");
         copyIfPresent(properties, analysis.finalReport, "mvstore.sizeAmplification");
+        copyIfPresent(properties, analysis.finalReport, "mvstore.onlineReclamationBuilderOptionsApplied");
         try (FileOutputStream out = new FileOutputStream(file)) {
             properties.store(out, "H2 longrun analysis summary");
         }
@@ -689,6 +696,10 @@ public final class ReportAnalyzer {
         return bytes / 1024D / 1024D / 1024D;
     }
 
+    private static boolean onlineReclamationExpected(Analysis analysis) {
+        return !"false".equals(analysis.finalReport.getProperty("mvstore.onlineReclamationBuilderOptionsApplied"));
+    }
+
     private static void calculateSteadyThroughput(Analysis analysis) {
         if (analysis.opsPerSecondSamples.size() < 5) {
             return;
@@ -724,7 +735,7 @@ public final class ReportAnalyzer {
             return 0D;
         }
         Collections.sort(samples);
-        if (samples.size() < 100) {
+        if (samples.size() < MIN_SAMPLES_FOR_PERCENTILE_THROUGHPUT) {
             return samples.get(0).doubleValue();
         }
         int index = Math.max(0, (int) Math.ceil(samples.size() * 0.05D) - 1);
@@ -824,8 +835,10 @@ public final class ReportAnalyzer {
         private double steadyThroughputDropRatio;
         private double steadySustainedOpsPerSecond;
         private double steadySustainedThroughputDropRatio;
+        private double throughputWarningDropRatio;
         private double finalSizeGb;
         private double sizePerMillionOpsGb;
+        private double maxSizeAmplificationThreshold;
         private int reclamationEvents;
         private int reclamationSuccessEvents;
         private int reclamationSkippedEvents;

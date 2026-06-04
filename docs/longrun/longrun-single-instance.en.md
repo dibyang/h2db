@@ -15,7 +15,7 @@ This prevents two processes from writing the same MVStore, metrics, report, or l
 Use `watch` when a run should behave like a foreground command for observation but keep executing in the background:
 
 ```sh
-./bin/h2-longrun watch --config config/longrun-crash.properties
+./bin/h2-longrun watch --config config/crash.properties
 ```
 
 If the instance is not running, `watch` starts it in the background and follows the selected instance log. If it is already running, `watch` only follows the log. Ctrl-C stops the log follower, not the background longrun process.
@@ -27,21 +27,21 @@ For a new background start, the Linux script rotates an existing instance log by
 Built-in profiles already define instance names such as `crash`, `reopen`, and `smoke`. Use the same config for start and stop to resolve the matching pid/log files:
 
 ```sh
-./bin/h2-longrun start --config config/longrun-crash.properties
-./bin/h2-longrun status --config config/longrun-crash.properties
-./bin/h2-longrun stop --config config/longrun-crash.properties
+./bin/h2-longrun start --config config/crash.properties
+./bin/h2-longrun status --config config/crash.properties
+./bin/h2-longrun stop --config config/crash.properties
 ```
 
 Parallel runs must be explicitly isolated:
 
 ```sh
 H2_LONGRUN_INSTANCE=reopen \
-./bin/h2-longrun start --config config/longrun-reopen.properties --work-dir work/reopen
+./bin/h2-longrun start --config config/reopen.properties --work-dir work/reopen
 ```
 
 ```sh
 H2_LONGRUN_INSTANCE=crash \
-./bin/h2-longrun start --config config/longrun-crash.properties --work-dir work/crash
+./bin/h2-longrun start --config config/crash.properties --work-dir work/crash
 ```
 
 `run.instance` or `H2_LONGRUN_INSTANCE` makes the Linux script derive independent pid/log files:
@@ -58,7 +58,7 @@ For full control, specify files directly:
 ```sh
 H2_LONGRUN_PID_FILE=logs/custom.pid \
 H2_LONGRUN_LOG_FILE=logs/custom.out \
-./bin/h2-longrun start --config config/longrun-smoke.properties --work-dir work/custom
+./bin/h2-longrun start --config config/smoke.properties --work-dir work/custom
 ```
 
 ## Constraints

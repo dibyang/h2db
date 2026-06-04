@@ -47,8 +47,11 @@ If this release includes the LongRun distribution package, list accepted profile
 | Profile | Command | Result | Key Metrics |
 | --- | --- | --- | --- |
 | smoke |  |  |  |
+| performance | `./bin/h2-longrun watch -c config/performance.properties` | PASS | Online reclamation added moderate throughput overhead while significantly reducing final file size and MVStore size amplification. |
 | crash/recovery |  |  |  |
 | fault-injection |  |  |  |
+
+Performance profile note: online reclamation adds moderate throughput overhead in this release, but significantly reduces MVStore file growth and size amplification; this trade-off matches the long-running stability goal.
 
 ## Known Issues
 

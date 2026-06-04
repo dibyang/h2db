@@ -59,7 +59,7 @@ fault.retainedCopies=5
 Run command:
 
 ```sh
-./bin/h2-longrun start --config config/longrun-fault-injection.properties
+./bin/h2-longrun start --config config/fault-injection.properties
 ```
 
 Local Gradle validation:

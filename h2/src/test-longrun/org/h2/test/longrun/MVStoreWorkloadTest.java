@@ -58,7 +58,13 @@ public final class MVStoreWorkloadTest {
         assertEquals("10", properties.getProperty("mvstore.ledgerMaxEntries"));
         assertEquals("0", properties.getProperty("mvstore.retentionTimeMillis"));
         assertEquals("0", properties.getProperty("mvstore.versionsToKeep"));
+        assertEquals("true", properties.getProperty("mvstore.onlineReclamationBuilderOptionsApplied"));
         assertTrue(Long.parseLong(properties.getProperty("mvstore.ledgerEntries")) <= 10L);
+    }
+
+    @Test
+    public void missingOnlineReclamationBuilderOptionIsSkipped() {
+        assertTrue(!MVStoreWorkload.applyBuilderIntOption(new Object(), "onlineReclamationMaxCandidateChunks", 64));
     }
 
     @Test

@@ -146,6 +146,39 @@ public final class ReportAnalyzerTest {
     }
 
     @Test
+    public void reportIgnoresIsolatedThroughputDipInShortPerformanceRuns() throws Exception {
+        File workDir = new File(tempDir, "short-performance-dip-work");
+        File metricsDir = new File(workDir, "metrics");
+        assertTrue(metricsDir.mkdirs());
+        writeFinalReport(new File(workDir, "final-report.properties"));
+        File metrics = new File(metricsDir, "metrics-20260601.csv");
+        try (FileWriter writer = new FileWriter(metrics)) {
+            writer.write("timeMillis,operations,opsPerSecond,reads,writes,removes,commits\n");
+            writer.write("1,100,100.0,10,80,10,1\n");
+            for (int i = 2; i <= 31; i++) {
+                double ops = i == 15 ? 1.0D : 100.0D;
+                writer.write(i + "," + (i * 100) + "," + ops + ",10,80,10," + i + "\n");
+            }
+            writer.write("32,3200,100.0,10,80,10,32\n");
+        }
+        File logFile = new File(tempDir, "short-performance-dip-longrun.out");
+        try (FileWriter writer = new FileWriter(logFile)) {
+            writer.write("Longrun finished\n");
+        }
+
+        int exitCode = LongRunTestApp.run("report", "--work-dir", workDir.getPath(), "--log-file",
+                logFile.getPath(), "--min-reclamation-events", "0");
+
+        assertEquals(0, exitCode);
+        Properties properties = loadSummary(workDir);
+        assertEquals("PASS", properties.getProperty("status"));
+        assertEquals("30", properties.getProperty("steadyMetricSamples"));
+        assertEquals("1.0", properties.getProperty("steadyMinOpsPerSecond"));
+        assertEquals("100.0", properties.getProperty("steadySustainedOpsPerSecond"));
+        assertEquals("0.0", properties.getProperty("throughputWarningDropRatio"));
+    }
+
+    @Test
     public void reportWarnsOnIneffectiveReclamation() throws Exception {
         File workDir = new File(tempDir, "reclaim-work");
         File metricsDir = new File(workDir, "metrics");
@@ -194,6 +227,42 @@ public final class ReportAnalyzerTest {
         assertTrue(summary.contains("RECLAMATION_SCHEDULER_BACKOFF: 2"));
         assertTrue(summary.contains("SUCCESS RECLAMATION_PAUSED_BY_TIME_BUDGET"));
         assertTrue(summary.contains("beforeChunksFillRate=0"));
+    }
+
+    @Test
+    public void reportDoesNotRequireReclamationEventsWhenTestedJarDoesNotSupportOnlineReclamation()
+            throws Exception {
+        File workDir = new File(tempDir, "baseline-no-reclaim-work");
+        File metricsDir = new File(workDir, "metrics");
+        assertTrue(metricsDir.mkdirs());
+        Properties finalReport = new Properties();
+        finalReport.setProperty("operations", "2000");
+        finalReport.setProperty("commits", "2");
+        finalReport.setProperty("finalSizeBytes", "4096");
+        finalReport.setProperty("mvstore.onlineReclamationBuilderOptionsApplied", "false");
+        try (FileOutputStream out = new FileOutputStream(new File(workDir, "final-report.properties"))) {
+            finalReport.store(out, "test");
+        }
+        File metrics = new File(metricsDir, "metrics-20260601.csv");
+        try (FileWriter writer = new FileWriter(metrics)) {
+            writer.write("timeMillis,operations,opsPerSecond,reads,writes,removes,commits\n");
+            for (int i = 1; i <= 12; i++) {
+                writer.write(i + "," + (i * 100) + ",100.0,10,80,10," + i + "\n");
+            }
+        }
+        File logFile = new File(tempDir, "baseline-no-reclaim-longrun.out");
+        try (FileWriter writer = new FileWriter(logFile)) {
+            writer.write("Longrun finished\n");
+        }
+
+        int exitCode = LongRunTestApp.run("report", "--work-dir", workDir.getPath(), "--log-file",
+                logFile.getPath());
+
+        assertEquals(0, exitCode);
+        Properties properties = loadSummary(workDir);
+        assertEquals("PASS", properties.getProperty("status"));
+        assertEquals("false", properties.getProperty("mvstore.onlineReclamationBuilderOptionsApplied"));
+        assertEquals("0", properties.getProperty("reclamationEvents"));
     }
 
     @Test
@@ -294,11 +363,33 @@ public final class ReportAnalyzerTest {
     }
 
     @Test
+    public void performanceProfileUsesDefaultSizeAmplificationLimit() throws Exception {
+        File workDir = new File(tempDir, "performance-amplification-work");
+        File metricsDir = new File(workDir, "metrics");
+        assertTrue(metricsDir.mkdirs());
+        writeFinalReport(new File(workDir, "final-report.properties"), "5.8", "mvstore-performance");
+        writeMetrics(new File(metricsDir, "metrics-20260601.csv"));
+        File logFile = new File(tempDir, "performance-amplification-longrun.out");
+        try (FileWriter writer = new FileWriter(logFile)) {
+            writer.write("Longrun finished\n");
+        }
+
+        int exitCode = LongRunTestApp.run("report", "--work-dir", workDir.getPath(), "--log-file",
+                logFile.getPath());
+
+        assertEquals(0, exitCode);
+        Properties properties = loadSummary(workDir);
+        assertEquals("WARN", properties.getProperty("status"));
+        assertEquals("5.0", properties.getProperty("maxSizeAmplificationThreshold"));
+        assertEquals("5.8", properties.getProperty("mvstore.sizeAmplification"));
+    }
+
+    @Test
     public void reportAcceptsConfiguredSizeAmplificationLimit() throws Exception {
         File workDir = new File(tempDir, "amplification-override-work");
         File metricsDir = new File(workDir, "metrics");
         assertTrue(metricsDir.mkdirs());
-        writeFinalReport(new File(workDir, "final-report.properties"), "18.0");
+        writeFinalReport(new File(workDir, "final-report.properties"), "18.0", "mvstore-performance");
         writeMetrics(new File(metricsDir, "metrics-20260601.csv"));
         File logFile = new File(tempDir, "amplification-override-longrun.out");
         try (FileWriter writer = new FileWriter(logFile)) {
@@ -402,6 +493,20 @@ public final class ReportAnalyzerTest {
         properties.setProperty("finalSizeBytes", "4096");
         properties.setProperty("mode", "MVSTORE");
         properties.setProperty("keySpace", "10000");
+        properties.setProperty("mvstore.sizeAmplification", sizeAmplification);
+        try (FileOutputStream out = new FileOutputStream(file)) {
+            properties.store(out, "test");
+        }
+    }
+
+    private static void writeFinalReport(File file, String sizeAmplification, String runName) throws Exception {
+        Properties properties = new Properties();
+        properties.setProperty("operations", "100");
+        properties.setProperty("commits", "2");
+        properties.setProperty("finalSizeBytes", "4096");
+        properties.setProperty("mode", "MVSTORE");
+        properties.setProperty("keySpace", "10000");
+        properties.setProperty("runName", runName);
         properties.setProperty("mvstore.sizeAmplification", sizeAmplification);
         try (FileOutputStream out = new FileOutputStream(file)) {
             properties.store(out, "test");

@@ -116,7 +116,7 @@ public final class LongRunConfigTest {
 
     @Test
     public void sampleSmokeConfigUsesTenSecondReclamationInterval() throws Exception {
-        File configFile = new File("src/longrun/resources/longrun-smoke.properties");
+        File configFile = new File("src/longrun/resources/smoke.properties");
 
         assertTrue(configFile.isFile());
         LongRunConfig config = LongRunConfig.load(CommandLineOptions.parse("--config", configFile.getPath()));
@@ -125,22 +125,26 @@ public final class LongRunConfigTest {
 
     @Test
     public void reliabilityProfilesArePackagedConfigs() throws Exception {
-        File reopenConfig = new File("src/longrun/resources/longrun-reopen.properties");
-        File crashConfig = new File("src/longrun/resources/longrun-crash.properties");
-        File nightlyConfig = new File("src/longrun/resources/longrun-nightly.properties");
-        File comprehensiveConfig = new File("src/longrun/resources/longrun-comprehensive.properties");
-        File soakConfig = new File("src/longrun/resources/longrun-soak-30d.properties");
-        File faultConfig = new File("src/longrun/resources/longrun-fault-injection.properties");
+        File reopenConfig = new File("src/longrun/resources/reopen.properties");
+        File crashConfig = new File("src/longrun/resources/crash.properties");
+        File nightlyConfig = new File("src/longrun/resources/nightly.properties");
+        File performanceConfig = new File("src/longrun/resources/performance.properties");
+        File comprehensiveConfig = new File("src/longrun/resources/comprehensive.properties");
+        File soakConfig = new File("src/longrun/resources/soak-30d.properties");
+        File faultConfig = new File("src/longrun/resources/fault-injection.properties");
 
         assertTrue(reopenConfig.isFile());
         assertTrue(crashConfig.isFile());
         assertTrue(nightlyConfig.isFile());
+        assertTrue(performanceConfig.isFile());
         assertTrue(comprehensiveConfig.isFile());
         assertTrue(soakConfig.isFile());
         assertTrue(faultConfig.isFile());
         LongRunConfig reopen = LongRunConfig.load(CommandLineOptions.parse("--config", reopenConfig.getPath()));
         LongRunConfig crash = LongRunConfig.load(CommandLineOptions.parse("--config", crashConfig.getPath()));
         LongRunConfig nightly = LongRunConfig.load(CommandLineOptions.parse("--config", nightlyConfig.getPath()));
+        LongRunConfig performance = LongRunConfig.load(CommandLineOptions.parse("--config",
+                performanceConfig.getPath()));
         LongRunConfig comprehensive = LongRunConfig.load(CommandLineOptions.parse("--config",
                 comprehensiveConfig.getPath()));
         LongRunConfig soak = LongRunConfig.load(CommandLineOptions.parse("--config", soakConfig.getPath()));
@@ -152,6 +156,13 @@ public final class LongRunConfigTest {
         assertTrue(comprehensive.isCrashEnabled());
         assertTrue(comprehensive.getCrashCycles() > 0);
         assertTrue(comprehensive.getReopenIntervalMillis() > 0L);
+        assertEquals(0L, performance.getReopenIntervalMillis());
+        assertEquals(2_000L, performance.getMetricsIntervalMillis());
+        assertEquals(10_000L, performance.getReclamationIntervalMillis());
+        assertEquals(10_000L, performance.getReclamationMinSchedulerIntervalMillis());
+        assertEquals(64L * 1024L * 1024L, performance.getReclamationMaxLiveBytesToRewrite());
+        assertEquals(250L, performance.getReclamationMaxRunMillis());
+        assertEquals(250L, performance.getReclamationMaxTailCompactionMillis());
         assertEquals("bounded", comprehensive.getLedgerMode());
         assertEquals(60L * 60L * 1000L, reopen.getDurationMillis());
         assertEquals("reopen", reopen.getInstanceName());

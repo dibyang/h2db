@@ -137,9 +137,9 @@ h2-longrun/
     h2-longrun
     h2-longrun.bat
   config/
-    longrun-smoke.properties
-    longrun-nightly.properties
-    longrun-soak-30d.properties
+    smoke.properties
+    nightly.properties
+    soak-30d.properties
   lib/
     h2-longrun.jar
   README.md
@@ -151,13 +151,13 @@ Linux 解压 tar.gz 后运行：
 ```sh
 tar -xzf h2-longrun.tar.gz
 cd h2-longrun
-./bin/h2-longrun start --config config/longrun-smoke.properties
+./bin/h2-longrun start --config config/smoke.properties
 ```
 
 Windows 解压 zip 后运行：
 
 ```powershell
-bin\h2-longrun.bat --config config\longrun-smoke.properties
+bin\h2-longrun.bat --config config\smoke.properties
 ```
 
 Linux / macOS 的 `bin/h2-longrun` 是一个后台进程包装脚本。`start` 是默认动作，`run` 保持前台运行，`watch` 会启动或复用后台进程并跟随日志，`status`、`logs`、`stop`、`restart` 用于管理后台进程。`watch` 下按 Ctrl-C 只退出日志跟随，后台 longrun 会继续运行。默认日志和 pid 文件为：
@@ -426,7 +426,7 @@ sequenceDiagram
 | LR8 | external mode | `--h2-jar` 验证候选版本 | 可对指定 jar 跑 smoke。 |
 | LR9 | 发布包 | 包含 jar、脚本、配置和 README 的 `h2-longrun.zip` / `h2-longrun.tar.gz` | 解压后脚本可跑 smoke。 |
 | LR10 | 报告分析器 | 基于 final report、metrics 和日志生成 PASS/WARN/FAIL 摘要 | smoke 完成后自动生成报告文件。 |
-| LR11 | copy-based 文件损坏注入 | `longrun-fault-injection.properties`、`runLongRunFaultInjection`、fault metrics、损坏副本只读校验 | fault profile 记录 recovered/detected/unexpected 结果；启用但零 fault 事件时报告 WARN。 |
+| LR11 | copy-based 文件损坏注入 | `fault-injection.properties`、`runLongRunFaultInjection`、fault metrics、损坏副本只读校验 | fault profile 记录 recovered/detected/unexpected 结果；启用但零 fault 事件时报告 WARN。 |
 
 ## 已拍板的问题
 

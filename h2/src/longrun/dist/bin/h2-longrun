@@ -1,0 +1,397 @@
+#!/usr/bin/env sh
+
+set -eu
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+app_home=$(CDPATH= cd -- "$script_dir/.." && pwd)
+
+java_cmd=${JAVA_CMD:-java}
+longrun_jar="$app_home/lib/h2-longrun.jar"
+log_dir=${H2_LONGRUN_LOG_DIR:-"$app_home/logs"}
+instance=
+pid_file=
+log_file=
+
+usage() {
+    cat <<EOF
+Usage:
+  h2-longrun [start] [longrun options]   Start in background. This is the default.
+  h2-longrun run [longrun options]       Run in foreground.
+  h2-longrun stop [longrun options]      Stop the background process.
+  h2-longrun status [longrun options]    Show process and log status.
+  h2-longrun restart [longrun options]   Restart in background.
+  h2-longrun logs [longrun options]      Follow the selected instance log.
+  h2-longrun watch [longrun options]     Start in background if needed, then follow the log.
+  h2-longrun report -w <dir> [-l <file>]     Analyze a completed run.
+
+Common options are passed to LongRunTestApp, for example:
+  -c config/longrun-smoke.properties -d 10m
+  -j /path/to/h2.jar
+  --rotate-log           Rotate an existing log before starting. This is the default.
+  --append-log           Append to an existing log when starting.
+  --truncate-log         Truncate an existing log when starting.
+
+Environment:
+  JAVA_CMD              Java executable. Default: java
+  H2_LONGRUN_LOG_DIR    Log directory. Default: <app>/logs
+  H2_LONGRUN_LOG_FILE   Output log file. Default: <app>/logs/longrun.out
+  H2_LONGRUN_PID_FILE   PID file. Default: <app>/logs/longrun.pid
+  H2_LONGRUN_LOG_POLICY  Log policy for new starts: rotate, append, or truncate.
+                        Default: rotate
+  H2_LONGRUN_INSTANCE   Instance name used to derive separate pid/log files.
+                        Defaults to run.instance from --config, or i1.
+  H2_LONGRUN_H2_JAR     Candidate H2 jar prepended to the classpath.
+EOF
+}
+
+config_file_from_args() {
+    previous=
+    for arg in "$@"; do
+        if [ "$previous" = "--config" ] || [ "$previous" = "-c" ]; then
+            printf '%s\n' "$arg"
+            return 0
+        fi
+        previous=$arg
+    done
+    return 1
+}
+
+instance_from_config() {
+    config_file=$1
+    if [ ! -f "$config_file" ]; then
+        return 1
+    fi
+    awk -F= '
+        /^[[:space:]]*#/ { next }
+        /^[[:space:]]*run\.instance[[:space:]]*=/ {
+            value=$2
+            sub(/^[[:space:]]*/, "", value)
+            sub(/[[:space:]\r]*$/, "", value)
+            print value
+            exit
+        }
+    ' "$config_file"
+}
+
+set_instance_files() {
+    instance=${H2_LONGRUN_INSTANCE:-}
+    if [ -z "$instance" ]; then
+        config_file=$(config_file_from_args "$@" || true)
+        if [ -n "$config_file" ]; then
+            instance=$(instance_from_config "$config_file" || true)
+        fi
+    fi
+    if [ -z "$instance" ]; then
+        instance=i1
+    fi
+    default_pid_file="$log_dir/longrun-$instance.pid"
+    default_log_file="$log_dir/longrun-$instance.out"
+    pid_file=${H2_LONGRUN_PID_FILE:-"$default_pid_file"}
+    log_file=${H2_LONGRUN_LOG_FILE:-"$default_log_file"}
+}
+
+classpath_for() {
+    h2_jar=${H2_LONGRUN_H2_JAR:-}
+    previous=
+    for arg in "$@"; do
+        if [ "$previous" = "--h2-jar" ] || [ "$previous" = "-j" ]; then
+            h2_jar=$arg
+            break
+        fi
+        previous=$arg
+    done
+    if [ -n "$h2_jar" ]; then
+        printf '%s:%s\n' "$h2_jar" "$longrun_jar"
+    else
+        printf '%s\n' "$longrun_jar"
+    fi
+}
+
+is_running() {
+    if [ ! -f "$pid_file" ]; then
+        return 1
+    fi
+    pid=$(cat "$pid_file")
+    if [ -z "$pid" ]; then
+        return 1
+    fi
+    kill -0 "$pid" 2>/dev/null
+}
+
+has_log_file_arg() {
+    previous=
+    for arg in "$@"; do
+        if [ "$previous" = "--log-file" ] || [ "$previous" = "-l" ]; then
+            return 0
+        fi
+        previous=$arg
+    done
+    return 1
+}
+
+run_foreground() {
+    cd "$app_home"
+    mkdir -p "$log_dir"
+    if has_log_file_arg "$@"; then
+        exec "$java_cmd" -cp "$(classpath_for "$@")" org.h2.test.longrun.LongRunTestApp "$@"
+    else
+        exec "$java_cmd" -cp "$(classpath_for "$@")" org.h2.test.longrun.LongRunTestApp "$@" --log-file "$log_file"
+    fi
+}
+
+start_background() {
+    mkdir -p "$log_dir"
+    if is_running; then
+        echo "H2 LongRun is already running, pid=$(cat "$pid_file")"
+        if [ -n "$instance" ]; then
+            echo "Instance: $instance"
+        fi
+        echo "Log: $log_file"
+        return 0
+    fi
+    cd "$app_home"
+    prepare_log_for_start
+    if has_log_file_arg "$@"; then
+        nohup "$java_cmd" -cp "$(classpath_for "$@")" org.h2.test.longrun.LongRunTestApp "$@" >> "$log_file" 2>&1 &
+    else
+        nohup "$java_cmd" -cp "$(classpath_for "$@")" org.h2.test.longrun.LongRunTestApp "$@" --log-file "$log_file" >> "$log_file" 2>&1 &
+    fi
+    pid=$!
+    echo "$pid" > "$pid_file"
+    echo "H2 LongRun started, pid=$pid"
+    if [ -n "$instance" ]; then
+        echo "Instance: $instance"
+    fi
+    echo "Log: $log_file"
+}
+
+prepare_log_for_start() {
+    case "$log_policy" in
+        rotate|"")
+            rotate_log
+            ;;
+        append)
+            touch "$log_file"
+            ;;
+        truncate)
+            : > "$log_file"
+            ;;
+        *)
+            echo "Invalid log policy: $log_policy"
+            echo "Use rotate, append, or truncate."
+            exit 2
+            ;;
+    esac
+}
+
+rotate_log() {
+    if [ -s "$log_file" ]; then
+        timestamp=$(date '+%Y%m%d%H%M%S')
+        rotated="$log_file.$timestamp"
+        count=0
+        while [ -e "$rotated" ]; do
+            count=$((count + 1))
+            rotated="$log_file.$timestamp.$count"
+        done
+        mv "$log_file" "$rotated"
+        echo "Previous log rotated to: $rotated"
+    fi
+    : > "$log_file"
+}
+
+stop_background() {
+    if ! is_running; then
+        echo "H2 LongRun is not running"
+        rm -f "$pid_file"
+        return 0
+    fi
+    pid=$(cat "$pid_file")
+    kill "$pid"
+    count=0
+    while kill -0 "$pid" 2>/dev/null; do
+        count=$((count + 1))
+        if [ "$count" -ge 30 ]; then
+            echo "H2 LongRun did not stop after 30 seconds, pid=$pid"
+            exit 1
+        fi
+        sleep 1
+    done
+    rm -f "$pid_file"
+    echo "H2 LongRun stopped, pid=$pid"
+}
+
+status_background() {
+    if is_running; then
+        echo "H2 LongRun is running, pid=$(cat "$pid_file")"
+    else
+        echo "H2 LongRun is not running"
+    fi
+    if [ -n "$instance" ]; then
+        echo "Instance: $instance"
+    fi
+    echo "PID file: $pid_file"
+    echo "Log: $log_file"
+}
+
+follow_logs() {
+    mkdir -p "$log_dir"
+    touch "$log_file"
+    if [ -t 1 ]; then
+        tail -f "$log_file" | awk '
+            function value_from_line(line, key,     n, i, parts, prefix) {
+                prefix = key "="
+                n = split(line, parts, /[, ]+/)
+                for (i = 1; i <= n; i++) {
+                    if (index(parts[i], prefix) == 1) {
+                        return substr(parts[i], length(prefix) + 1)
+                    }
+                }
+                return ""
+            }
+            function compact_startup(     instance, runName, mode, duration, workDir, crash, config) {
+                instance = value_from_line($0, "instance")
+                runName = value_from_line($0, "runName")
+                mode = value_from_line($0, "mode")
+                duration = int((value_from_line($0, "durationMillis") + 999) / 1000)
+                workDir = value_from_line($0, "workDir")
+                crash = value_from_line($0, "crashEnabled")
+                config = value_from_line($0, "config")
+                print "RUN instance=" instance " name=" runName " mode=" mode " duration=" duration "s workDir=" workDir " crash=" crash " config=" config
+                fflush()
+            }
+            function progress_text(     i, text) {
+                text = ""
+                for (i = 1; i <= NF; i++) {
+                    if ($i == "PROGRESS") {
+                        text = substr($0, index($0, "PROGRESS"))
+                        break
+                    }
+                }
+                return text
+            }
+            /(^|] )PROGRESS / {
+                printf "\r\033[K%s", progress_text()
+                fflush()
+                in_progress = 1
+                next
+            }
+            /] instance=/ {
+                if (in_progress) {
+                    printf "\n"
+                    in_progress = 0
+                }
+                compact_startup()
+                next
+            }
+            {
+                if (in_progress) {
+                    printf "\n"
+                    in_progress = 0
+                }
+                print
+                fflush()
+            }
+            END {
+                if (in_progress) {
+                    printf "\n"
+                }
+            }
+        '
+    else
+        tail -f "$log_file"
+    fi
+}
+
+watch_background() {
+    start_background "$@"
+    follow_logs
+}
+
+main() {
+    log_policy=${H2_LONGRUN_LOG_POLICY:-rotate}
+    original_count=$#
+    while [ "$original_count" -gt 0 ]; do
+        arg=$1
+        shift
+        case "$arg" in
+            --rotate-log)
+                log_policy=rotate
+                ;;
+            --append-log)
+                log_policy=append
+                ;;
+            --truncate-log)
+                log_policy=truncate
+                ;;
+            *)
+                set -- "$@" "$arg"
+                ;;
+        esac
+        original_count=$((original_count - 1))
+    done
+
+    if [ "$#" -eq 0 ]; then
+        set_instance_files
+        start_background
+        exit 0
+    fi
+
+    command=$1
+    case "$command" in
+        start)
+            shift
+            set_instance_files "$@"
+            start_background "$@"
+            ;;
+        run)
+            shift
+            set_instance_files "$@"
+            run_foreground "$@"
+            ;;
+        stop)
+            shift
+            set_instance_files "$@"
+            stop_background
+            ;;
+        status)
+            shift
+            set_instance_files "$@"
+            status_background
+            ;;
+        restart)
+            shift
+            set_instance_files "$@"
+            stop_background
+            start_background "$@"
+            ;;
+        logs)
+            shift
+            set_instance_files "$@"
+            follow_logs
+            ;;
+        watch)
+            shift
+            set_instance_files "$@"
+            watch_background "$@"
+            ;;
+        report)
+            shift
+            set_instance_files "$@"
+            run_foreground report "$@"
+            ;;
+        help|--help|-h)
+            usage
+            ;;
+        --*)
+            set_instance_files "$@"
+            start_background "$@"
+            ;;
+        *)
+            echo "Unknown command: $command"
+            usage
+            exit 2
+            ;;
+    esac
+}
+
+main "$@"

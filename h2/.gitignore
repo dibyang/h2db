@@ -4,6 +4,8 @@
 .settings
 benchmark.html
 bin
+!src/longrun/dist/bin/
+!src/longrun/dist/bin/h2-longrun-completion.bash
 coverage
 data
 docs

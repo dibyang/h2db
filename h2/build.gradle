@@ -124,6 +124,26 @@ sourceSets {
         compileClasspath = sourceSets.main.output + configurations.testCompileClasspath
         runtimeClasspath = output + compileClasspath + configurations.testRuntimeClasspath
     }
+    longrun {
+        java {
+            srcDirs = ['src/longrun']
+        }
+        resources {
+            srcDirs = ['src/longrun/resources']
+        }
+        compileClasspath = sourceSets.main.output + configurations.testCompileClasspath
+        runtimeClasspath = output + sourceSets.main.output + compileClasspath + configurations.testRuntimeClasspath
+    }
+    longrunTest {
+        java {
+            srcDirs = ['src/test-longrun']
+        }
+        resources {
+            srcDirs = []
+        }
+        compileClasspath = sourceSets.longrun.output + sourceSets.main.output + configurations.testCompileClasspath
+        runtimeClasspath = output + compileClasspath + sourceSets.longrun.runtimeClasspath + configurations.testRuntimeClasspath
+    }
     legacyTest {
         java {
             srcDirs = ['src/test', 'src/tools']
@@ -246,6 +266,176 @@ task runMvStoreReclamationJUnitCheck(type: Test) {
     exclude '**/*$*.class'
     useJUnitPlatform()
     dependsOn reclamationTestClasses
+}
+
+task longRunTestJar(type: Jar) {
+    description = 'Builds the standalone H2 long-running stress test application jar.'
+    archiveName = 'h2-longrun.jar'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from sourceSets.longrun.output
+    from sourceSets.main.output
+    manifest {
+        attributes(
+                'Main-Class': 'org.h2.test.longrun.LongRunTestApp',
+                'Implementation-Title': 'H2 LongRun Tests',
+                'Implementation-Version': project.version
+        )
+    }
+    dependsOn longrunClasses
+}
+
+def longRunTestDistName = "h2-longrun-${project.version}"
+def longRunTestInstallDir = 'h2-longrun'
+
+task longRunTestDistZip(type: Zip) {
+    description = 'Builds the standalone H2 long-running stress test application distribution zip.'
+    archiveName = "${longRunTestDistName}.zip"
+    destinationDir = file("$buildDir/distributions")
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    into(longRunTestInstallDir) {
+        from({ longRunTestJar.archivePath }) {
+            into 'lib'
+        }
+        from('src/longrun/resources') {
+            include 'longrun-*.properties'
+            into 'config'
+        }
+        from('src/longrun/dist/bin') {
+            into 'bin'
+            fileMode = 0755
+        }
+        from('src/longrun/dist') {
+            include 'README.md'
+            include 'README.en.md'
+        }
+    }
+    dependsOn longRunTestJar
+}
+
+task longRunTestDistTar(type: Tar) {
+    description = 'Builds the standalone H2 long-running stress test application distribution tar.gz.'
+    archiveName = "${longRunTestDistName}.tar.gz"
+    destinationDir = file("$buildDir/distributions")
+    compression = Compression.GZIP
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    into(longRunTestInstallDir) {
+        from({ longRunTestJar.archivePath }) {
+            into 'lib'
+        }
+        from('src/longrun/resources') {
+            include 'longrun-*.properties'
+            into 'config'
+        }
+        from('src/longrun/dist/bin') {
+            into 'bin'
+            fileMode = 0755
+        }
+        from('src/longrun/dist') {
+            include 'README.md'
+            include 'README.en.md'
+        }
+    }
+    dependsOn longRunTestJar
+}
+
+task longRunTestDist {
+    description = 'Builds all standalone H2 long-running stress test distribution packages.'
+    dependsOn longRunTestDistZip, longRunTestDistTar
+}
+
+task runLongRunSmoke(type: JavaExec) {
+    description = 'Runs the standalone long-running stress test smoke profile. Defaults to 5 minutes.'
+    dependsOn longrunClasses
+    main = 'org.h2.test.longrun.LongRunTestApp'
+    classpath = project.hasProperty('longRunH2Jar') ?
+            files(project.property('longRunH2Jar')) + sourceSets.longrun.runtimeClasspath :
+            sourceSets.longrun.runtimeClasspath
+    args '--config', file('src/longrun/resources/longrun-smoke.properties').absolutePath
+    if (project.hasProperty('longRunDuration')) {
+        args '--duration', project.property('longRunDuration')
+    }
+    if (project.hasProperty('longRunMode')) {
+        args '--mode', project.property('longRunMode')
+    }
+    if (project.hasProperty('longRunH2Jar')) {
+        args '--h2-jar', file(project.property('longRunH2Jar')).absolutePath
+    }
+    if (project.hasProperty('longRunReclamationInterval')) {
+        systemProperty 'h2.longrun.reclamation.interval', project.property('longRunReclamationInterval')
+    }
+    if (project.hasProperty('longRunReopenInterval')) {
+        systemProperty 'h2.longrun.reopen.interval', project.property('longRunReopenInterval')
+    }
+    if (project.hasProperty('longRunCrashEnabled')) {
+        systemProperty 'h2.longrun.crash.enabled', project.property('longRunCrashEnabled')
+    }
+    if (project.hasProperty('longRunCrashInterval')) {
+        systemProperty 'h2.longrun.crash.interval', project.property('longRunCrashInterval')
+    }
+    if (project.hasProperty('longRunCrashCycles')) {
+        systemProperty 'h2.longrun.crash.cycles', project.property('longRunCrashCycles')
+    }
+    if (project.hasProperty('longRunFaultEnabled')) {
+        systemProperty 'h2.longrun.fault.enabled', project.property('longRunFaultEnabled')
+    }
+    if (project.hasProperty('longRunFaultInterval')) {
+        systemProperty 'h2.longrun.fault.interval', project.property('longRunFaultInterval')
+    }
+    if (project.hasProperty('longRunFaultKinds')) {
+        systemProperty 'h2.longrun.fault.kinds', project.property('longRunFaultKinds')
+    }
+    if (project.hasProperty('longRunFaultMaxBytes')) {
+        systemProperty 'h2.longrun.fault.maxBytes', project.property('longRunFaultMaxBytes')
+    }
+    if (project.hasProperty('longRunFaultRetainedCopies')) {
+        systemProperty 'h2.longrun.fault.retainedCopies', project.property('longRunFaultRetainedCopies')
+    }
+}
+
+task runLongRunFaultInjection(type: JavaExec) {
+    description = 'Runs the standalone longrun file corruption injection profile.'
+    dependsOn longrunClasses
+    main = 'org.h2.test.longrun.LongRunTestApp'
+    classpath = project.hasProperty('longRunH2Jar') ?
+            files(project.property('longRunH2Jar')) + sourceSets.longrun.runtimeClasspath :
+            sourceSets.longrun.runtimeClasspath
+    args '--config', file('src/longrun/resources/longrun-fault-injection.properties').absolutePath
+    if (project.hasProperty('longRunDuration')) {
+        args '--duration', project.property('longRunDuration')
+    }
+    if (project.hasProperty('longRunH2Jar')) {
+        args '--h2-jar', file(project.property('longRunH2Jar')).absolutePath
+    }
+    if (project.hasProperty('longRunReclamationInterval')) {
+        systemProperty 'h2.longrun.reclamation.interval', project.property('longRunReclamationInterval')
+    }
+    if (project.hasProperty('longRunReopenInterval')) {
+        systemProperty 'h2.longrun.reopen.interval', project.property('longRunReopenInterval')
+    }
+    if (project.hasProperty('longRunFaultEnabled')) {
+        systemProperty 'h2.longrun.fault.enabled', project.property('longRunFaultEnabled')
+    }
+    if (project.hasProperty('longRunFaultInterval')) {
+        systemProperty 'h2.longrun.fault.interval', project.property('longRunFaultInterval')
+    }
+    if (project.hasProperty('longRunFaultKinds')) {
+        systemProperty 'h2.longrun.fault.kinds', project.property('longRunFaultKinds')
+    }
+    if (project.hasProperty('longRunFaultMaxBytes')) {
+        systemProperty 'h2.longrun.fault.maxBytes', project.property('longRunFaultMaxBytes')
+    }
+    if (project.hasProperty('longRunFaultRetainedCopies')) {
+        systemProperty 'h2.longrun.fault.retainedCopies', project.property('longRunFaultRetainedCopies')
+    }
+}
+
+task runLongRunJUnitCheck(type: Test) {
+    description = 'Runs the standalone longrun JUnit checks.'
+    testClassesDirs = sourceSets.longrunTest.output.classesDirs
+    classpath = sourceSets.longrunTest.runtimeClasspath
+    exclude '**/*$*.class'
+    useJUnitPlatform()
+    dependsOn longrunTestClasses
 }
 
 task runH2TestAllCi(type: JavaExec) {
@@ -495,4 +685,3 @@ if (!project.version.toString().endsWith('SNAPSHOT') || project.hasProperty('sig
         sign publishing.publications.maven
     }
 }
-

@@ -37,8 +37,8 @@
 tag 应与 Maven 版本一致，例如：
 
 ```sh
-git tag -s v2.2.10
-git push origin v2.2.10
+git tag -s v2.3.0
+git push origin v2.3.0
 ```
 
 如果无法签名 tag，请说明如何通过 Maven Central PGP 签名验证 release 真实性。

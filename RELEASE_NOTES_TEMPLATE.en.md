@@ -1,4 +1,4 @@
-# h2db VERSION
+# h2db 2.3.0
 
 [中文](RELEASE_NOTES_TEMPLATE.md)
 
@@ -32,13 +32,23 @@ State whether SQL parsing, execution, compatibility modes, JDBC behavior, errors
 <dependency>
     <groupId>net.xdob.h2db</groupId>
     <artifactId>h2db</artifactId>
-    <version>VERSION</version>
+    <version>2.3.0</version>
 </dependency>
 ```
 
 ## Verification
 
 List release verification commands and smoke tests.
+
+### LongRun Acceptance
+
+If this release includes the LongRun distribution package, list accepted profiles:
+
+| Profile | Command | Result | Key Metrics |
+| --- | --- | --- | --- |
+| smoke |  |  |  |
+| crash/recovery |  |  |  |
+| fault-injection |  |  |  |
 
 ## Known Issues
 

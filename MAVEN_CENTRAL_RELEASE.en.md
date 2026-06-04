@@ -102,7 +102,7 @@ Confirm:
 Before publishing externally, publish to the local Maven repository.
 
 ```sh
-./gradlew clean publishToMavenLocal "-Pversion=2.2.10" "-Dmaven.repo.local=build/test-m2-release-clean"
+./gradlew clean publishToMavenLocal "-Pversion=2.3.0" "-Dmaven.repo.local=build/test-m2-release-clean"
 ```
 
 Inspect the generated files under the local Maven repository:
@@ -131,7 +131,7 @@ Snapshot builds do not attach signing artifacts by default to avoid stale local 
 If the maintainer has a release repository endpoint compatible with `maven-publish`, use this command from `h2/`:
 
 ```sh
-./gradlew clean publish "-Pversion=2.2.10"
+./gradlew clean publish "-Pversion=2.3.0"
 ```
 
 If using the Central Portal Publisher API, first generate a local Maven repository layout or staging bundle, confirm signatures and checksum files, and upload it with the Portal API. Use the external publish step only after the local dry run confirms the generated repository layout, signatures, and POM metadata pass validation.

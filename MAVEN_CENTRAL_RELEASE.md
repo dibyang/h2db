@@ -102,7 +102,7 @@ ossrhPassword=YOUR_CENTRAL_TOKEN_PASSWORD
 发布到外部仓库前，先发布到本地 Maven 仓库。
 
 ```sh
-./gradlew clean publishToMavenLocal "-Pversion=2.2.10" "-Dmaven.repo.local=build/test-m2-release-clean"
+./gradlew clean publishToMavenLocal "-Pversion=2.3.0" "-Dmaven.repo.local=build/test-m2-release-clean"
 ```
 
 检查本地 Maven 仓库中的文件：
@@ -131,7 +131,7 @@ snapshot 构建默认不挂载签名产物，以避免旧本地产物或 Gradle 
 如果维护者已经有兼容 `maven-publish` 的 release 仓库入口，正式发布命令：
 
 ```sh
-./gradlew clean publish "-Pversion=2.2.10"
+./gradlew clean publish "-Pversion=2.3.0"
 ```
 
 如果使用 Central Portal Publisher API，则先生成本地 Maven 仓库布局或 staging bundle，确认签名和校验文件齐全后，通过 Portal API 上传。只有在本地 dry run 已确认仓库布局、签名和 POM 元数据都通过检查后，才执行外部发布。

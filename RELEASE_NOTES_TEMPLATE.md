@@ -1,4 +1,4 @@
-# h2db VERSION
+# h2db 2.3.0
 
 [English](RELEASE_NOTES_TEMPLATE.en.md)
 
@@ -32,13 +32,23 @@
 <dependency>
     <groupId>net.xdob.h2db</groupId>
     <artifactId>h2db</artifactId>
-    <version>VERSION</version>
+    <version>2.3.0</version>
 </dependency>
 ```
 
 ## 验证
 
 列出 release 验证命令和 smoke tests。
+
+### LongRun 验收
+
+如果本次 release 包含 LongRun 发布包，请列出已跑 profile：
+
+| Profile | 命令 | 结果 | 关键指标 |
+| --- | --- | --- | --- |
+| smoke |  |  |  |
+| crash/recovery |  |  |  |
+| fault-injection |  |  |  |
 
 ## 已知问题
 

@@ -46,11 +46,12 @@
 5. 运行本次发布选定的项目测试命令。
 6. 检查生成 POM 的许可证、SCM、developer 和依赖元数据。
 7. 检查源码和二进制归档中是否包含必要许可证和 notice 文件；当前 Gradle 产物会在 `META-INF/` 下包含 `LICENSE.txt` 与 `NOTICE.txt`。
-8. 签名 release 产物。
-9. 使用 Maven Central 发布流程发布。
-10. 在新工作区下载已发布产物并进行 smoke test。
-11. Maven Central 产物验证成功后再创建 Git tag。
-12. 发布 GitHub Release，包含 release notes、checksums 和已知问题。
+8. 如果本次 release 包含 LongRun 发布包，构建并解压 `h2-longrun.zip` / `.tar.gz`，确认脚本、配置、README 和 jar 布局，并参考 `docs/longrun/longrun-release-acceptance.md` 记录 profile 验收结果。
+9. 签名 release 产物。
+10. 使用 Maven Central 发布流程发布。
+11. 在新工作区下载已发布产物并进行 smoke test。
+12. Maven Central 产物验证成功后再创建 Git tag。
+13. 发布 GitHub Release，包含 release notes、checksums 和已知问题。
 
 ## 合规说明
 

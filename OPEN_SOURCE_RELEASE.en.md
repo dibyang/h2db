@@ -46,11 +46,12 @@ The following items still need maintainer confirmation before a public release:
 5. Run the project-specific test command selected for the release.
 6. Inspect generated POM license, SCM, developer, and dependency metadata.
 7. Inspect source and binary archives for license and notice files; current Gradle artifacts include `LICENSE.txt` and `NOTICE.txt` under `META-INF/`.
-8. Sign release artifacts.
-9. Publish through the Maven Central workflow.
-10. Download published artifacts into a fresh workspace and smoke test them.
-11. Create the Git tag after the immutable Maven Central version is verified.
-12. Publish the GitHub Release with release notes, checksums, and known issues.
+8. If this release includes the LongRun distribution package, build and unpack `h2-longrun.zip` / `.tar.gz`, confirm scripts, configs, README files, and jar layout, and record profile acceptance results using `docs/longrun/longrun-release-acceptance.en.md`.
+9. Sign release artifacts.
+10. Publish through the Maven Central workflow.
+11. Download published artifacts into a fresh workspace and smoke test them.
+12. Create the Git tag after the immutable Maven Central version is verified.
+13. Publish the GitHub Release with release notes, checksums, and known issues.
 
 ## Compliance Notes
 

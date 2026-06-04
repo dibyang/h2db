@@ -25,7 +25,7 @@ Published h2db artifacts use the following coordinates. Replace the version with
 <dependency>
     <groupId>net.xdob.h2db</groupId>
     <artifactId>h2db</artifactId>
-    <version>2.2.10</version>
+    <version>2.3.0</version>
 </dependency>
 ```
 

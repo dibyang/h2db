@@ -73,6 +73,32 @@ public class SystemCatalogProviderTest {
     }
 
     /**
+     * T-PLUGIN-P4-SYSTEM-CATALOG-BUILTIN-DIAGNOSTIC-01.
+     */
+    @Test
+    public void builtinSystemCatalogProvidersAreVisibleInDiagnostics() throws Exception {
+        try (Connection conn = DriverManager.getConnection("jdbc:h2:mem:pluginBuiltinSystemCatalogDiagnostics",
+                "sa", "");
+                Statement stat = conn.createStatement()) {
+            try (ResultSet rs = stat.executeQuery("select provider_id from "
+                    + "information_schema.plugin_providers where provider_type = '"
+                    + SystemCatalogProvider.TYPE + "' and is_builtin order by provider_id")) {
+                assertTrue(rs.next());
+                assertEquals(MVStoreStorageEngineProvider.ID, rs.getString(1));
+                assertTrue(rs.next());
+                assertEquals(SecondaryMVStoreStorageEngineProvider.ID, rs.getString(1));
+            }
+            try (ResultSet rs = stat.executeQuery("select capability_name from "
+                    + "information_schema.plugin_capabilities where provider_type = '"
+                    + SystemCatalogProvider.TYPE + "' and provider_id = '"
+                    + MVStoreStorageEngineProvider.ID + "'")) {
+                assertTrue(rs.next());
+                assertEquals(PluginCapability.SYSTEM_CATALOG, rs.getString(1));
+            }
+        }
+    }
+
+    /**
      * T-PLUGIN-P4-SYSTEM-CATALOG-MISSING-01.
      */
     @Test

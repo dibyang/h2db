@@ -891,6 +891,7 @@ public final class InformationSchemaTable extends MetaTable {
             isView = false;
             cols = new Column[] {
                     column("PLUGIN_ID"), //
+                    column("PLUGIN_VERSION"), //
                     column("PROVIDER_TYPE"), //
                     column("PROVIDER_ID"), //
                     column("CAPABILITY_NAME"), //
@@ -3093,7 +3094,8 @@ public final class InformationSchemaTable extends MetaTable {
         HashSet<String> seen = new HashSet<>();
         for (PluginRegistry.ProviderDiagnostic diagnostic : database.getPluginRegistry().getProviderDiagnostics()) {
             String pluginId = diagnostic.getPluginId();
-            if (!checkIndex(session, pluginId, indexFrom, indexTo) || !seen.add(pluginId)) {
+            if (!checkIndex(session, pluginId, indexFrom, indexTo)
+                    || !seen.add(pluginId + '\u0000' + diagnostic.getPluginVersion())) {
                 continue;
             }
             PluginSource source = diagnostic.getSource();
@@ -3143,6 +3145,8 @@ public final class InformationSchemaTable extends MetaTable {
                 add(session, rows,
                         // PLUGIN_ID
                         diagnostic.getPluginId(),
+                        // PLUGIN_VERSION
+                        diagnostic.getPluginVersion(),
                         // PROVIDER_TYPE
                         diagnostic.getType(),
                         // PROVIDER_ID

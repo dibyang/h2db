@@ -65,10 +65,11 @@
 | P11 | 已完成 | 事务事件扩展能力 | 新增 `TransactionEventProvider` / `TransactionContext`，接入 commit / rollback 前后事件，补诊断和失败测试 | `runPluginArchitectureCheck`、`runH2LegacySmoke` |
 | P13 | 已完成 | 数据库生命周期扩展能力 | 新增 `DatabaseLifecycleProvider` / `DatabaseLifecycleContext`，接入数据库关闭回调，补诊断和失败测试 | `runPluginArchitectureCheck` |
 | P14 | 已完成 | 插件版本并存与依赖解析 | 允许同 plugin id 的不同版本在 provider id 不冲突时并存；依赖版本支持精确版本、`*` 和区间匹配 | `runPluginArchitectureCheck` |
+| P15 | 已完成 | 多版本诊断闭环 | `INFORMATION_SCHEMA.PLUGINS` 按 plugin id/version 输出，`PLUGIN_CAPABILITIES` 能力行包含 `PLUGIN_VERSION` | `runPluginArchitectureCheck` |
 
 ## 当前收口状态
 
-P1-P8、P10、P11、P13 与 P14 已完成。插件化基础设施当前具备：
+P1-P8、P10、P11、P13、P14 与 P15 已完成。插件化基础设施当前具备：
 
 | 能力 | 状态 |
 | --- | --- |
@@ -81,7 +82,7 @@ P1-P8、P10、P11、P13 与 P14 已完成。插件化基础设施当前具备：
 | 事务事件扩展 | 支持 transaction provider 监听 commit / rollback 前后事件，并在失败时输出 provider/event/session 诊断 |
 | 数据库生命周期扩展 | 支持 lifecycle provider 监听数据库关闭事件，不再需要通过 URL 注入 `DATABASE_EVENT_LISTENER` 做插件关闭适配 |
 | 版本解析 | 插件依赖支持精确版本、`*` 和区间匹配；同 plugin id 的多个版本可在 provider id 不冲突时并存 |
-| 可观测性 | `INFORMATION_SCHEMA.PLUGINS`、`PLUGIN_PROVIDERS`、`PLUGIN_CAPABILITIES` 覆盖内置和外部配置插件 |
+| 可观测性 | `INFORMATION_SCHEMA.PLUGINS`、`PLUGIN_PROVIDERS`、`PLUGIN_CAPABILITIES` 覆盖内置、外部配置和多版本插件 |
 | 测试门禁 | `runPluginArchitectureCheck` 与日常门禁已通过 |
 
 ## 推进规则

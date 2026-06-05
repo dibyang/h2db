@@ -15,6 +15,10 @@ import java.sql.Statement;
 
 import org.h2.api.PluginCapability;
 import org.h2.engine.Constants;
+import org.h2.engine.Database;
+import org.h2.engine.PluginLoader;
+import org.h2.engine.SessionLocal;
+import org.h2.jdbc.JdbcConnection;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -92,5 +96,39 @@ public class PluginInformationSchemaTest {
                 assertEquals(PluginCapability.TABLE_CREATE, rs.getString(1));
             }
         }
+    }
+
+    /**
+     * T-PLUGIN-P15-MULTI-VERSION-INFO-SCHEMA-01.
+     */
+    @Test
+    public void exposesMultiplePluginVersionsInDiagnostics() throws Exception {
+        String classes = PluginLoaderTest.VersionedV1Plugin.class.getName() + ","
+                + PluginLoaderTest.VersionedV2Plugin.class.getName();
+        try (Connection conn = DriverManager.getConnection("jdbc:h2:mem:pluginMultiVersionInfo", "sa", "");
+                Statement stat = conn.createStatement()) {
+            PluginLoader.loadConfiguredPlugins(database(conn).getPluginRegistry(), classes);
+
+            try (ResultSet rs = stat.executeQuery("select plugin_version from information_schema.plugins "
+                    + "where plugin_id = 'test.versioned' order by plugin_version")) {
+                assertTrue(rs.next());
+                assertEquals("1", rs.getString(1));
+                assertTrue(rs.next());
+                assertEquals("2", rs.getString(1));
+                assertTrue(!rs.next());
+            }
+            try (ResultSet rs = stat.executeQuery("select plugin_version, capability_name from "
+                    + "information_schema.plugin_capabilities where plugin_id = 'test.versioned' "
+                    + "and provider_id = 'versioned_v2_table'")) {
+                assertTrue(rs.next());
+                assertEquals("2", rs.getString(1));
+                assertEquals(PluginCapability.TABLE_CREATE, rs.getString(2));
+            }
+        }
+    }
+
+    private static Database database(Connection conn) {
+        SessionLocal session = (SessionLocal) ((JdbcConnection) conn).getSession();
+        return session.getDatabase();
     }
 }

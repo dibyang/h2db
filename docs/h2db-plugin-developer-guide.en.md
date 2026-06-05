@@ -355,7 +355,9 @@ Plugin diagnostics are available through these INFORMATION_SCHEMA tables:
 - `INFORMATION_SCHEMA.PLUGIN_PROVIDERS`
 - `INFORMATION_SCHEMA.PLUGIN_CAPABILITIES`
 
-These tables are read-only and expose plugin id, provider type/id, source, and capability information.
+These tables are read-only and expose plugin id, plugin version, provider type/id, source, and capability information.
+For multi-version plugin deployments, `INFORMATION_SCHEMA.PLUGINS` reports each plugin id/version pair
+and `INFORMATION_SCHEMA.PLUGIN_CAPABILITIES` includes `PLUGIN_VERSION` on every capability row.
 
 Plugin load failures, version mismatches, missing dependencies, provider conflicts, and forbidden provider types fail during database open. Error messages should include plugin id, provider type/id, or class name to make configuration issues diagnosable.
 

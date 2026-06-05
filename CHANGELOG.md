@@ -8,6 +8,10 @@
 
 ### 新增
 
+- 增加 H2 插件化静态加载基线：插件通过 `ServiceLoader` 自动发现，支持 table/storage/system catalog/JDBC URL prefix/transaction event/database lifecycle provider，并统一走插件 registry。
+- 增加插件版本并存和依赖解析能力；同一 plugin id 的多个版本可在 provider id 不冲突时并存，依赖版本支持精确版本、`*` 和区间范围。
+- 增加插件诊断视图：`INFORMATION_SCHEMA.PLUGINS`、`PLUGIN_PROVIDERS`、`PLUGIN_CAPABILITIES`、`PLUGIN_DEPENDENCIES`，可查看插件描述符、provider、capability、依赖、来源和多版本归属。
+- 增加插件发布就绪说明，明确当前版本的发布范围、非目标、必跑门禁和后续新增 provider type 的收口规则。
 - 补齐开源发布材料，包括 README、贡献指南、安全策略、支持说明、GitHub Release 指南、Maven Central 发布指南、第三方通知和中英文副本。
 - 增加 MVStore 空间回收实验性维护 API 文档，说明受控维护窗口、诊断、残留清理和回滚策略。
 - MVStore 空间回收维护 API 增加公开稳定级别、入口形态查询和诊断事件监听器。
@@ -19,11 +23,15 @@
 
 ### 变更
 
+- 插件加载不再支持通过 JDBC URL 配置插件类；插件 jar 进入 classpath 并发布 `META-INF/services/org.h2.api.H2Plugin` 后自动发现，URL 只用于选择已发现的 provider。
+- 加固插件权限和隔离边界，非法 provider type、插件级 allowed provider type 违规、ServiceLoader 自动发现失败、无效描述符、依赖缺失和依赖环都会输出可诊断错误。
 - Gradle 发布产物会在 main jar、sources jar 和 javadoc jar 的 `META-INF/` 下包含 `LICENSE.txt` 与 `NOTICE.txt`。
 - LongRun 发布包 README、设计文档、单实例策略文档和 profile 默认时间文档已同步中英文说明。
 
 ### 验证
 
+- 插件化发布门禁通过：`runPluginArchitectureCheck`。
+- H2 legacy smoke 通过：`runH2LegacySmoke`。
 - LongRun smoke 10 分钟验收通过：`PASS`，约 1409 万操作，4 次 reopen，60 次 reclamation success，0 suspicious log lines。
 - LongRun performance 3 分钟预发布对比显示，启用在线空间回收后有中等幅度吞吐开销，同时显著降低最终文件大小和 MVStore 空间放大。
 - LongRun crash/recovery 30 分钟验收通过：`PASS`，15 个 crash cycle，29 次 recovery check，0 warnings，0 suspicious log lines。
@@ -31,6 +39,7 @@
 
 ### 已知限制
 
+- 当前插件机制是静态加载模型，不支持热加载、卸载或在线替换；插件 manifest、签名、独立沙箱、parser/function/auth/optimizer/wire protocol 扩展点和非 MVStore 生产主路径均不在本版本发布范围内。
 - MVStore 空间回收能力当前是实验性维护 API，不暴露 SQL，不自动调度。
 - prepared shadow 生成后源文件发生变化时，默认拒绝切换；显式开启降级选项后会执行维护态 full-copy。
 - LongRun live write-order、torn-write 和 FilePath 级 chaos 注入尚未启用；当前 fault-injection profile 只损坏数据库副本，不损坏活动数据库。

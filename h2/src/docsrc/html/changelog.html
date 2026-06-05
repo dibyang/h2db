@@ -21,7 +21,17 @@ Change Log
 
 <h2>Next Version (unreleased)</h2>
 <ul>
-<li>Nothing yet...
+<li>Add static plugin discovery through ServiceLoader with a shared plugin registry.
+</li>
+<li>Add plugin providers for table engines, storage engines, system catalog ownership, JDBC URL prefixes,
+transaction events, and database lifecycle close events.
+</li>
+<li>Add plugin version coexistence and dependency range resolution with exact, wildcard, and interval matching.
+</li>
+<li>Add INFORMATION_SCHEMA diagnostics for plugins, providers, capabilities, and dependencies.
+</li>
+<li>Improve plugin permission boundaries and diagnostics for invalid descriptors, forbidden provider types,
+dependency failures, and ServiceLoader discovery failures.
 </li>
 </ul>
 

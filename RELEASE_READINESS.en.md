@@ -17,6 +17,7 @@ The target release version for this round is `2.3.0`. The current release config
 - Maven Central artifacts: Gradle can generate the main jar, sources jar, javadoc jar, and POM.
 - License-in-artifact coverage: the main jar, sources jar, and javadoc jar include `LICENSE.txt` and `NOTICE.txt` under `META-INF/`.
 - LongRun distribution: the standalone long-running stress-test package, configs, scripts, reporting, and bilingual documentation are in place; see `docs/longrun/longrun-release-acceptance.en.md`.
+- Plugin foundation: static automatic discovery, provider registry, version/dependency resolution, diagnostic views, permission boundaries, and release-readiness documentation are in place; see `docs/plugin/plugin-release-readiness.en.md`.
 - Credential protection: `signing.properties`, `*.gpg`, and `*.asc` are ignored by Git, and no publishing credential or signing key is tracked.
 
 ## Local Verification
@@ -28,6 +29,8 @@ Executed from `h2/`:
 .\gradlew.bat publishToMavenLocal "-Dmaven.repo.local=build\test-m2-release-clean"
 .\gradlew.bat runMvStoreSpaceReclamationCheck
 .\gradlew.bat runMvStoreRecoveryCheck
+.\gradlew.bat runPluginArchitectureCheck
+.\gradlew.bat runH2LegacySmoke
 .\gradlew.bat --rerun-tasks runLongRunJUnitCheck
 .\gradlew.bat --rerun-tasks longRunTestDistZip
 ```
@@ -61,6 +64,12 @@ LongRun distribution verification:
 - Linux crash/recovery acceptance passed: `PASS`, 15 crash cycles, 29 recovery checks, 0 warnings, and 0 suspicious log lines.
 - Linux fault-injection acceptance passed: `PASS`, 14 fault injection events, 0 unexpected, 0 warnings, and 0 suspicious log lines.
 
+Plugin verification:
+
+- `runPluginArchitectureCheck` passed.
+- `runH2LegacySmoke` passed.
+- Plugin non-goals for this release are documented in `docs/plugin/plugin-release-readiness.en.md`.
+
 ## Maintainer Checks On Release Day
 
 - Confirm `version` in `h2/gradle.properties` is the final release version `2.3.0`; do not publish a release with `-SNAPSHOT`.
@@ -68,6 +77,7 @@ LongRun distribution verification:
 - Confirm versions match across `README.md`, release notes, and the generated POM.
 - Run the local dry run and signing checks with the real release version.
 - If this release advertises the LongRun distribution, run `longRunTestDistTar` before publishing and unpack both zip/tar packages in a clean directory to confirm script permissions and layout.
+- If this release advertises the plugin baseline, release notes should reference the plugin entries in `CHANGELOG.en.md` and the non-goal boundaries in `docs/plugin/plugin-release-readiness.en.md`.
 - If the release window allows it, run a shortened nightly or comprehensive LongRun to cover a longer normal-pressure combined path.
 - Keep Central Portal tokens, GPG private keys, and passphrases only in protected local files or CI secrets.
 - After Maven Central publication, run a JDBC smoke test from a fresh temporary project, then create the Git tag and GitHub Release.

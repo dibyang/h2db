@@ -37,6 +37,8 @@ h2db 发布产物使用以下坐标。请将版本号替换为你要使用的正
 * [Aggregate functions](https://h2database.com/html/functions-aggregate.html)
 * [Window functions](https://h2database.com/html/functions-window.html)
 * [Data types](https://h2database.com/html/datatypes.html)
+* [插件化使用说明](docs/plugin/plugin-usage.md)
+* [插件开发者指南](docs/h2db-plugin-developer-guide.md)
 
 ## 构建
 
@@ -64,6 +66,7 @@ Maven 支持仍是实验性的，详见 [h2/MAVEN.md](h2/MAVEN.md)。
 * [MAVEN_CENTRAL_RELEASE.md](MAVEN_CENTRAL_RELEASE.md)
 * [GITHUB_RELEASE.md](GITHUB_RELEASE.md)
 * [RELEASE_READINESS.md](RELEASE_READINESS.md)
+* [docs/plugin/plugin-release-readiness.md](docs/plugin/plugin-release-readiness.md)
 * [CHANGELOG.md](CHANGELOG.md)
 * [CONTRIBUTING.md](CONTRIBUTING.md)
 * [SECURITY.md](SECURITY.md)

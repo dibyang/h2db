@@ -37,6 +37,8 @@ Published h2db artifacts use the following coordinates. Replace the version with
 * [Aggregate functions](https://h2database.com/html/functions-aggregate.html)
 * [Window functions](https://h2database.com/html/functions-window.html)
 * [Data types](https://h2database.com/html/datatypes.html)
+* [Plugin usage guide](docs/plugin/plugin-usage.en.md)
+* [Plugin developer guide](docs/h2db-plugin-developer-guide.en.md)
 
 ## Build
 
@@ -64,6 +66,7 @@ Before publishing a release, review:
 * [MAVEN_CENTRAL_RELEASE.en.md](MAVEN_CENTRAL_RELEASE.en.md)
 * [GITHUB_RELEASE.en.md](GITHUB_RELEASE.en.md)
 * [RELEASE_READINESS.en.md](RELEASE_READINESS.en.md)
+* [docs/plugin/plugin-release-readiness.en.md](docs/plugin/plugin-release-readiness.en.md)
 * [CHANGELOG.en.md](CHANGELOG.en.md)
 * [CONTRIBUTING.en.md](CONTRIBUTING.en.md)
 * [SECURITY.en.md](SECURITY.en.md)

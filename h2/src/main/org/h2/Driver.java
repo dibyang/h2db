@@ -13,6 +13,7 @@ import java.util.Properties;
 import java.util.logging.Logger;
 import org.h2.api.ErrorCode;
 import org.h2.engine.Constants;
+import org.h2.engine.JdbcUrlPrefixResolver;
 import org.h2.jdbc.JdbcConnection;
 import org.h2.message.DbException;
 
@@ -60,7 +61,8 @@ public class Driver implements java.sql.Driver, JdbcDriverBackwardsCompat {
         } else if (url.equals(DEFAULT_URL)) {
             return DEFAULT_CONNECTION.get();
         } else {
-            return null;
+            String mappedUrl = JdbcUrlPrefixResolver.mapToH2Url(url);
+            return mappedUrl == null ? null : new JdbcConnection(mappedUrl, info, null, null, false);
         }
     }
 
@@ -81,7 +83,7 @@ public class Driver implements java.sql.Driver, JdbcDriverBackwardsCompat {
         } else if (url.equals(DEFAULT_URL)) {
             return DEFAULT_CONNECTION.get() != null;
         } else {
-            return false;
+            return JdbcUrlPrefixResolver.acceptsURL(url);
         }
     }
 

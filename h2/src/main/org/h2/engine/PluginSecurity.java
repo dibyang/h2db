@@ -16,6 +16,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 import org.h2.api.H2Plugin;
+import org.h2.api.JdbcUrlPrefixProvider;
 import org.h2.api.PluginProvider;
 import org.h2.api.StorageEngineProvider;
 import org.h2.api.SystemCatalogProvider;
@@ -29,6 +30,7 @@ public final class PluginSecurity {
 
     private static final Set<String> ALLOWED_PROVIDER_TYPES = new HashSet<>(Arrays.asList(
             TableEngineProvider.TYPE,
+            JdbcUrlPrefixProvider.TYPE,
             SystemCatalogProvider.TYPE,
             StorageEngineProvider.TYPE));
 

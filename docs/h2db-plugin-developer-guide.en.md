@@ -12,6 +12,7 @@ H2 plugins expose their plugin descriptor through `org.h2.api.H2Plugin` and exte
 - `StorageEngineProvider`: extends the database-level storage engine.
 - `StorageMaintenance`: exposes maintenance capabilities such as compact and vacuum.
 - `SystemCatalogProvider`: a prerequisite extension point for non-MVStore main paths and system catalog ownership.
+- `JdbcUrlPrefixProvider`: a Driver-level URL prefix extension point for mapping custom URLs such as `jdbc:adb:*` to `jdbc:h2:*`.
 - Explicit class loading: `PLUGIN_CLASSES=a.b.Plugin`.
 - Isolated path loading: `PLUGIN_PATHS=/path/to/plugin.jar`.
 - Optional discovery: `PLUGIN_SERVICE_LOADER=TRUE` discovers `META-INF/services/org.h2.api.H2Plugin`.
@@ -26,7 +27,7 @@ The current plugin API has three layers:
 
 | Layer | Scope | Commitment |
 | --- | --- | --- |
-| Stable SPI | `H2Plugin`, `PluginProvider`, `TableEngineProvider`, `StorageEngineProvider`, `SystemCatalogProvider`, `StorageMaintenance`, capability strings | Kept source-compatible as plugin entry points. New behavior should normally be added through default methods or new capabilities. |
+| Stable SPI | `H2Plugin`, `PluginProvider`, `TableEngineProvider`, `StorageEngineProvider`, `SystemCatalogProvider`, `JdbcUrlPrefixProvider`, `StorageMaintenance`, capability strings | Kept source-compatible as plugin entry points. New behavior should normally be added through default methods or new capabilities. |
 | Managed migration API | `TableEngineContext`, `StorageEngineContext`, `CreateTableData`, `Table` / `Index` related internal types | Usable during the ADB migration period, but contract tests must run before upgrading H2 minor versions. Long-term binary compatibility is not promised. |
 | Internal implementation | parser, optimizer, JDBC server, MVStore physical structures, deep `Database` lifecycle | Not exposed as plugin APIs. Plugins must not depend on call order or field layout here. |
 
@@ -80,7 +81,7 @@ Plugin classes must provide a public no-argument constructor. Plugin id, version
 
 ## Provider Constraints
 
-External plugins can currently register only table, storage, and system catalog providers. SQL parser, optimizer, wire protocol, and other core extension points are not open yet.
+External plugins can currently register only table, storage, system catalog, and JDBC URL prefix providers. SQL parser, optimizer, wire protocol, and other core extension points are not open yet.
 
 Provider ids must be unique within the same provider type. Built-in providers cannot be overridden by external plugins.
 
@@ -103,6 +104,23 @@ Use a reverse-DNS or clear product prefix for plugin ids, such as `com.acme.plug
 | `storage.truncate.safe` | Storage supports safe physical truncation |
 
 New capabilities should use stable strings and should normally stay under the `table.*` or `storage.*` namespaces.
+
+## Driver-Level Plugin Loading
+
+`JdbcUrlPrefixProvider` registers JDBC URL prefixes before a database is opened, for example by mapping `jdbc:adb:*` to a regular `jdbc:h2:*` URL. Because `Driver.acceptsURL()` and `Driver.connect()` run before `Database` is created, these providers cannot rely on `PLUGIN_CLASSES` inside the database URL.
+
+Driver-level plugins are loaded from global plugin system properties, Driver-only system properties, or `ServiceLoader`. If the same plugin also provides table or storage providers, prefer the global properties so Driver URL resolution and Database provider registration use the same plugin set.
+
+| System property | Meaning |
+| --- | --- |
+| `h2.pluginClasses` | Comma-separated `H2Plugin` class names loaded both by the Driver early path and by Database provider registration. |
+| `h2.pluginPaths` | Comma-separated plugin jar or directory paths, used with `h2.pluginClasses`. |
+| `h2.pluginServiceLoader` | When set to `true`, both Driver and Database discover plugins through `META-INF/services/org.h2.api.H2Plugin`. |
+| `h2.driverPluginClasses` | Comma-separated `H2Plugin` class names loaded only by the Driver early path. |
+| `h2.driverPluginPaths` | Comma-separated plugin jar or directory paths, used with `h2.driverPluginClasses`. |
+| `h2.driverPluginServiceLoader` | When set to `true`, only the Driver discovers plugins through `META-INF/services/org.h2.api.H2Plugin`. |
+
+`JdbcUrlPrefixProvider.toH2Url()` must return a URL that starts with `jdbc:h2:`; other prefixes fail the connection. The mapped URL then uses the existing H2 connection, authorization, storage, and table provider flow.
 
 ## Table Provider Constraints
 

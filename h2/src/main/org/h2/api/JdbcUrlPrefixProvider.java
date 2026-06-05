@@ -22,7 +22,7 @@ public interface JdbcUrlPrefixProvider extends PluginProvider {
     /**
      * Returns the JDBC URL prefix handled by this provider.
      *
-     * @return JDBC URL prefix, for example {@code jdbc:adb:}
+     * @return JDBC URL prefix, for example {@code jdbc:vendor:}
      */
     String getUrlPrefix();
 

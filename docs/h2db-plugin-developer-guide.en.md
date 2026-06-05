@@ -12,7 +12,7 @@ H2 plugins expose their plugin descriptor through `org.h2.api.H2Plugin` and exte
 - `StorageEngineProvider`: extends the database-level storage engine.
 - `StorageMaintenance`: exposes maintenance capabilities such as compact and vacuum.
 - `SystemCatalogProvider`: a prerequisite extension point for non-MVStore main paths and system catalog ownership.
-- `JdbcUrlPrefixProvider`: a Driver-level URL prefix extension point for mapping custom URLs such as `jdbc:adb:*` to `jdbc:h2:*`.
+- `JdbcUrlPrefixProvider`: a Driver-level URL prefix extension point for mapping custom URLs such as `jdbc:vendor:*` to `jdbc:h2:*`.
 - Automatic discovery: H2 reads `META-INF/services/org.h2.api.H2Plugin` from the classpath.
 
 Plugin loading no longer depends on JDBC URL parameters. Once a plugin jar is on the application classpath and publishes the `ServiceLoader` file, it is discovered both by the Driver early path and by the database-open path.
@@ -26,7 +26,7 @@ The current plugin API has three layers:
 | Layer | Scope | Commitment |
 | --- | --- | --- |
 | Stable SPI | `H2Plugin`, `PluginProvider`, `TableEngineProvider`, `StorageEngineProvider`, `SystemCatalogProvider`, `JdbcUrlPrefixProvider`, `StorageMaintenance`, capability strings | Kept source-compatible as plugin entry points. New behavior should normally be added through default methods or new capabilities. |
-| Managed migration API | `TableEngineContext`, `StorageEngineContext`, `CreateTableData`, `Table` / `Index` related internal types | Usable during the ADB migration period, but contract tests must run before upgrading H2 minor versions. Long-term binary compatibility is not promised. |
+| Managed migration API | `TableEngineContext`, `StorageEngineContext`, `CreateTableData`, `Table` / `Index` related internal types | Usable during plugin migration periods, but contract tests must run before upgrading H2 minor versions. Long-term binary compatibility is not promised. |
 | Internal implementation | parser, optimizer, JDBC server, MVStore physical structures, deep `Database` lifecycle | Not exposed as plugin APIs. Plugins must not depend on call order or field layout here. |
 
 Non-MVStore storage engines can currently be registered, diagnosed, and managed through `StorageEngineProvider` capabilities, and `SystemCatalogProvider` is now part of the provider whitelist and diagnostics as the prerequisite SPI for system catalog ownership. Full replacement of the H2 main storage path still requires system catalog tables, LOBs, transaction logs, and temporary results to be separated from `Store`. Therefore the first stable commitment remains: production main-path storage engines must be MVStore-backed. A non-MVStore main path should enter implementation separately after system catalog table contracts are defined.
@@ -105,7 +105,7 @@ New capabilities should use stable strings and should normally stay under the `t
 
 ## Driver-Level Plugin Loading
 
-`JdbcUrlPrefixProvider` registers JDBC URL prefixes before a database is opened, for example by mapping `jdbc:adb:*` to a regular `jdbc:h2:*` URL. Because `Driver.acceptsURL()` and `Driver.connect()` run before `Database` is created, these providers cannot rely on plugin-loading parameters inside the database URL.
+`JdbcUrlPrefixProvider` registers JDBC URL prefixes before a database is opened, for example by mapping a custom `jdbc:vendor:*` URL to a regular `jdbc:h2:*` URL. Because `Driver.acceptsURL()` and `Driver.connect()` run before `Database` is created, these providers cannot rely on plugin-loading parameters inside the database URL.
 
 Driver-level plugins are discovered only through `ServiceLoader`. If the same plugin also provides table or storage providers, Driver URL resolution and Database provider registration use the same classpath service file.
 
@@ -167,7 +167,7 @@ The public `TableEngineProvider` SPI is stable only up to the boundary where it 
 | `TableEngineProvider` | SPI | Use it as the plugin entry point; keep provider ids and capabilities stable. |
 | `TableEngineContext` | SPI | Prefer it for schema, storage, trace, parameters, read-only, and persistence state. |
 | `CreateTableData` | Managed internal input | Read table creation metadata from it; do not retain it as a long-lived reference. |
-| `Table` / `TableBase` | Managed internal API | Suitable for ADB migration prototypes; run contract tests before upgrading H2 minor versions. |
+| `Table` / `TableBase` | Managed internal API | Suitable for custom table provider migration prototypes; run contract tests before upgrading H2 minor versions. |
 | `Index` / `IndexType` / `IndexColumn` | Managed internal API | Custom indexes must cover scan, cost, row count, drop, and rebuild semantics. |
 | `Row` / `SearchRow` / `Value` | Managed internal API | Suitable for row encoding boundaries; do not assume stable internal layout or object reuse. |
 | `SessionLocal` | High-risk internal API | Use only when transactions, locks, or permissions require it; do not expose it through plugin public APIs. |
@@ -183,9 +183,9 @@ Custom table providers should follow these rules:
 
 H2-side table SPI contract tests live in `h2/src/test-plugin/org/h2/test/plugin/TableSpiContractTest.java`. Migration-period plugins should align with its registration, table creation, parameter propagation, schema context, basic DML, and diagnostics cases.
 
-### ADB Prototype Feedback and Diagnostics Rules
+### Provider Prototype Feedback and Diagnostics Rules
 
-If the ADB prototype shows that `TableEngineContext` does not expose enough information, handle it in this order:
+If a custom table provider prototype shows that `TableEngineContext` does not expose enough information, handle it in this order:
 
 1. First add contract tests for read-only, persistence, schema, trace, storage, and parameter context.
 2. Add a public method to `TableEngineContext` only when multiple providers need the same information.

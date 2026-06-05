@@ -34,12 +34,12 @@ public class JdbcUrlPrefixProviderTest {
      * T-PLUGIN-P5-JDBC-PREFIX-AUTO-01.
      */
     @Test
-    public void serviceLoaderMapsAdbJdbcPrefixAndRegistersDatabaseProviders() throws Exception {
+    public void serviceLoaderMapsVendorJdbcPrefixAndRegistersDatabaseProviders() throws Exception {
         java.sql.Driver driver = Driver.load();
 
-        assertTrue(driver.acceptsURL("jdbc:adb:mem:pluginJdbcPrefixAuto"));
+        assertTrue(driver.acceptsURL("jdbc:vendor:mem:pluginJdbcPrefixAuto"));
 
-        try (Connection conn = DriverManager.getConnection("jdbc:adb:mem:pluginJdbcPrefixAuto", "sa", "")) {
+        try (Connection conn = DriverManager.getConnection("jdbc:vendor:mem:pluginJdbcPrefixAuto", "sa", "")) {
             assertFalse(conn.createStatement().execute("create table test(id int)"));
             assertTrue(database(conn).getPluginRegistry().findProvider(TableEngineProvider.TYPE,
                     ServicePrefixPlugin.TABLE_PROVIDER_ID) instanceof TableEngineProvider);
@@ -93,7 +93,7 @@ public class JdbcUrlPrefixProviderTest {
 
         @Override
         public Iterable<? extends PluginProvider> getProviders() {
-            return Arrays.asList(new PrefixProvider("adb_prefix", "jdbc:adb:"),
+            return Arrays.asList(new PrefixProvider("vendor_prefix", "jdbc:vendor:"),
                     new PrefixProvider("service_prefix", "jdbc:svc:"),
                     new TestTableProvider(TABLE_PROVIDER_ID));
         }

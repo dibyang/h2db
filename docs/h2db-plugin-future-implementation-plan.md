@@ -419,12 +419,12 @@ cd D:\work\java\h2db\h2
 
 只改文档的阶段可以不跑 Gradle，但必须在提交说明或最终说明中明确“文档变更，未运行测试”。
 
-### H2-P1（ADB-like）执行快照
+### Table SPI 契约测试执行快照
 
 - 交付项：
   - 在 `h2/src/test-plugin` 新增表 SPI 契约验证（新文件 `TableSpiContractTest`）。
   - 验证能力点：注册、通过 provider 创建表、参数透传、schema 上下文、DDL/DML 基础链路。
-  - 对齐 ADB 阶段口径：默认 `ENGINE` 解析 + `WITH` 参数注入 + schema 默认参数注入 + 诊断表可观测。
+  - 覆盖默认 `ENGINE` 解析 + `WITH` 参数注入 + schema 默认参数注入 + 诊断表可观测。
 - 验收测试：
   - `T-PLUGIN-F5-TABLE-SPI-REGISTER-01`
   - `T-PLUGIN-F5-TABLE-SPI-CREATE-01`
@@ -438,17 +438,14 @@ cd D:\work\java\h2db\h2
   - `T-PLUGIN-F5-TABLE-SPI-SCHEMA-PARAMS-01`
   - `T-PLUGIN-F5-TABLE-SPI-CONTEXT-01`
   - `T-PLUGIN-F5-TABLE-SPI-DIAGNOSTIC-01`
-- 下一步切入：
-  - `ADB-P1` 原型实现与本地验证对齐：`adb-h2-plugin-migration-review-plan.md` 的 P1 里定义的 `AdbH2Plugin + AdbTableEngineProvider` 直接对标上述测试。
-
 ### H2-P0 至 H2-P3 收口快照
 
 | 阶段 | 状态 | 产出 |
 | --- | --- | --- |
-| H2-P0 | [x] | `docs/adb-h2-plugin-migration-review-plan.md` 固定评审结论和迁移优先级。 |
+| H2-P0 | [x] | 固定插件迁移优先级：table provider 优先，非 MVStore 主路径单独推进。 |
 | H2-P1 | [x] | `TableSpiContractTest` 补齐 table provider 契约测试。 |
 | H2-P2 | [x] | `h2db-plugin-developer-guide.md` / `.en.md` 补 table/index 迁移期稳定性。 |
-| H2-P3 | [x] | 契约测试覆盖上下文和诊断；文档明确 ADB 原型反馈规则。 |
+| H2-P3 | [x] | 契约测试覆盖上下文和诊断；文档明确 provider 原型反馈规则。 |
 
 ### 非 MVStore 主路径收口结论
 

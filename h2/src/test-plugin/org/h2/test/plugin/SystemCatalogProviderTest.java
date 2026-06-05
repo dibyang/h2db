@@ -23,12 +23,45 @@ import org.h2.api.SystemCatalogProvider;
 import org.h2.engine.Database;
 import org.h2.engine.SessionLocal;
 import org.h2.jdbc.JdbcConnection;
+import org.h2.mvstore.db.MVStoreStorageEngineProvider;
+import org.h2.mvstore.db.SecondaryMVStoreStorageEngineProvider;
 import org.junit.jupiter.api.Test;
 
 /**
  * System catalog provider 前置契约的 JUnit 验证。
  */
 public class SystemCatalogProviderTest {
+
+    /**
+     * T-PLUGIN-P4-SYSTEM-CATALOG-BUILTIN-01.
+     */
+    @Test
+    public void defaultMvStoreUsesBuiltinSystemCatalogProvider() throws Exception {
+        try (Connection conn = DriverManager.getConnection("jdbc:h2:mem:pluginSystemCatalogBuiltin", "sa", "")) {
+            Database db = database(conn);
+
+            assertEquals(MVStoreStorageEngineProvider.ID, db.getSystemCatalogProvider().getId());
+            assertNotNull(db.getPluginRegistry().findProvider(SystemCatalogProvider.TYPE,
+                    MVStoreStorageEngineProvider.ID));
+        }
+    }
+
+    /**
+     * T-PLUGIN-P4-SYSTEM-CATALOG-SECONDARY-01.
+     */
+    @Test
+    public void secondaryMvStoreUsesMatchingSystemCatalogProvider() throws Exception {
+        String url = "jdbc:h2:mem:pluginSystemCatalogSecondary;STORAGE_ENGINE="
+                + SecondaryMVStoreStorageEngineProvider.ID;
+
+        try (Connection conn = DriverManager.getConnection(url, "sa", "")) {
+            Database db = database(conn);
+
+            assertEquals(SecondaryMVStoreStorageEngineProvider.ID, db.getSystemCatalogProvider().getId());
+            assertNotNull(db.getPluginRegistry().findProvider(SystemCatalogProvider.TYPE,
+                    SecondaryMVStoreStorageEngineProvider.ID));
+        }
+    }
 
     /**
      * T-PLUGIN-P4-SYSTEM-CATALOG-REGISTER-01.

@@ -6,6 +6,7 @@
 package org.h2.engine;
 
 import org.h2.mvstore.db.MVStoreStorageEngineProvider;
+import org.h2.mvstore.db.MVStoreSystemCatalogProvider;
 import org.h2.mvstore.db.MVStoreTableEngineProvider;
 import org.h2.mvstore.db.SecondaryMVStoreStorageEngineProvider;
 
@@ -29,5 +30,9 @@ public final class BuiltinPlugins {
                 new SecondaryMVStoreStorageEngineProvider(), PluginSource.BUILTIN);
         registry.registerProvider("h2.mvstore", Constants.VERSION,
                 new MVStoreTableEngineProvider(), PluginSource.BUILTIN);
+        registry.registerProvider("h2.mvstore", Constants.VERSION,
+                new MVStoreSystemCatalogProvider(MVStoreStorageEngineProvider.ID), PluginSource.BUILTIN);
+        registry.registerProvider("h2.mvstore.secondary", Constants.VERSION,
+                new MVStoreSystemCatalogProvider(SecondaryMVStoreStorageEngineProvider.ID), PluginSource.BUILTIN);
     }
 }

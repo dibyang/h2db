@@ -24,6 +24,8 @@ import org.h2.api.JavaObjectSerializer;
 import org.h2.api.StorageEngine;
 import org.h2.api.StorageEngineContext;
 import org.h2.api.StorageEngineProvider;
+import org.h2.api.SystemCatalogContext;
+import org.h2.api.SystemCatalogProvider;
 import org.h2.api.TableEngine;
 import org.h2.command.CommandInterface;
 import org.h2.command.Prepared;
@@ -209,6 +211,7 @@ public final class Database implements DataHandler, CastDataProvider {
     private final PluginRegistry pluginRegistry = new PluginRegistry();
     private final String storageEngineId;
     private final StorageEngine storageEngine;
+    private final SystemCatalogProvider systemCatalogProvider;
     private final Store store;
     private boolean allowBuiltinAliasOverride;
     private final AtomicReference<DbException> backgroundException = new AtomicReference<>();
@@ -333,18 +336,21 @@ public final class Database implements DataHandler, CastDataProvider {
             PluginLoader.loadServiceLoaderPlugins(pluginRegistry, dbSettings.pluginServiceLoader);
             starting = true;
             if (dbSettings.mvStore) {
-                storageEngineId = StorageEngineResolver.resolveRequested(dbSettings);
+                String requestedStorageEngineId = StorageEngineResolver.resolveRequested(dbSettings);
                 String persistedStorageEngineId = persistent
                         ? StorageEngineResolver.readPersistedStorageEngineId(databaseName) : null;
-                StorageEngineResolver.validateMatch(storageEngineId, persistedStorageEngineId);
+                StorageEngineResolver.validateMatch(requestedStorageEngineId, persistedStorageEngineId);
                 StorageEngineProvider provider = StorageEngineResolver.requireStorageProvider(pluginRegistry,
-                        storageEngineId, readOnly, dbSettings.missingStorageReadOnlyDowngrade);
+                        requestedStorageEngineId, readOnly, dbSettings.missingStorageReadOnlyDowngrade);
+                storageEngineId = provider.getId();
                 storageEngine = provider.open(new DatabaseStorageEngineContext(ci.getFileEncryptionKey()));
                 if (!(storageEngine instanceof MVStoreBackedStorageEngine)) {
                     throw DbException.getUnsupportedException("Storage engine is not MVStore-backed: "
                             + storageEngineId);
                 }
                 store = ((MVStoreBackedStorageEngine) storageEngine).getStore();
+                systemCatalogProvider = requireSystemCatalogProvider(storageEngineId);
+                systemCatalogProvider.validate(new DatabaseSystemCatalogContext());
                 if (persistent && !readOnly && persistedStorageEngineId == null) {
                     StorageEngineResolver.writePersistedStorageEngineId(databaseName, storageEngineId);
                 }
@@ -474,6 +480,24 @@ public final class Database implements DataHandler, CastDataProvider {
      */
     public String getStorageEngineId() {
         return storageEngineId;
+    }
+
+    /**
+     * 获取当前数据库使用的系统目录 provider。
+     *
+     * @return 系统目录 provider
+     */
+    public SystemCatalogProvider getSystemCatalogProvider() {
+        return systemCatalogProvider;
+    }
+
+    private SystemCatalogProvider requireSystemCatalogProvider(String id) {
+        org.h2.api.PluginProvider provider = pluginRegistry.findProvider(SystemCatalogProvider.TYPE, id);
+        if (provider instanceof SystemCatalogProvider) {
+            return (SystemCatalogProvider) provider;
+        }
+        throw DbException.getUnsupportedException("Missing system catalog provider: type="
+                + SystemCatalogProvider.TYPE + ", id=" + id);
     }
 
     /**
@@ -2543,6 +2567,34 @@ public final class Database implements DataHandler, CastDataProvider {
         @Override
         public Trace getTrace() {
             return trace;
+        }
+    }
+
+    private final class DatabaseSystemCatalogContext implements SystemCatalogContext {
+
+        @Override
+        public Database getDatabase() {
+            return Database.this;
+        }
+
+        @Override
+        public StorageEngine getStorageEngine() {
+            return storageEngine;
+        }
+
+        @Override
+        public Trace getTrace() {
+            return trace;
+        }
+
+        @Override
+        public boolean isPersistent() {
+            return persistent;
+        }
+
+        @Override
+        public boolean isReadOnly() {
+            return readOnly;
         }
     }
 }

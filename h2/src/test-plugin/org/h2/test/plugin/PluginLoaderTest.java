@@ -18,6 +18,7 @@ import org.h2.api.H2Plugin;
 import org.h2.api.PluginDependency;
 import org.h2.api.PluginCapability;
 import org.h2.api.PluginProvider;
+import org.h2.api.SystemCatalogProvider;
 import org.h2.api.TableEngineProvider;
 import org.h2.command.ddl.CreateTableData;
 import org.h2.engine.BuiltinPlugins;
@@ -171,6 +172,30 @@ public class PluginLoaderTest {
 
         assertTrue(e.getMessage().contains("provider type is not allowed"));
         assertTrue(e.getMessage().contains("type=parser"));
+    }
+
+    /**
+     * T-PLUGIN-P12-PROVIDER-PERMISSIONS-01.
+     */
+    @Test
+    public void rejectsProviderTypeOutsidePluginAllowedList() {
+        DbException e = assertThrows(DbException.class, () ->
+                configuredRegistry(DisallowedProviderTypePlugin.class.getName()));
+
+        assertTrue(e.getMessage().contains("provider type is not permitted"));
+        assertTrue(e.getMessage().contains("type=table"));
+        assertTrue(e.getMessage().contains("plugin=restricted.plugin"));
+        assertTrue(e.getMessage().contains("pluginAllowedTypes=[system_catalog]"));
+    }
+
+    /**
+     * T-PLUGIN-P12-PROVIDER-PERMISSIONS-02.
+     */
+    @Test
+    public void acceptsProviderTypeWithinPluginAllowedList() {
+        PluginRegistry registry = configuredRegistry(AllowedProviderTypePlugin.class.getName());
+
+        assertNotNull(registry.findProvider(TableEngineProvider.TYPE, "constrained_table"));
     }
 
     /**
@@ -426,6 +451,40 @@ public class PluginLoaderTest {
         @Override
         public Iterable<? extends PluginProvider> getProviders() {
             return Arrays.asList(new ForbiddenProvider());
+        }
+    }
+
+    public static final class AllowedProviderTypePlugin extends ConfiguredPlugin {
+        @Override
+        public String getId() {
+            return "test.allowed.provider";
+        }
+
+        @Override
+        public Iterable<String> getAllowedProviderTypes() {
+            return Arrays.asList(TableEngineProvider.TYPE);
+        }
+
+        @Override
+        public Iterable<? extends PluginProvider> getProviders() {
+            return Arrays.asList(new TestTableProvider("constrained_table"));
+        }
+    }
+
+    public static final class DisallowedProviderTypePlugin extends ConfiguredPlugin {
+        @Override
+        public String getId() {
+            return "restricted.plugin";
+        }
+
+        @Override
+        public Iterable<String> getAllowedProviderTypes() {
+            return Arrays.asList(SystemCatalogProvider.TYPE);
+        }
+
+        @Override
+        public Iterable<? extends PluginProvider> getProviders() {
+            return Arrays.asList(new TestTableProvider("restricted_table"));
         }
     }
 

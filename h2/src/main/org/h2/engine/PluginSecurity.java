@@ -11,7 +11,9 @@ import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -45,12 +47,38 @@ public final class PluginSecurity {
      * @param plugin 插件
      */
     public static void validateProviderTypes(H2Plugin plugin) {
+        Set<String> restrictedTypes = extractRestrictedTypes(plugin);
         for (PluginProvider provider : plugin.getProviders()) {
             if (!ALLOWED_PROVIDER_TYPES.contains(provider.getType())) {
                 throw DbException.getUnsupportedException("Configured plugin provider type is not allowed: plugin="
                         + plugin.getId() + ", type=" + provider.getType() + ", id=" + provider.getId());
             }
+            if (!restrictedTypes.isEmpty() && !restrictedTypes.contains(provider.getType())) {
+                throw DbException.getUnsupportedException("Configured plugin provider type is not permitted: plugin="
+                        + plugin.getId() + ", type=" + provider.getType() + ", pluginAllowedTypes="
+                        + asSortedString(restrictedTypes));
+            }
         }
+    }
+
+    private static Set<String> extractRestrictedTypes(H2Plugin plugin) {
+        Iterable<String> allowedProviderTypes = plugin.getAllowedProviderTypes();
+        if (allowedProviderTypes == null) {
+            return Collections.emptySet();
+        }
+        HashSet<String> restrictedTypes = new HashSet<>();
+        for (String type : allowedProviderTypes) {
+            if (type != null && !type.trim().isEmpty()) {
+                restrictedTypes.add(type.trim());
+            }
+        }
+        return restrictedTypes;
+    }
+
+    private static String asSortedString(Set<String> values) {
+        ArrayList<String> sorted = new ArrayList<>(values);
+        Collections.sort(sorted);
+        return sorted.toString();
     }
 
     /**

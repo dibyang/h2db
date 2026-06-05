@@ -36,6 +36,18 @@ public interface H2Plugin {
     String getDisplayName();
 
     /**
+     * 获取该插件允许注册的 provider 类型清单。
+     * <p>
+     * 仅在安全边界收紧时使用。返回空集合时表示不限制 provider 类型（使用系统允许列表）。
+     * 返回集合时，仅允许其中列出的 provider 类型注册到该插件。
+     *
+     * @return 允许的 provider 类型列表
+     */
+    default Iterable<String> getAllowedProviderTypes() {
+        return Collections.emptyList();
+    }
+
+    /**
      * 获取插件提供的扩展点。
      *
      * @return provider 集合

@@ -76,6 +76,34 @@ public final class AcmePlugin implements H2Plugin {
 }
 ```
 
+For least-privilege plugin loading, implement `getAllowedProviderTypes()` to restrict this plugin to an explicit list of provider types. If the list is empty, the global `H2` provider allowlist applies.
+
+```java
+package com.acme;
+
+import java.util.Collections;
+import org.h2.api.H2Plugin;
+import org.h2.api.TableEngineProvider;
+
+public final class LeastPrivilegePlugin implements H2Plugin {
+    public String getId() {
+        return "com.acme.privileged";
+    }
+
+    public String getVersion() {
+        return "1.0.0";
+    }
+
+    public String getDisplayName() {
+        return "Least Privilege Plugin";
+    }
+
+    public Iterable<String> getAllowedProviderTypes() {
+        return Collections.singletonList(TableEngineProvider.TYPE);
+    }
+}
+```
+
 Plugin classes must provide a public no-argument constructor. Plugin id, version, provider type, and provider id must not be empty. The provider list must not be null and must contain at least one provider.
 
 ## Provider Constraints

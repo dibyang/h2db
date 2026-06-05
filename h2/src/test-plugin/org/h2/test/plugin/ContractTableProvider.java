@@ -11,6 +11,7 @@ import java.util.List;
 import org.h2.api.PluginCapability;
 import org.h2.api.TableEngineContext;
 import org.h2.api.TableEngineProvider;
+import org.h2.api.TableProviderSupport;
 import org.h2.command.ddl.CreateTableData;
 import org.h2.mvstore.db.MVStoreBackedStorageEngine;
 import org.h2.table.Table;
@@ -48,6 +49,7 @@ public final class ContractTableProvider implements TableEngineProvider {
 
     @Override
     public Table createTable(CreateTableData data, TableEngineContext context) {
+        TableProviderSupport.requireWritable(context, data, ID);
         tableName = data.tableName;
         schemaName = context.getSchema().getName();
         tableEngineParams = context.getTableEngineParams();
@@ -56,7 +58,8 @@ public final class ContractTableProvider implements TableEngineProvider {
         storageEngineId = context.getStorageEngineId();
         persistent = context.isPersistent();
         readOnly = context.isReadOnly();
-        return ((MVStoreBackedStorageEngine) context.getStorageEngine()).getStore().createTable(data);
+        return TableProviderSupport.requireStorageEngine(context, MVStoreBackedStorageEngine.class, ID, data)
+                .getStore().createTable(data);
     }
 
     static String normalizedTableName() {
@@ -72,5 +75,29 @@ public final class ContractTableProvider implements TableEngineProvider {
         storageEngineId = null;
         persistent = false;
         readOnly = false;
+    }
+}
+
+final class FailingContractTableProvider implements TableEngineProvider {
+    static final String ID = "contract_failing_table";
+
+    @Override
+    public String getType() {
+        return TYPE;
+    }
+
+    @Override
+    public String getId() {
+        return ID;
+    }
+
+    @Override
+    public boolean supports(String capability) {
+        return PluginCapability.TABLE_CREATE.equals(capability);
+    }
+
+    @Override
+    public Table createTable(CreateTableData data, TableEngineContext context) {
+        throw new IllegalStateException("simulated provider failure");
     }
 }

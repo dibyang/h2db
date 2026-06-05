@@ -154,6 +154,12 @@ public final class AcmeTableProvider implements TableEngineProvider {
 
 `TableEngineContext` 提供当前 `Database`、目标 `Schema`、当前 `StorageEngine`、storage engine id、trace、`WITH` 参数、持久化状态和只读状态。表未指定 `WITH` 参数时，会继承 schema default params。
 
+`TableProviderSupport` 提供 table provider 常用的薄支撑方法：
+
+- `requireWritable(...)`：在只读数据库中拒绝创建或修改外部表资源，并输出 provider/table/params 诊断。
+- `requireStorageEngine(...)`：校验当前 storage engine 类型，避免 provider 手写不带诊断的强制类型转换。
+- `createTableException(...)`：包装 `createTable()` 失败，保留原始 cause，并在错误消息中包含 provider id、table name 和参数摘要。
+
 旧的 `org.h2.api.TableEngine` class-name 路径仍保留用于兼容；新增扩展建议使用 `TableEngineProvider`。
 
 ### 自定义 Table / Index 迁移期稳定性
@@ -179,7 +185,7 @@ public final class AcmeTableProvider implements TableEngineProvider {
 - 只读数据库中不得执行会改变外部存储或索引元数据的动作。
 - 若需要 H2 当前上下文，优先提出 `TableEngineContext` 字段扩展，不要直接依赖 `Database` 深层内部状态。
 
-H2 侧表 SPI 契约测试位于 `h2/src/test-plugin/org/h2/test/plugin/TableSpiContractTest.java`。迁移期插件至少应对齐其中的注册、建表、参数透传、schema 上下文、基础 DML 和诊断表用例。
+H2 侧表 SPI 契约测试位于 `h2/src/test-plugin/org/h2/test/plugin/TableSpiContractTest.java`。迁移期插件至少应对齐其中的注册、建表、参数透传、schema 上下文、基础 DML、失败诊断、只读 gate 和诊断表用例。
 
 ### Provider 原型反馈与诊断规则
 

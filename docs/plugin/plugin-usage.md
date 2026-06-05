@@ -166,5 +166,5 @@ SELECT * FROM INFORMATION_SCHEMA.PLUGIN_CAPABILITIES;
 | 热加载、卸载、在线替换 | 插件只在数据库打开时加载 |
 | 插件 manifest 和签名 | 当前通过 `ServiceLoader` 自动发现 |
 | 多版本插件并存 | 当前依赖只检查插件 id，复杂版本解算留待后续 |
-| parser/function/auth 等扩展点 | 当前白名单只允许 storage 和 table provider |
+| parser/function/auth/optimizer/wire protocol 等扩展点 | 当前规划不纳入；白名单只允许 table、storage、system catalog 和 JDBC URL prefix provider |
 | 独立权限沙箱 | 当前主要边界是 provider type 白名单和加载诊断 |

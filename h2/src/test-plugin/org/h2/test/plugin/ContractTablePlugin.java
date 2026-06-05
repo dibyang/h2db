@@ -32,6 +32,6 @@ public final class ContractTablePlugin implements H2Plugin {
 
     @Override
     public Iterable<? extends PluginProvider> getProviders() {
-        return Arrays.asList(new ContractTableProvider());
+        return Arrays.asList(new ContractTableProvider(), new FailingContractTableProvider());
     }
 }

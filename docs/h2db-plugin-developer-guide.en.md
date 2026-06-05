@@ -156,6 +156,12 @@ public final class AcmeTableProvider implements TableEngineProvider {
 
 `TableEngineContext` provides the current `Database`, target `Schema`, current `StorageEngine`, storage engine id, trace, `WITH` parameters, persistence state, and read-only state. If a table does not specify `WITH` parameters, schema default params are used.
 
+`TableProviderSupport` provides thin helper methods for table providers:
+
+- `requireWritable(...)`: rejects external table resource creation or mutation in read-only databases and emits provider/table/params diagnostics.
+- `requireStorageEngine(...)`: checks the current storage engine type so providers do not need unchecked casts without diagnostics.
+- `createTableException(...)`: wraps `createTable()` failures, preserves the original cause, and includes provider id, table name, and parameter summary in the message.
+
 The old `org.h2.api.TableEngine` class-name path remains available for compatibility. New extensions should prefer `TableEngineProvider`.
 
 ### Custom Table / Index Stability During Migration
@@ -181,7 +187,7 @@ Custom table providers should follow these rules:
 - Read-only databases must not perform actions that mutate external storage or index metadata.
 - If more context is needed, prefer proposing a `TableEngineContext` field instead of reaching into deep `Database` internals.
 
-H2-side table SPI contract tests live in `h2/src/test-plugin/org/h2/test/plugin/TableSpiContractTest.java`. Migration-period plugins should align with its registration, table creation, parameter propagation, schema context, basic DML, and diagnostics cases.
+H2-side table SPI contract tests live in `h2/src/test-plugin/org/h2/test/plugin/TableSpiContractTest.java`. Migration-period plugins should align with its registration, table creation, parameter propagation, schema context, basic DML, failure diagnostics, read-only gate, and diagnostics cases.
 
 ### Provider Prototype Feedback and Diagnostics Rules
 

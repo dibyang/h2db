@@ -447,6 +447,17 @@ cd D:\work\java\h2db\h2
 | H2-P2 | [x] | `h2db-plugin-developer-guide.md` / `.en.md` 补 table/index 迁移期稳定性。 |
 | H2-P3 | [x] | 契约测试覆盖上下文和诊断；文档明确 provider 原型反馈规则。 |
 
+### P10：Table / Index 迁移期适配层执行快照
+
+- 交付项：
+  - 新增 `TableProviderSupport`，集中提供只读 gate、storage engine 类型校验和 `createTable()` 失败诊断包装。
+  - `Schema` 对 table provider 普通运行时异常进行统一包装，保留原始 cause，并输出 provider/table/params。
+  - `TableSpiContractTest` 补充 provider 失败诊断和只读 gate 覆盖。
+- 当前边界：
+  - 不公开完整 `Index` SPI。
+  - 不改变旧 `TableEngine` class-name 兼容路径。
+  - 自定义 `Table` / `Index` 仍是迁移期受管内部 API，长期二进制稳定性后续再评估。
+
 ### 非 MVStore 主路径收口结论
 
 当前 storage provider 已支持注册、加载、诊断、storage id 持久化、缺失 provider 策略、只读降级和 MVStore-backed 多 provider 验证。真正非 MVStore 主路径尚不能只靠 `StorageEngineProvider` 完成，因为 H2 系统元数据表、LOB、事务日志、临时结果和现有 `MVTable` 路径仍依赖 `Store`。

@@ -7,21 +7,32 @@ package org.h2.test.plugin;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 
 import org.h2.api.PluginCapability;
+import org.h2.api.StorageEngine;
+import org.h2.api.TableEngineContext;
 import org.h2.api.TableEngineProvider;
+import org.h2.api.TableProviderSupport;
+import org.h2.command.ddl.CreateTableData;
 import org.h2.engine.Database;
 import org.h2.engine.PluginRegistry;
 import org.h2.engine.PluginSource;
 import org.h2.engine.SessionLocal;
 import org.h2.jdbc.JdbcConnection;
+import org.h2.message.DbException;
+import org.h2.message.Trace;
+import org.h2.schema.Schema;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -284,9 +295,89 @@ public class TableSpiContractTest {
         }
     }
 
+    /**
+     * T-PLUGIN-F5-TABLE-SPI-FAILURE-DIAGNOSTIC-01.
+     */
+    @Test
+    public void providerCreateFailureIncludesStableDiagnostics() throws Exception {
+        SQLException e = assertThrows(SQLException.class, () -> {
+            try (Connection conn = DriverManager.getConnection("jdbc:h2:mem:pluginTableFailure;MODE=REGULAR", "sa", "");
+                    Statement stat = conn.createStatement()) {
+                stat.execute("create table failure_table(id int) engine \"" + FailingContractTableProvider.ID + "\" "
+                        + "with \"diag_param\"");
+            }
+        });
+
+        assertTrue(e.getMessage().contains("Table provider createTable failed"));
+        assertTrue(e.getMessage().contains("provider=" + FailingContractTableProvider.ID));
+        assertTrue(e.getMessage().contains("table=FAILURE_TABLE"));
+        assertTrue(e.getMessage().contains("diag_param"));
+    }
+
+    /**
+     * T-PLUGIN-F5-TABLE-SPI-READONLY-GATE-01.
+     */
+    @Test
+    public void tableProviderSupportRejectsReadOnlyCreate() {
+        CreateTableData data = new CreateTableData();
+        data.tableName = "READ_ONLY_TABLE";
+        data.tableEngineParams = new ArrayList<>(Arrays.asList("p1"));
+
+        DbException e = assertThrows(DbException.class,
+                () -> TableProviderSupport.requireWritable(new FakeContext(true), data, ContractTableProvider.ID));
+
+        assertTrue(e.getMessage().contains("read-only database"));
+        assertTrue(e.getMessage().contains("provider=" + ContractTableProvider.ID));
+        assertTrue(e.getMessage().contains("table=READ_ONLY_TABLE"));
+        assertTrue(e.getMessage().contains("p1"));
+    }
+
     private static Database database(Connection conn) {
         SessionLocal session = (SessionLocal) ((JdbcConnection) conn).getSession();
         return session.getDatabase();
+    }
+
+    private static final class FakeContext implements TableEngineContext {
+        private final boolean readOnly;
+
+        FakeContext(boolean readOnly) {
+            this.readOnly = readOnly;
+        }
+
+        @Override
+        public Database getDatabase() {
+            return null;
+        }
+
+        @Override
+        public Schema getSchema() {
+            return null;
+        }
+
+        @Override
+        public StorageEngine getStorageEngine() {
+            return null;
+        }
+
+        @Override
+        public Trace getTrace() {
+            return null;
+        }
+
+        @Override
+        public java.util.List<String> getTableEngineParams() {
+            return Collections.emptyList();
+        }
+
+        @Override
+        public boolean isPersistent() {
+            return false;
+        }
+
+        @Override
+        public boolean isReadOnly() {
+            return readOnly;
+        }
     }
 
 }

@@ -16,6 +16,7 @@ import org.h2.api.PluginProvider;
 import org.h2.api.StorageEngine;
 import org.h2.api.TableEngineContext;
 import org.h2.api.TableEngineProvider;
+import org.h2.api.TableProviderSupport;
 import org.h2.command.ddl.CreateSynonymData;
 import org.h2.command.ddl.CreateTableData;
 import org.h2.constraint.Constraint;
@@ -800,7 +801,7 @@ public class Schema extends DbObject {
                 tableEngine = s.defaultTableEngine;
                 if (tableEngine == null) {
                     TableEngineProvider provider = findTableEngineProvider(MVStoreTableEngineProvider.ID);
-                    return provider.createTable(data, new SchemaTableEngineContext(data));
+                    return createTable(provider, data);
                 }
                 data.tableEngine = tableEngine;
             }
@@ -809,9 +810,19 @@ public class Schema extends DbObject {
             }
             TableEngineProvider provider = findTableEngineProvider(tableEngine);
             if (provider != null) {
-                return provider.createTable(data, new SchemaTableEngineContext(data));
+                return createTable(provider, data);
             }
             return database.getTableEngine(tableEngine).createTable(data);
+        }
+    }
+
+    private Table createTable(TableEngineProvider provider, CreateTableData data) {
+        try {
+            return provider.createTable(data, new SchemaTableEngineContext(data));
+        } catch (DbException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            throw TableProviderSupport.createTableException(provider.getId(), data, e.getMessage(), e);
         }
     }
 

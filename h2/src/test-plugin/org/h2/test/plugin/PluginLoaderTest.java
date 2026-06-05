@@ -189,6 +189,30 @@ public class PluginLoaderTest {
     }
 
     /**
+     * T-PLUGIN-P16-INVALID-DEPENDENCY-01.
+     */
+    @Test
+    public void rejectsInvalidPluginDependencies() {
+        DbException e = assertThrows(DbException.class, () ->
+                configuredRegistry(NullDependencyPlugin.class.getName()));
+
+        assertTrue(e.getMessage().contains("Configured plugin descriptor is invalid"));
+        assertTrue(e.getMessage().contains("reason=dependency is null"));
+    }
+
+    /**
+     * T-PLUGIN-P16-INVALID-DEPENDENCY-02.
+     */
+    @Test
+    public void rejectsEmptyPluginDependencyVersion() {
+        DbException e = assertThrows(DbException.class, () ->
+                configuredRegistry(EmptyDependencyVersionPlugin.class.getName()));
+
+        assertTrue(e.getMessage().contains("Configured plugin descriptor is invalid"));
+        assertTrue(e.getMessage().contains("dependency version is empty"));
+    }
+
+    /**
      * T-PLUGIN-R7-DEPENDENCY-ORDER-01.
      */
     @Test
@@ -586,6 +610,30 @@ public class PluginLoaderTest {
         @Override
         public Iterable<? extends PluginProvider> getProviders() {
             return Collections.emptyList();
+        }
+    }
+
+    public static final class NullDependencyPlugin extends ConfiguredPlugin {
+        @Override
+        public String getId() {
+            return "test.null.dependency";
+        }
+
+        @Override
+        public Iterable<PluginDependency> getDependencies() {
+            return Arrays.asList((PluginDependency) null);
+        }
+    }
+
+    public static final class EmptyDependencyVersionPlugin extends ConfiguredPlugin {
+        @Override
+        public String getId() {
+            return "test.empty.dependency.version";
+        }
+
+        @Override
+        public Iterable<PluginDependency> getDependencies() {
+            return Arrays.asList(new PluginDependency("test.configured", ""));
         }
     }
 

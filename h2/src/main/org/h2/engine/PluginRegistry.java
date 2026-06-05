@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import org.h2.api.H2Plugin;
 import org.h2.api.PluginCapability;
+import org.h2.api.PluginDependency;
 import org.h2.api.PluginProvider;
 
 /**
@@ -22,6 +23,7 @@ public final class PluginRegistry {
 
     private final HashMap<String, HashMap<String, RegisteredProvider>> providers = new HashMap<>();
     private final HashMap<String, HashSet<String>> pluginVersions = new HashMap<>();
+    private final HashMap<String, PluginDiagnostic> plugins = new HashMap<>();
 
     /**
      * 注册一个插件中的全部 provider。
@@ -56,9 +58,11 @@ public final class PluginRegistry {
             throw new IllegalArgumentException("Duplicate plugin version: plugin=" + pluginId
                     + ", version=" + pluginVersion);
         }
+        ArrayList<DependencyDiagnostic> dependencies = dependencies(pluginId, plugin.getDependencies());
         for (PluginProvider provider : checkedProviders) {
             registerProvider(pluginId, pluginVersion, provider, source);
         }
+        addPlugin(pluginId, pluginVersion, source, dependencies);
     }
 
     /**
@@ -94,6 +98,7 @@ public final class PluginRegistry {
         }
         byId.put(id, new RegisteredProvider(pluginId, pluginVersion, provider, source));
         addPluginVersion(pluginId, pluginVersion);
+        addPlugin(pluginId, pluginVersion, source, Collections.<DependencyDiagnostic>emptyList());
     }
 
     /**
@@ -200,6 +205,28 @@ public final class PluginRegistry {
         return Collections.unmodifiableList(diagnostics);
     }
 
+    /**
+     * Get plugin diagnostic snapshots.
+     *
+     * @return plugin diagnostic snapshots
+     */
+    public List<PluginDiagnostic> getPluginDiagnostics() {
+        return Collections.unmodifiableList(new ArrayList<>(plugins.values()));
+    }
+
+    /**
+     * Get plugin dependency diagnostic snapshots.
+     *
+     * @return plugin dependency diagnostic snapshots
+     */
+    public List<DependencyDiagnostic> getDependencyDiagnostics() {
+        ArrayList<DependencyDiagnostic> diagnostics = new ArrayList<>();
+        for (PluginDiagnostic plugin : plugins.values()) {
+            diagnostics.addAll(plugin.getDependencies());
+        }
+        return Collections.unmodifiableList(diagnostics);
+    }
+
     private RegisteredProvider findRegisteredProvider(String type, String id) {
         HashMap<String, RegisteredProvider> byId = providers.get(type);
         return byId == null ? null : byId.get(id);
@@ -210,6 +237,35 @@ public final class PluginRegistry {
             throw new IllegalArgumentException(name + " must not be empty");
         }
         return value;
+    }
+
+    private void addPlugin(String pluginId, String pluginVersion, PluginSource source,
+            List<DependencyDiagnostic> dependencies) {
+        String key = pluginKey(pluginId, pluginVersion);
+        if (!plugins.containsKey(key) || !dependencies.isEmpty()) {
+            plugins.put(key, new PluginDiagnostic(pluginId, pluginVersion, source, dependencies));
+        }
+    }
+
+    private static ArrayList<DependencyDiagnostic> dependencies(String pluginId,
+            Iterable<PluginDependency> dependencies) {
+        if (dependencies == null) {
+            throw new IllegalArgumentException("Plugin dependencies must not be null: plugin=" + pluginId);
+        }
+        ArrayList<DependencyDiagnostic> diagnostics = new ArrayList<>();
+        for (PluginDependency dependency : dependencies) {
+            if (dependency == null) {
+                throw new IllegalArgumentException("Plugin dependency must not be null: plugin=" + pluginId);
+            }
+            String dependencyPluginId = requireNonBlank(dependency.getPluginId(), "Dependency plugin id");
+            String dependencyVersion = requireNonBlank(dependency.getVersion(), "Dependency version");
+            diagnostics.add(new DependencyDiagnostic(pluginId, dependencyPluginId, dependencyVersion));
+        }
+        return diagnostics;
+    }
+
+    private static String pluginKey(String pluginId, String pluginVersion) {
+        return pluginId + '\u0000' + pluginVersion;
     }
 
     private static IllegalArgumentException duplicateProviderException(String prefix, String type, String id,
@@ -291,6 +347,134 @@ public final class PluginRegistry {
          */
         public List<String> getCapabilities() {
             return capabilities;
+        }
+    }
+
+    /**
+     * Plugin diagnostic snapshot.
+     */
+    public static final class PluginDiagnostic {
+        private final String pluginId;
+        private final String pluginVersion;
+        private final PluginSource source;
+        private final List<DependencyDiagnostic> dependencies;
+
+        PluginDiagnostic(String pluginId, String pluginVersion, PluginSource source,
+                List<DependencyDiagnostic> dependencies) {
+            this.pluginId = pluginId;
+            this.pluginVersion = pluginVersion;
+            this.source = source;
+            ArrayList<DependencyDiagnostic> checkedDependencies = new ArrayList<>();
+            for (DependencyDiagnostic dependency : dependencies) {
+                checkedDependencies.add(new DependencyDiagnostic(pluginId, pluginVersion,
+                        dependency.dependencyPluginId, dependency.dependencyVersion, source));
+            }
+            this.dependencies = Collections.unmodifiableList(checkedDependencies);
+        }
+
+        /**
+         * Get the plugin id.
+         *
+         * @return plugin id
+         */
+        public String getPluginId() {
+            return pluginId;
+        }
+
+        /**
+         * Get the plugin version.
+         *
+         * @return plugin version
+         */
+        public String getPluginVersion() {
+            return pluginVersion;
+        }
+
+        /**
+         * Get the registration source.
+         *
+         * @return registration source
+         */
+        public PluginSource getSource() {
+            return source;
+        }
+
+        /**
+         * Get plugin dependencies.
+         *
+         * @return plugin dependencies
+         */
+        public List<DependencyDiagnostic> getDependencies() {
+            return dependencies;
+        }
+    }
+
+    /**
+     * Plugin dependency diagnostic snapshot.
+     */
+    public static final class DependencyDiagnostic {
+        private final String pluginId;
+        private final String pluginVersion;
+        private final String dependencyPluginId;
+        private final String dependencyVersion;
+        private final PluginSource source;
+
+        DependencyDiagnostic(String pluginId, String dependencyPluginId, String dependencyVersion) {
+            this(pluginId, null, dependencyPluginId, dependencyVersion, null);
+        }
+
+        DependencyDiagnostic(String pluginId, String pluginVersion, String dependencyPluginId,
+                String dependencyVersion, PluginSource source) {
+            this.pluginId = pluginId;
+            this.pluginVersion = pluginVersion;
+            this.dependencyPluginId = dependencyPluginId;
+            this.dependencyVersion = dependencyVersion;
+            this.source = source;
+        }
+
+        /**
+         * Get the plugin id.
+         *
+         * @return plugin id
+         */
+        public String getPluginId() {
+            return pluginId;
+        }
+
+        /**
+         * Get the plugin version.
+         *
+         * @return plugin version
+         */
+        public String getPluginVersion() {
+            return pluginVersion;
+        }
+
+        /**
+         * Get the dependency plugin id.
+         *
+         * @return dependency plugin id
+         */
+        public String getDependencyPluginId() {
+            return dependencyPluginId;
+        }
+
+        /**
+         * Get the dependency version range.
+         *
+         * @return dependency version range
+         */
+        public String getDependencyVersion() {
+            return dependencyVersion;
+        }
+
+        /**
+         * Get the registration source.
+         *
+         * @return registration source
+         */
+        public PluginSource getSource() {
+            return source;
         }
     }
 

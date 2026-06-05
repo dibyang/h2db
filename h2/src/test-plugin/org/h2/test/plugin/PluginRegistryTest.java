@@ -17,6 +17,7 @@ import java.util.Collections;
 import java.util.List;
 import org.h2.api.H2Plugin;
 import org.h2.api.PluginCapability;
+import org.h2.api.PluginDependency;
 import org.h2.api.PluginProvider;
 import org.h2.api.TableEngineProvider;
 import org.h2.engine.PluginRegistry;
@@ -183,6 +184,27 @@ public class PluginRegistryTest {
     }
 
     /**
+     * T-PLUGIN-P16-DEPENDENCY-DIAGNOSTIC-01.
+     */
+    @Test
+    public void returnsDependencyDiagnostics() {
+        PluginRegistry registry = new PluginRegistry();
+        PluginProvider provider = new TestProvider(TableEngineProvider.TYPE, "sample",
+                PluginCapability.TABLE_CREATE);
+
+        registry.registerPlugin(new TestPlugin("test.plugin", "1", Arrays.asList(provider),
+                Arrays.asList(new PluginDependency("test.base", "[1,2)"))), PluginSource.CONFIGURED_CLASS);
+
+        List<PluginRegistry.DependencyDiagnostic> diagnostics = registry.getDependencyDiagnostics();
+        assertEquals(1, diagnostics.size());
+        assertEquals("test.plugin", diagnostics.get(0).getPluginId());
+        assertEquals("1", diagnostics.get(0).getPluginVersion());
+        assertEquals("test.base", diagnostics.get(0).getDependencyPluginId());
+        assertEquals("[1,2)", diagnostics.get(0).getDependencyVersion());
+        assertEquals(PluginSource.CONFIGURED_CLASS, diagnostics.get(0).getSource());
+    }
+
+    /**
      * T-PLUGIN-P14-VERSION-RANGE-REGISTRY-01.
      */
     @Test
@@ -247,15 +269,22 @@ public class PluginRegistryTest {
         private final String id;
         private final String version;
         private final Iterable<? extends PluginProvider> providers;
+        private final Iterable<PluginDependency> dependencies;
 
         TestPlugin(PluginProvider provider) {
             this("test.plugin", "1", Arrays.asList(provider));
         }
 
         TestPlugin(String id, String version, Iterable<? extends PluginProvider> providers) {
+            this(id, version, providers, Collections.<PluginDependency>emptyList());
+        }
+
+        TestPlugin(String id, String version, Iterable<? extends PluginProvider> providers,
+                Iterable<PluginDependency> dependencies) {
             this.id = id;
             this.version = version;
             this.providers = providers;
+            this.dependencies = dependencies;
         }
 
         @Override
@@ -276,6 +305,11 @@ public class PluginRegistryTest {
         @Override
         public Iterable<? extends PluginProvider> getProviders() {
             return providers;
+        }
+
+        @Override
+        public Iterable<PluginDependency> getDependencies() {
+            return dependencies;
         }
     }
 

@@ -224,6 +224,19 @@ public final class PluginLoader {
             throw DbException.getUnsupportedException("Configured plugin descriptor is invalid: class=" + className
                     + ", plugin=" + pluginId + ", reason=no providers");
         }
+        Iterable<PluginDependency> dependencies = plugin.getDependencies();
+        if (dependencies == null) {
+            throw DbException.getUnsupportedException("Configured plugin descriptor is invalid: class=" + className
+                    + ", plugin=" + pluginId + ", reason=dependencies are null");
+        }
+        for (PluginDependency dependency : dependencies) {
+            if (dependency == null) {
+                throw DbException.getUnsupportedException("Configured plugin descriptor is invalid: class=" + className
+                        + ", plugin=" + pluginId + ", reason=dependency is null");
+            }
+            requireNonBlank(dependency.getPluginId(), "dependency plugin id", className);
+            requireNonBlank(dependency.getVersion(), "dependency version", className);
+        }
     }
 
     private static String requireNonBlank(String value, String name, String className) {

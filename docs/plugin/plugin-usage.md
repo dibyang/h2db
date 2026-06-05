@@ -193,11 +193,14 @@ public final class AcmeLifecycleProvider implements DatabaseLifecycleProvider {
 SELECT * FROM INFORMATION_SCHEMA.PLUGINS;
 SELECT * FROM INFORMATION_SCHEMA.PLUGIN_PROVIDERS;
 SELECT * FROM INFORMATION_SCHEMA.PLUGIN_CAPABILITIES;
+SELECT * FROM INFORMATION_SCHEMA.PLUGIN_DEPENDENCIES;
 ```
 
 这些视图会展示插件 id、版本、来源、provider type/id、是否内置、以及 provider 声明的能力。
 当同一 plugin id 加载了多个版本时，`PLUGINS` 按 plugin id/version 输出多行，
 `PLUGIN_CAPABILITIES` 会包含 `PLUGIN_VERSION`，确保 provider 能力可归属到具体版本。
+`PLUGIN_DEPENDENCIES` 会展示每个已加载插件声明的依赖，包括声明方 plugin id/version、
+依赖 plugin id、依赖版本范围和来源。
 
 ## 当前边界
 

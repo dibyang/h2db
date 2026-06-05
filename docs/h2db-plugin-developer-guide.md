@@ -324,10 +324,13 @@ com.acme.AcmePlugin
 - `INFORMATION_SCHEMA.PLUGINS`
 - `INFORMATION_SCHEMA.PLUGIN_PROVIDERS`
 - `INFORMATION_SCHEMA.PLUGIN_CAPABILITIES`
+- `INFORMATION_SCHEMA.PLUGIN_DEPENDENCIES`
 
 这些表只读，用于查看 plugin id、plugin version、provider type/id、来源和 capability。
 在多版本插件部署中，`INFORMATION_SCHEMA.PLUGINS` 会按 plugin id/version 输出；
 `INFORMATION_SCHEMA.PLUGIN_CAPABILITIES` 的每条能力行都会包含 `PLUGIN_VERSION`。
+`INFORMATION_SCHEMA.PLUGIN_DEPENDENCIES` 会输出每条已加载依赖声明的声明方 plugin id/version、
+依赖 plugin id、依赖版本范围和来源。
 
 插件加载失败、版本不匹配、依赖缺失、provider 冲突和 provider type 禁止都会在数据库打开时报错。错误消息应包含 plugin id、provider type/id 或 class name，便于定位配置问题。
 

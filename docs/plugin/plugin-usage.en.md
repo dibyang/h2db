@@ -193,11 +193,14 @@ Registered plugins and providers can be inspected through information schema:
 SELECT * FROM INFORMATION_SCHEMA.PLUGINS;
 SELECT * FROM INFORMATION_SCHEMA.PLUGIN_PROVIDERS;
 SELECT * FROM INFORMATION_SCHEMA.PLUGIN_CAPABILITIES;
+SELECT * FROM INFORMATION_SCHEMA.PLUGIN_DEPENDENCIES;
 ```
 
 These views expose plugin id, version, source, provider type/id, whether the plugin is built in, and provider capabilities.
 When multiple versions of the same plugin id are loaded, `PLUGINS` reports one row per plugin id/version
 and `PLUGIN_CAPABILITIES` includes `PLUGIN_VERSION` so provider capabilities remain attributable.
+`PLUGIN_DEPENDENCIES` exposes each loaded plugin dependency with the declaring plugin id/version,
+dependency plugin id, dependency version range, and source.
 
 ## Current Boundaries
 

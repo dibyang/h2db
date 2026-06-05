@@ -164,11 +164,13 @@ public final class InformationSchemaTable extends MetaTable {
 
     private static final int PLUGIN_CAPABILITIES = PLUGIN_PROVIDERS + 1;
 
+    private static final int PLUGIN_DEPENDENCIES = PLUGIN_CAPABILITIES + 1;
+
     /**
      * The number of meta table types. Supported meta table types are
      * {@code 0..META_TABLE_TYPE_COUNT - 1}.
      */
-    public static final int META_TABLE_TYPE_COUNT = PLUGIN_CAPABILITIES + 1;
+    public static final int META_TABLE_TYPE_COUNT = PLUGIN_DEPENDENCIES + 1;
 
     private final boolean isView;
 
@@ -899,6 +901,18 @@ public final class InformationSchemaTable extends MetaTable {
             };
             indexColumnName = "CAPABILITY_NAME";
             break;
+        case PLUGIN_DEPENDENCIES:
+            setMetaTableName("PLUGIN_DEPENDENCIES");
+            isView = false;
+            cols = new Column[] {
+                    column("PLUGIN_ID"), //
+                    column("PLUGIN_VERSION"), //
+                    column("DEPENDENCY_PLUGIN_ID"), //
+                    column("DEPENDENCY_VERSION"), //
+                    column("SOURCE"), //
+            };
+            indexColumnName = "DEPENDENCY_PLUGIN_ID";
+            break;
         default:
             throw DbException.getInternalError("type=" + type);
         }
@@ -1045,6 +1059,9 @@ public final class InformationSchemaTable extends MetaTable {
             break;
         case PLUGIN_CAPABILITIES:
             pluginCapabilities(session, indexFrom, indexTo, rows);
+            break;
+        case PLUGIN_DEPENDENCIES:
+            pluginDependencies(session, indexFrom, indexTo, rows);
             break;
         default:
             throw DbException.getInternalError("type=" + type);
@@ -3091,11 +3108,9 @@ public final class InformationSchemaTable extends MetaTable {
     }
 
     private void plugins(SessionLocal session, Value indexFrom, Value indexTo, ArrayList<Row> rows) {
-        HashSet<String> seen = new HashSet<>();
-        for (PluginRegistry.ProviderDiagnostic diagnostic : database.getPluginRegistry().getProviderDiagnostics()) {
+        for (PluginRegistry.PluginDiagnostic diagnostic : database.getPluginRegistry().getPluginDiagnostics()) {
             String pluginId = diagnostic.getPluginId();
-            if (!checkIndex(session, pluginId, indexFrom, indexTo)
-                    || !seen.add(pluginId + '\u0000' + diagnostic.getPluginVersion())) {
+            if (!checkIndex(session, pluginId, indexFrom, indexTo)) {
                 continue;
             }
             PluginSource source = diagnostic.getSource();
@@ -3157,6 +3172,27 @@ public final class InformationSchemaTable extends MetaTable {
                         diagnostic.getSource().name()
                 );
             }
+        }
+    }
+
+    private void pluginDependencies(SessionLocal session, Value indexFrom, Value indexTo, ArrayList<Row> rows) {
+        for (PluginRegistry.DependencyDiagnostic diagnostic : database.getPluginRegistry().getDependencyDiagnostics()) {
+            String dependencyPluginId = diagnostic.getDependencyPluginId();
+            if (!checkIndex(session, dependencyPluginId, indexFrom, indexTo)) {
+                continue;
+            }
+            add(session, rows,
+                    // PLUGIN_ID
+                    diagnostic.getPluginId(),
+                    // PLUGIN_VERSION
+                    diagnostic.getPluginVersion(),
+                    // DEPENDENCY_PLUGIN_ID
+                    dependencyPluginId,
+                    // DEPENDENCY_VERSION
+                    diagnostic.getDependencyVersion(),
+                    // SOURCE
+                    diagnostic.getSource().name()
+            );
         }
     }
 

@@ -23,7 +23,6 @@ Not included in this round:
 | --- | --- |
 | Hot loading, unloading, or online plugin replacement | Design after the plugin lifecycle is stable |
 | Plugin package manifest, signing, and permission sandbox | Design during external plugin distribution |
-| Multiple plugin versions and version resolution | Design during dependency/version semantic expansion |
 | New extension points beyond storage/table/system catalog/JDBC URL prefix/transaction event | Parser, function, auth, optimizer, wire protocol, and similar extension points are not in the current plan |
 | Automated performance baselines and large-resource slow tests | Add during the slow-test foundation phase |
 
@@ -66,14 +65,15 @@ If full acceptance fails in a network phase with a connection timeout, rerun the
 | P13 | Done | Database lifecycle extension | Add `DatabaseLifecycleProvider` / `DatabaseLifecycleContext`, wire database close callbacks, and cover diagnostics and failure reporting | `runPluginArchitectureCheck` |
 | P14 | Done | Plugin version coexistence and dependency resolution | Allow distinct versions of the same plugin id to coexist when provider ids do not conflict; resolve dependency versions with exact, wildcard, and interval matching | `runPluginArchitectureCheck` |
 | P15 | Done | Multi-version diagnostics | Report each plugin id/version pair in `INFORMATION_SCHEMA.PLUGINS` and include `PLUGIN_VERSION` in capability rows | `runPluginArchitectureCheck` |
+| P16 | Done | Dependency diagnostics | Add plugin dependency snapshots to the registry and expose `INFORMATION_SCHEMA.PLUGIN_DEPENDENCIES`; harden invalid dependency descriptors | `runPluginArchitectureCheck` |
 
 ## Current Closeout Status
 
-P1-P8, P10, P11, P13, P14, and P15 are complete. The plugin foundation currently provides:
+P1-P8, P10, P11, P13, P14, P15, and P16 are complete. The plugin foundation currently provides:
 
 | Capability | Status |
 | --- | --- |
-| Plugin registry | Provider registration, uniqueness checks, capability diagnostics, invalid descriptor rejection |
+| Plugin registry | Provider registration, uniqueness checks, capability and dependency diagnostics, invalid descriptor rejection |
 | Plugin loading | Default `ServiceLoader` automatic discovery, version ranges, dependency ordering, missing dependency diagnostics, and dependency-cycle diagnostics |
 | Built-in plugins | MVStore storage/table providers registered and resolved through the built-in registry path |
 | Table-engine extension | External `TableEngineProvider` can create tables through SQL engine ids and receive table/schema params |
@@ -82,7 +82,7 @@ P1-P8, P10, P11, P13, P14, and P15 are complete. The plugin foundation currently
 | Transaction event extension | Transaction providers can observe commit / rollback boundary events with provider/event/session diagnostics on failure |
 | Database lifecycle extension | Lifecycle providers can observe database close events without URL-level `DATABASE_EVENT_LISTENER` injection |
 | Version resolution | Plugin dependencies match exact versions, `*`, and intervals; multiple versions of the same plugin id may coexist when provider ids remain distinct |
-| Observability | `INFORMATION_SCHEMA.PLUGINS`, `PLUGIN_PROVIDERS`, and `PLUGIN_CAPABILITIES` cover built-in, configured external, and multi-version plugins |
+| Observability | `INFORMATION_SCHEMA.PLUGINS`, `PLUGIN_PROVIDERS`, `PLUGIN_CAPABILITIES`, and `PLUGIN_DEPENDENCIES` cover built-in, configured external, and multi-version plugins |
 | Test gates | `runPluginArchitectureCheck` and the daily gate have passed |
 
 ## Working Rules

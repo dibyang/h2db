@@ -23,7 +23,6 @@
 | --- | --- |
 | 热加载、卸载、在线替换插件 | 插件生命周期稳定后单独设计 |
 | 插件包 manifest、签名、权限沙箱 | 外部插件分发阶段设计 |
-| 多版本插件并存与版本解算器 | dependency/version 语义扩展阶段设计 |
 | 非 storage/table/system catalog/JDBC URL prefix/transaction event 的新扩展点 | parser、function、auth、optimizer、wire protocol 等当前规划不纳入 |
 | 自动性能基线和大资源慢测 | 测试底座慢测阶段补齐 |
 
@@ -66,14 +65,15 @@
 | P13 | 已完成 | 数据库生命周期扩展能力 | 新增 `DatabaseLifecycleProvider` / `DatabaseLifecycleContext`，接入数据库关闭回调，补诊断和失败测试 | `runPluginArchitectureCheck` |
 | P14 | 已完成 | 插件版本并存与依赖解析 | 允许同 plugin id 的不同版本在 provider id 不冲突时并存；依赖版本支持精确版本、`*` 和区间匹配 | `runPluginArchitectureCheck` |
 | P15 | 已完成 | 多版本诊断闭环 | `INFORMATION_SCHEMA.PLUGINS` 按 plugin id/version 输出，`PLUGIN_CAPABILITIES` 能力行包含 `PLUGIN_VERSION` | `runPluginArchitectureCheck` |
+| P16 | 已完成 | 依赖诊断闭环 | 注册中心保存插件依赖快照并暴露 `INFORMATION_SCHEMA.PLUGIN_DEPENDENCIES`；加固非法依赖描述符 | `runPluginArchitectureCheck` |
 
 ## 当前收口状态
 
-P1-P8、P10、P11、P13、P14 与 P15 已完成。插件化基础设施当前具备：
+P1-P8、P10、P11、P13、P14、P15 与 P16 已完成。插件化基础设施当前具备：
 
 | 能力 | 状态 |
 | --- | --- |
-| 插件注册中心 | 支持 provider 注册、唯一性校验、能力诊断、无效描述符拒绝 |
+| 插件注册中心 | 支持 provider 注册、唯一性校验、能力和依赖诊断、无效描述符拒绝 |
 | 插件加载 | 支持默认 `ServiceLoader` 自动发现、版本范围、依赖排序、依赖缺失和依赖环诊断 |
 | 内置插件 | MVStore storage/table provider 通过 builtin registry 路径注册和解析 |
 | 表引擎扩展 | 支持外部 `TableEngineProvider` 通过 SQL engine id 建表，并传递 table/schema params |
@@ -82,7 +82,7 @@ P1-P8、P10、P11、P13、P14 与 P15 已完成。插件化基础设施当前具
 | 事务事件扩展 | 支持 transaction provider 监听 commit / rollback 前后事件，并在失败时输出 provider/event/session 诊断 |
 | 数据库生命周期扩展 | 支持 lifecycle provider 监听数据库关闭事件，不再需要通过 URL 注入 `DATABASE_EVENT_LISTENER` 做插件关闭适配 |
 | 版本解析 | 插件依赖支持精确版本、`*` 和区间匹配；同 plugin id 的多个版本可在 provider id 不冲突时并存 |
-| 可观测性 | `INFORMATION_SCHEMA.PLUGINS`、`PLUGIN_PROVIDERS`、`PLUGIN_CAPABILITIES` 覆盖内置、外部配置和多版本插件 |
+| 可观测性 | `INFORMATION_SCHEMA.PLUGINS`、`PLUGIN_PROVIDERS`、`PLUGIN_CAPABILITIES`、`PLUGIN_DEPENDENCIES` 覆盖内置、外部配置和多版本插件 |
 | 测试门禁 | `runPluginArchitectureCheck` 与日常门禁已通过 |
 
 ## 推进规则

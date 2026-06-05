@@ -127,6 +127,30 @@ public class PluginInformationSchemaTest {
         }
     }
 
+    /**
+     * T-PLUGIN-P16-DEPENDENCY-INFO-SCHEMA-01.
+     */
+    @Test
+    public void exposesPluginDependencies() throws Exception {
+        String classes = PluginLoaderTest.DependsOnVersion2Plugin.class.getName() + ","
+                + PluginLoaderTest.VersionedV2Plugin.class.getName();
+        try (Connection conn = DriverManager.getConnection("jdbc:h2:mem:pluginDependencyInfo", "sa", "");
+                Statement stat = conn.createStatement()) {
+            PluginLoader.loadConfiguredPlugins(database(conn).getPluginRegistry(), classes);
+
+            try (ResultSet rs = stat.executeQuery("select plugin_version, dependency_plugin_id, "
+                    + "dependency_version, source from information_schema.plugin_dependencies "
+                    + "where plugin_id = 'test.depends.v2'")) {
+                assertTrue(rs.next());
+                assertEquals("1", rs.getString(1));
+                assertEquals("test.versioned", rs.getString(2));
+                assertEquals("[2,3)", rs.getString(3));
+                assertEquals("CONFIGURED_CLASS", rs.getString(4));
+                assertTrue(!rs.next());
+            }
+        }
+    }
+
     private static Database database(Connection conn) {
         SessionLocal session = (SessionLocal) ((JdbcConnection) conn).getSession();
         return session.getDatabase();

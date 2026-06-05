@@ -7,6 +7,7 @@ package org.h2.engine;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -20,6 +21,7 @@ import org.h2.api.PluginProvider;
 public final class PluginRegistry {
 
     private final HashMap<String, HashMap<String, RegisteredProvider>> providers = new HashMap<>();
+    private final HashMap<String, HashSet<String>> pluginVersions = new HashMap<>();
 
     /**
      * 注册一个插件中的全部 provider。
@@ -40,13 +42,22 @@ public final class PluginRegistry {
         if (pluginProviders == null) {
             throw new IllegalArgumentException("Plugin providers must not be null: plugin=" + pluginId);
         }
-        boolean registered = false;
+        ArrayList<PluginProvider> checkedProviders = new ArrayList<>();
         for (PluginProvider provider : pluginProviders) {
-            registerProvider(pluginId, pluginVersion, provider, source);
-            registered = true;
+            if (provider == null) {
+                throw new IllegalArgumentException("Plugin provider must not be null: plugin=" + pluginId);
+            }
+            checkedProviders.add(provider);
         }
-        if (!registered) {
+        if (checkedProviders.isEmpty()) {
             throw new IllegalArgumentException("Plugin must provide at least one provider: plugin=" + pluginId);
+        }
+        if (hasPluginVersion(pluginId, pluginVersion)) {
+            throw new IllegalArgumentException("Duplicate plugin version: plugin=" + pluginId
+                    + ", version=" + pluginVersion);
+        }
+        for (PluginProvider provider : checkedProviders) {
+            registerProvider(pluginId, pluginVersion, provider, source);
         }
     }
 
@@ -82,6 +93,7 @@ public final class PluginRegistry {
             throw duplicateProviderException("Duplicate plugin provider", type, id, existing, source);
         }
         byId.put(id, new RegisteredProvider(pluginId, pluginVersion, provider, source));
+        addPluginVersion(pluginId, pluginVersion);
     }
 
     /**
@@ -127,14 +139,41 @@ public final class PluginRegistry {
      * @return 已注册时返回 true
      */
     public boolean hasPlugin(String pluginId) {
-        for (HashMap<String, RegisteredProvider> byId : providers.values()) {
-            for (RegisteredProvider registered : byId.values()) {
-                if (registered.pluginId.equals(pluginId)) {
-                    return true;
-                }
+        return pluginVersions.containsKey(pluginId);
+    }
+
+    /**
+     * 判断指定版本范围的插件是否已注册。
+     *
+     * @param pluginId 插件标识
+     * @param versionRange 版本或版本范围
+     * @return 存在匹配版本时返回 true
+     */
+    public boolean hasPlugin(String pluginId, String versionRange) {
+        HashSet<String> versions = pluginVersions.get(pluginId);
+        if (versions == null) {
+            return false;
+        }
+        for (String version : versions) {
+            if (PluginVersionRange.matches(version, versionRange)) {
+                return true;
             }
         }
         return false;
+    }
+
+    private boolean hasPluginVersion(String pluginId, String pluginVersion) {
+        HashSet<String> versions = pluginVersions.get(pluginId);
+        return versions != null && versions.contains(pluginVersion);
+    }
+
+    private void addPluginVersion(String pluginId, String pluginVersion) {
+        HashSet<String> versions = pluginVersions.get(pluginId);
+        if (versions == null) {
+            versions = new HashSet<>();
+            pluginVersions.put(pluginId, versions);
+        }
+        versions.add(pluginVersion);
     }
 
     /**

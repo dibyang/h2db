@@ -183,6 +183,45 @@ public class PluginRegistryTest {
     }
 
     /**
+     * T-PLUGIN-P14-VERSION-RANGE-REGISTRY-01.
+     */
+    @Test
+    public void matchesRegisteredPluginVersionRanges() {
+        PluginRegistry registry = new PluginRegistry();
+
+        registry.registerProvider("test.versioned", "1.0.0",
+                new TestProvider(TableEngineProvider.TYPE, "sample_v1", PluginCapability.TABLE_CREATE),
+                PluginSource.CONFIGURED_CLASS);
+        registry.registerProvider("test.versioned", "2.1.0",
+                new TestProvider(TableEngineProvider.TYPE, "sample_v2", PluginCapability.TABLE_CREATE),
+                PluginSource.CONFIGURED_CLASS);
+
+        assertTrue(registry.hasPlugin("test.versioned"));
+        assertTrue(registry.hasPlugin("test.versioned", "1.0.0"));
+        assertTrue(registry.hasPlugin("test.versioned", "[2.0,3.0)"));
+        assertTrue(registry.hasPlugin("test.versioned", "*"));
+        assertFalse(registry.hasPlugin("test.versioned", "[3.0,4.0)"));
+        assertFalse(registry.hasPlugin("missing.versioned", "*"));
+    }
+
+    /**
+     * T-PLUGIN-P14-DUPLICATE-PLUGIN-VERSION-01.
+     */
+    @Test
+    public void rejectsDuplicatePluginIdAndVersion() {
+        PluginRegistry registry = new PluginRegistry();
+
+        registry.registerPlugin(new TestPlugin("test.duplicate", "1",
+                Arrays.asList(new TestProvider(TableEngineProvider.TYPE, "duplicate_a",
+                        PluginCapability.TABLE_CREATE))), PluginSource.CONFIGURED_CLASS);
+
+        assertIllegalArgumentContains(() -> registry.registerPlugin(new TestPlugin("test.duplicate", "1",
+                Arrays.asList(new TestProvider(TableEngineProvider.TYPE, "duplicate_b",
+                        PluginCapability.TABLE_CREATE))), PluginSource.CONFIGURED_CLASS),
+                "Duplicate plugin version");
+    }
+
+    /**
      * T-PLUGIN-F1-CONFLICT-DIAGNOSTIC-01.
      */
     @Test

@@ -64,10 +64,11 @@ If full acceptance fails in a network phase with a connection timeout, rerun the
 | P10 | Done | Table / Index migration support layer | Add `TableProviderSupport` for read-only gates, storage type checks, and provider failure diagnostics; update contract tests and docs | `runPluginArchitectureCheck`, `runH2LegacySmoke` |
 | P11 | Done | Transaction event extension | Add `TransactionEventProvider` / `TransactionContext`, wire commit / rollback boundary events, and cover diagnostics and failures | `runPluginArchitectureCheck`, `runH2LegacySmoke` |
 | P13 | Done | Database lifecycle extension | Add `DatabaseLifecycleProvider` / `DatabaseLifecycleContext`, wire database close callbacks, and cover diagnostics and failure reporting | `runPluginArchitectureCheck` |
+| P14 | Done | Plugin version coexistence and dependency resolution | Allow distinct versions of the same plugin id to coexist when provider ids do not conflict; resolve dependency versions with exact, wildcard, and interval matching | `runPluginArchitectureCheck` |
 
 ## Current Closeout Status
 
-P1-P8, P10, P11, and P13 are complete. The plugin foundation currently provides:
+P1-P8, P10, P11, P13, and P14 are complete. The plugin foundation currently provides:
 
 | Capability | Status |
 | --- | --- |
@@ -79,6 +80,7 @@ P1-P8, P10, P11, and P13 are complete. The plugin foundation currently provides:
 | Storage-engine extension | Storage provider resolution, storage id persistence, mismatch rejection, read-only downgrade, and maintenance capability boundaries |
 | Transaction event extension | Transaction providers can observe commit / rollback boundary events with provider/event/session diagnostics on failure |
 | Database lifecycle extension | Lifecycle providers can observe database close events without URL-level `DATABASE_EVENT_LISTENER` injection |
+| Version resolution | Plugin dependencies match exact versions, `*`, and intervals; multiple versions of the same plugin id may coexist when provider ids remain distinct |
 | Observability | `INFORMATION_SCHEMA.PLUGINS`, `PLUGIN_PROVIDERS`, and `PLUGIN_CAPABILITIES` cover built-in and configured external plugins |
 | Test gates | `runPluginArchitectureCheck` and the daily gate have passed |
 

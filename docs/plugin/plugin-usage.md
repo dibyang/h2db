@@ -57,7 +57,9 @@ public final class AcmePlugin implements H2Plugin {
 }
 ```
 
-插件 id、版本、provider type、provider id 都不能为空。一个插件至少要提供一个 provider。重复 provider id、非法 provider type、缺失依赖或依赖环会在数据库打开时失败并给出诊断信息。
+插件 id、版本、provider type、provider id 都不能为空。一个插件至少要提供一个 provider。重复 provider id、非法 provider type、缺失依赖、依赖版本不匹配、重复 plugin id/version 或依赖环会在数据库打开时失败并给出诊断信息。
+
+同一个 plugin id 的多个版本仅在 provider id 各不相同时允许并存。依赖版本可以写 `*`、精确版本或形如 `[1.0,2.0)` 的区间。
 
 ## 表引擎插件
 
@@ -203,6 +205,6 @@ SELECT * FROM INFORMATION_SCHEMA.PLUGIN_CAPABILITIES;
 | --- | --- |
 | 热加载、卸载、在线替换 | 插件只在数据库打开时加载 |
 | 插件 manifest 和签名 | 当前通过 `ServiceLoader` 自动发现 |
-| 多版本插件并存 | 当前依赖只检查插件 id，复杂版本解算留待后续 |
+| 同 provider type/id 的多版本重载 | provider id 仍全局唯一；版本并存不改变 provider 选择语义 |
 | parser/function/auth/optimizer/wire protocol 等扩展点 | 当前规划不纳入；白名单只允许 table、storage、system catalog、JDBC URL prefix、transaction event 和 database lifecycle provider |
 | 独立权限沙箱 | 当前主要边界是 provider type 白名单和加载诊断 |

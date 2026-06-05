@@ -57,7 +57,9 @@ public final class AcmePlugin implements H2Plugin {
 }
 ```
 
-Plugin id, version, provider type, and provider id must not be empty. A plugin must provide at least one provider. Duplicate provider ids, forbidden provider types, missing dependencies, and dependency cycles fail during database open with diagnostic messages.
+Plugin id, version, provider type, and provider id must not be empty. A plugin must provide at least one provider. Duplicate provider ids, forbidden provider types, missing dependencies, dependency version mismatches, duplicate plugin id/version pairs, and dependency cycles fail during database open with diagnostic messages.
+
+Multiple versions of the same plugin id may coexist only when each version exposes distinct provider ids. Dependencies can target `*`, an exact version, or a range such as `[1.0,2.0)`.
 
 ## Table Engine Plugins
 
@@ -203,6 +205,6 @@ The current phase does not support:
 | --- | --- |
 | Hot loading, unloading, or online replacement | Plugins are loaded only during database open |
 | Plugin manifest and signing | Discovery currently uses `ServiceLoader` |
-| Multiple plugin versions at the same time | Dependencies currently check plugin ids; complex version resolution is deferred |
+| Multiple providers with the same type/id | Provider ids remain globally unique; version coexistence does not add provider-id overloading |
 | Parser/function/auth/optimizer/wire protocol extension points | Not in the current plan; the provider whitelist only allows table, storage, system catalog, JDBC URL prefix, transaction event, and database lifecycle providers |
 | Dedicated permission sandbox | Current boundaries include the global provider type whitelist and optional per-plugin allowlists (`H2Plugin#getAllowedProviderTypes`) |

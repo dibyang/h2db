@@ -91,6 +91,56 @@ public class PluginLoaderTest {
     }
 
     /**
+     * T-PLUGIN-P14-MULTI-VERSION-COEXIST-01.
+     */
+    @Test
+    public void allowsMultipleVersionsWithDistinctProviderIds() {
+        String classes = VersionedV1Plugin.class.getName() + "," + VersionedV2Plugin.class.getName();
+        PluginRegistry registry = configuredRegistry(classes);
+
+        assertNotNull(registry.findProvider(TableEngineProvider.TYPE, "versioned_v1_table"));
+        assertNotNull(registry.findProvider(TableEngineProvider.TYPE, "versioned_v2_table"));
+    }
+
+    /**
+     * T-PLUGIN-P14-DEPENDENCY-RANGE-01.
+     */
+    @Test
+    public void resolvesDependenciesByVersionRange() {
+        String classes = DependsOnVersion2Plugin.class.getName() + "," + VersionedV1Plugin.class.getName()
+                + "," + VersionedV2Plugin.class.getName();
+        PluginRegistry registry = configuredRegistry(classes);
+
+        assertNotNull(registry.findProvider(TableEngineProvider.TYPE, "depends_v2_table"));
+    }
+
+    /**
+     * T-PLUGIN-P14-DEPENDENCY-RANGE-MISSING-01.
+     */
+    @Test
+    public void rejectsDependencyWhenNoVersionMatches() {
+        String classes = DependsOnVersion3Plugin.class.getName() + "," + VersionedV2Plugin.class.getName();
+        DbException e = assertThrows(DbException.class, () -> configuredRegistry(classes));
+
+        assertTrue(e.getMessage().contains("Configured plugin dependency is missing"));
+        assertTrue(e.getMessage().contains("dependency=test.versioned"));
+        assertTrue(e.getMessage().contains("version=[3,4)"));
+    }
+
+    /**
+     * T-PLUGIN-P14-DUPLICATE-DISCOVERED-VERSION-01.
+     */
+    @Test
+    public void rejectsDuplicateDiscoveredPluginVersion() {
+        String classes = DuplicateVersionAPlugin.class.getName() + "," + DuplicateVersionBPlugin.class.getName();
+        DbException e = assertThrows(DbException.class, () -> configuredRegistry(classes));
+
+        assertTrue(e.getMessage().contains("Duplicate configured plugin version"));
+        assertTrue(e.getMessage().contains("plugin=test.duplicate.version"));
+        assertTrue(e.getMessage().contains("version=1"));
+    }
+
+    /**
      * T-PLUGIN-F6-DEPENDENCY-MISSING-01.
      */
     @Test
@@ -346,6 +396,98 @@ public class PluginLoaderTest {
         @Override
         public Iterable<? extends PluginProvider> getProviders() {
             return Arrays.asList(new TestTableProvider("version_range_table"));
+        }
+    }
+
+    public static final class VersionedV1Plugin extends ConfiguredPlugin {
+        @Override
+        public String getId() {
+            return "test.versioned";
+        }
+
+        @Override
+        public String getVersion() {
+            return "1";
+        }
+
+        @Override
+        public Iterable<? extends PluginProvider> getProviders() {
+            return Arrays.asList(new TestTableProvider("versioned_v1_table"));
+        }
+    }
+
+    public static final class VersionedV2Plugin extends ConfiguredPlugin {
+        @Override
+        public String getId() {
+            return "test.versioned";
+        }
+
+        @Override
+        public String getVersion() {
+            return "2";
+        }
+
+        @Override
+        public Iterable<? extends PluginProvider> getProviders() {
+            return Arrays.asList(new TestTableProvider("versioned_v2_table"));
+        }
+    }
+
+    public static final class DependsOnVersion2Plugin extends ConfiguredPlugin {
+        @Override
+        public String getId() {
+            return "test.depends.v2";
+        }
+
+        @Override
+        public Iterable<PluginDependency> getDependencies() {
+            return Arrays.asList(new PluginDependency("test.versioned", "[2,3)"));
+        }
+
+        @Override
+        public Iterable<? extends PluginProvider> getProviders() {
+            return Arrays.asList(new TestTableProvider("depends_v2_table"));
+        }
+    }
+
+    public static final class DependsOnVersion3Plugin extends ConfiguredPlugin {
+        @Override
+        public String getId() {
+            return "test.depends.v3";
+        }
+
+        @Override
+        public Iterable<PluginDependency> getDependencies() {
+            return Arrays.asList(new PluginDependency("test.versioned", "[3,4)"));
+        }
+
+        @Override
+        public Iterable<? extends PluginProvider> getProviders() {
+            return Arrays.asList(new TestTableProvider("depends_v3_table"));
+        }
+    }
+
+    public static final class DuplicateVersionAPlugin extends ConfiguredPlugin {
+        @Override
+        public String getId() {
+            return "test.duplicate.version";
+        }
+
+        @Override
+        public Iterable<? extends PluginProvider> getProviders() {
+            return Arrays.asList(new TestTableProvider("duplicate_version_a"));
+        }
+    }
+
+    public static final class DuplicateVersionBPlugin extends ConfiguredPlugin {
+        @Override
+        public String getId() {
+            return "test.duplicate.version";
+        }
+
+        @Override
+        public Iterable<? extends PluginProvider> getProviders() {
+            return Arrays.asList(new TestTableProvider("duplicate_version_b"));
         }
     }
 

@@ -114,23 +114,25 @@ public final class PluginLoader {
 
     private static void registerPluginsInDependencyOrder(PluginRegistry registry, ArrayList<H2Plugin> plugins,
             PluginSource source) {
+        validateUniquePluginVersions(plugins);
         HashSet<String> registered = new HashSet<>();
         boolean progressed;
         do {
             progressed = false;
             for (H2Plugin plugin : plugins) {
-                if (registered.contains(plugin.getId())) {
+                String key = pluginKey(plugin);
+                if (registered.contains(key)) {
                     continue;
                 }
                 if (dependenciesAvailable(registry, registered, plugin)) {
                     registry.registerPlugin(plugin, source);
-                    registered.add(plugin.getId());
+                    registered.add(key);
                     progressed = true;
                 }
             }
         } while (progressed);
         for (H2Plugin plugin : plugins) {
-            if (!registered.contains(plugin.getId())) {
+            if (!registered.contains(pluginKey(plugin))) {
                 throw unresolvedDependencyException(registry, registered, plugins, plugin);
             }
         }
@@ -139,7 +141,8 @@ public final class PluginLoader {
     private static boolean dependenciesAvailable(PluginRegistry registry, HashSet<String> registered,
             H2Plugin plugin) {
         for (PluginDependency dependency : plugin.getDependencies()) {
-            if (!registry.hasPlugin(dependency.getPluginId()) && !registered.contains(dependency.getPluginId())) {
+            if (!registry.hasPlugin(dependency.getPluginId(), dependency.getVersion())
+                    && !registeredContains(registered, dependency.getPluginId(), dependency.getVersion())) {
                 return false;
             }
         }
@@ -148,19 +151,51 @@ public final class PluginLoader {
 
     private static DbException unresolvedDependencyException(PluginRegistry registry, HashSet<String> registered,
             ArrayList<H2Plugin> plugins, H2Plugin plugin) {
-        HashSet<String> discovered = new HashSet<>();
-        for (H2Plugin discoveredPlugin : plugins) {
-            discovered.add(discoveredPlugin.getId());
-        }
         for (PluginDependency dependency : plugin.getDependencies()) {
-            if (!registry.hasPlugin(dependency.getPluginId()) && !registered.contains(dependency.getPluginId())
-                    && !discovered.contains(dependency.getPluginId())) {
+            if (!registry.hasPlugin(dependency.getPluginId(), dependency.getVersion())
+                    && !registeredContains(registered, dependency.getPluginId(), dependency.getVersion())
+                    && !discoveredContains(plugins, dependency.getPluginId(), dependency.getVersion())) {
                 return DbException.getUnsupportedException("Configured plugin dependency is missing: plugin="
                         + plugin.getId() + ", dependency=" + dependency.getPluginId()
                         + ", version=" + dependency.getVersion());
             }
         }
         return DbException.getUnsupportedException("Configured plugin dependency cycle: plugin=" + plugin.getId());
+    }
+
+    private static void validateUniquePluginVersions(ArrayList<H2Plugin> plugins) {
+        HashSet<String> keys = new HashSet<>();
+        for (H2Plugin plugin : plugins) {
+            String key = pluginKey(plugin);
+            if (!keys.add(key)) {
+                throw DbException.getUnsupportedException("Duplicate configured plugin version: plugin="
+                        + plugin.getId() + ", version=" + plugin.getVersion());
+            }
+        }
+    }
+
+    private static boolean registeredContains(HashSet<String> registered, String pluginId, String versionRange) {
+        for (String key : registered) {
+            int separator = key.indexOf('\u0000');
+            if (separator > 0 && key.substring(0, separator).equals(pluginId)
+                    && PluginVersionRange.matches(key.substring(separator + 1), versionRange)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean discoveredContains(ArrayList<H2Plugin> plugins, String pluginId, String versionRange) {
+        for (H2Plugin plugin : plugins) {
+            if (plugin.getId().equals(pluginId) && PluginVersionRange.matches(plugin.getVersion(), versionRange)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String pluginKey(H2Plugin plugin) {
+        return plugin.getId() + '\u0000' + plugin.getVersion();
     }
 
     private static void validatePluginDescriptor(H2Plugin plugin, String className) {
@@ -200,54 +235,7 @@ public final class PluginLoader {
     }
 
     static boolean isVersionInRange(String version, String range) {
-        if (range == null || range.isEmpty() || "*".equals(range) || version.equals(range)) {
-            return true;
-        }
-        if (range.length() < 3 || (range.charAt(0) != '[' && range.charAt(0) != '(')) {
-            return false;
-        }
-        char end = range.charAt(range.length() - 1);
-        if (end != ']' && end != ')') {
-            return false;
-        }
-        String body = range.substring(1, range.length() - 1);
-        int comma = body.indexOf(',');
-        if (comma < 0) {
-            return false;
-        }
-        String min = body.substring(0, comma).trim();
-        String max = body.substring(comma + 1).trim();
-        boolean minOk = min.isEmpty() || compareVersions(version, min) > 0
-                || range.charAt(0) == '[' && compareVersions(version, min) == 0;
-        boolean maxOk = max.isEmpty() || compareVersions(version, max) < 0
-                || end == ']' && compareVersions(version, max) == 0;
-        return minOk && maxOk;
-    }
-
-    private static int compareVersions(String left, String right) {
-        String[] leftParts = left.split("[.-]");
-        String[] rightParts = right.split("[.-]");
-        int count = Math.max(leftParts.length, rightParts.length);
-        for (int i = 0; i < count; i++) {
-            int l = i < leftParts.length ? parseVersionPart(leftParts[i]) : 0;
-            int r = i < rightParts.length ? parseVersionPart(rightParts[i]) : 0;
-            if (l != r) {
-                return l < r ? -1 : 1;
-            }
-        }
-        return 0;
-    }
-
-    private static int parseVersionPart(String value) {
-        int result = 0;
-        for (int i = 0; i < value.length(); i++) {
-            char ch = value.charAt(i);
-            if (ch < '0' || ch > '9') {
-                break;
-            }
-            result = result * 10 + ch - '0';
-        }
-        return result;
+        return PluginVersionRange.matches(version, range);
     }
 
     private static H2Plugin newPlugin(String className, ClassLoader classLoader) {

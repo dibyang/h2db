@@ -17,7 +17,7 @@ public final class PluginDependency {
      * 创建插件依赖描述。
      *
      * @param pluginId 依赖插件标识
-     * @param version 依赖版本；当前阶段仅用于诊断
+     * @param version 依赖版本或版本范围，支持 {@code *}、精确版本和区间
      */
     public PluginDependency(String pluginId, String version) {
         this.pluginId = pluginId;

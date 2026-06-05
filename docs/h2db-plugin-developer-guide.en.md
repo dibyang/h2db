@@ -43,7 +43,9 @@ Version ranges support three forms:
 - Exact version, such as `2.2`.
 - Ranges, such as `[2.2,3.0)` or `[2.2,2.3]`.
 
-Dependencies are declared with `PluginDependency`. When multiple automatically discovered plugins are loaded, H2 registers them in dependency order. Missing dependencies or dependency cycles fail database startup.
+Dependencies are declared with `PluginDependency`. The dependency version accepts the same minimal range syntax as H2 version ranges: `*`, an exact version, or an interval such as `[1.0,2.0)`. When multiple automatically discovered plugins are loaded, H2 registers them in dependency order. Missing dependencies, version-range mismatches, duplicate plugin id/version pairs, or dependency cycles fail database startup.
+
+Multiple versions of the same plugin id may be loaded in the same database only when their versions differ and their provider ids do not conflict. Provider type/id uniqueness is still global, so SQL and URL provider selection remain deterministic.
 
 Minimal plugin descriptor example:
 

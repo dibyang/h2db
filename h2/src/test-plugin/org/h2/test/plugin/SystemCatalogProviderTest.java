@@ -7,24 +7,33 @@ package org.h2.test.plugin;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Arrays;
 
 import org.h2.api.H2Plugin;
 import org.h2.api.PluginCapability;
 import org.h2.api.PluginProvider;
+import org.h2.api.StorageEngine;
+import org.h2.api.StorageEngineContext;
+import org.h2.api.StorageEngineProvider;
+import org.h2.api.StorageMaintenance;
+import org.h2.api.StorageMaintenanceResult;
 import org.h2.api.SystemCatalogContext;
 import org.h2.api.SystemCatalogProvider;
 import org.h2.engine.Database;
 import org.h2.engine.SessionLocal;
 import org.h2.jdbc.JdbcConnection;
+import org.h2.mvstore.db.MVStoreBackedStorageEngine;
 import org.h2.mvstore.db.MVStoreStorageEngineProvider;
 import org.h2.mvstore.db.SecondaryMVStoreStorageEngineProvider;
+import org.h2.mvstore.db.Store;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -61,6 +70,22 @@ public class SystemCatalogProviderTest {
             assertNotNull(db.getPluginRegistry().findProvider(SystemCatalogProvider.TYPE,
                     SecondaryMVStoreStorageEngineProvider.ID));
         }
+    }
+
+    /**
+     * T-PLUGIN-P4-SYSTEM-CATALOG-MISSING-01.
+     */
+    @Test
+    public void storageProviderWithoutMatchingSystemCatalogProviderFailsOpen() {
+        String url = "jdbc:h2:mem:pluginSystemCatalogMissing;PLUGIN_CLASSES="
+                + StorageOnlyPlugin.class.getName() + ";STORAGE_ENGINE=" + StorageOnlyProvider.ID;
+
+        SQLException e = assertThrows(SQLException.class, () ->
+                DriverManager.getConnection(url, "sa", ""));
+
+        assertTrue(e.getMessage().contains("Missing system catalog provider"));
+        assertTrue(e.getMessage().contains("type=" + SystemCatalogProvider.TYPE));
+        assertTrue(e.getMessage().contains("id=" + StorageOnlyProvider.ID));
     }
 
     /**
@@ -129,6 +154,113 @@ public class SystemCatalogProviderTest {
         @Override
         public Iterable<? extends PluginProvider> getProviders() {
             return Arrays.asList(new CatalogProvider());
+        }
+    }
+
+    /**
+     * Storage plugin intentionally missing the matching system catalog provider.
+     */
+    public static final class StorageOnlyPlugin implements H2Plugin {
+        @Override
+        public String getId() {
+            return "test.storage.only";
+        }
+
+        @Override
+        public String getVersion() {
+            return "1";
+        }
+
+        @Override
+        public String getDisplayName() {
+            return "Storage Only Plugin";
+        }
+
+        @Override
+        public Iterable<? extends PluginProvider> getProviders() {
+            return Arrays.asList(new StorageOnlyProvider());
+        }
+    }
+
+    private static final class StorageOnlyProvider implements StorageEngineProvider {
+        static final String ID = "storage_without_catalog";
+
+        @Override
+        public String getType() {
+            return TYPE;
+        }
+
+        @Override
+        public String getId() {
+            return ID;
+        }
+
+        @Override
+        public boolean supports(String capability) {
+            return PluginCapability.STORAGE_PERSISTENT.equals(capability);
+        }
+
+        @Override
+        public StorageEngine open(StorageEngineContext context) {
+            return new StorageOnlyEngine(context);
+        }
+    }
+
+    private static final class StorageOnlyEngine implements MVStoreBackedStorageEngine {
+        private final Store store;
+
+        StorageOnlyEngine(StorageEngineContext context) {
+            this.store = new Store(context.getDatabase(), context.getFilePasswordHash());
+        }
+
+        @Override
+        public String getEngineId() {
+            return StorageOnlyProvider.ID;
+        }
+
+        @Override
+        public boolean supports(String capability) {
+            return PluginCapability.STORAGE_PERSISTENT.equals(capability);
+        }
+
+        @Override
+        public void flush() {
+            store.flush();
+        }
+
+        @Override
+        public void closeImmediately() {
+            store.closeImmediately();
+        }
+
+        @Override
+        public StorageMaintenance getMaintenance() {
+            return new StorageMaintenance() {
+                @Override
+                public boolean supports(String capability) {
+                    return false;
+                }
+
+                @Override
+                public StorageMaintenanceResult compactClosed() {
+                    return StorageMaintenanceResult.UNSUPPORTED;
+                }
+
+                @Override
+                public StorageMaintenanceResult compactOnline() {
+                    return StorageMaintenanceResult.UNSUPPORTED;
+                }
+
+                @Override
+                public StorageMaintenanceResult vacuumOnline() {
+                    return StorageMaintenanceResult.UNSUPPORTED;
+                }
+            };
+        }
+
+        @Override
+        public Store getStore() {
+            return store;
         }
     }
 

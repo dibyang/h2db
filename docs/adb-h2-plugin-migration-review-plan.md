@@ -320,7 +320,7 @@ cd D:\work\java\h2db\h2
 验收：
 
 - 文档明确 system catalog、LOB、事务日志、临时结果的所有权。
-- 新增非 MVStore system catalog provider 契约测试。
+- 新增 matching system catalog provider 缺失时拒绝打开的契约测试。
 - 默认 H2 MVStore 行为、ADB table provider 原型行为均不回退。
 
 ### ADB-P1：ADB 最小插件原型

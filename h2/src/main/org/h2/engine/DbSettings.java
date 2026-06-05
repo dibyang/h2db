@@ -283,27 +283,6 @@ public class DbSettings extends SettingsBase {
     public final boolean missingStorageReadOnlyDowngrade = get("MISSING_STORAGE_READ_ONLY_DOWNGRADE", false);
 
     /**
-     * Database setting <code>PLUGIN_CLASSES</code>
-     * (default: null).
-     * Comma-separated {@link org.h2.api.H2Plugin} class names to load explicitly.
-     */
-    public final String pluginClasses = get("PLUGIN_CLASSES", null);
-
-    /**
-     * Database setting <code>PLUGIN_PATHS</code>
-     * (default: null).
-     * Comma-separated jar or directory paths used as isolated plugin classpath.
-     */
-    public final String pluginPaths = get("PLUGIN_PATHS", null);
-
-    /**
-     * Database setting <code>PLUGIN_SERVICE_LOADER</code>
-     * (default: false).
-     * Whether plugins should be discovered from {@link java.util.ServiceLoader}.
-     */
-    public final boolean pluginServiceLoader = get("PLUGIN_SERVICE_LOADER", false);
-
-    /**
      * Database setting <code>MV_STORE</code>
      * (default: true).
      * Use the MVStore storage engine.

@@ -1,25 +1,31 @@
 # Plugin Usage Guide
 
-This document is for users and developers who want to extend H2 storage engines or table engines. The current plugin mechanism uses static loading: plugins are loaded when a database is opened. Hot loading, unloading, and online replacement are not supported yet.
+This document is for users and developers who want to extend H2 storage engines or table engines. The current plugin mechanism uses static loading: plugins are discovered through `ServiceLoader` and loaded when the Driver resolves custom JDBC URL prefixes and when a database is opened. Hot loading, unloading, and online replacement are not supported yet.
 
-## Settings
+## Automatic Discovery
+
+Plugin jars need to provide the standard service file on the classpath:
+
+```text
+META-INF/services/org.h2.api.H2Plugin
+```
+
+The file contains plugin implementation class names, one per line:
+
+```text
+com.acme.AcmePlugin
+```
+
+H2 no longer loads plugin classes from the JDBC URL. URL settings only select already discovered providers, for example:
+
+```sql
+jdbc:h2:./data/demo;STORAGE_ENGINE=acme_storage
+```
 
 | Setting | Default | Description |
 | --- | --- | --- |
-| `PLUGIN_CLASSES` | empty | Comma-separated `org.h2.api.H2Plugin` implementation class names loaded explicitly during database open |
-| `PLUGIN_PATHS` | empty | Comma-separated jar or directory paths used to create an isolated classloader for explicit plugin classes |
-| `PLUGIN_SERVICE_LOADER` | `FALSE` | Whether to discover `H2Plugin` implementations through `ServiceLoader`; disabled by default |
 | `STORAGE_ENGINE` | `mvstore` | Database-level storage engine provider id |
 | `MISSING_STORAGE_READ_ONLY_DOWNGRADE` | `FALSE` | Whether a missing storage provider may be opened through a read-only downgrade path; the database must also be opened read-only |
-
-Examples:
-
-```sql
-jdbc:h2:./data/demo;PLUGIN_CLASSES=com.acme.AcmePlugin
-jdbc:h2:./data/demo;PLUGIN_CLASSES=com.acme.AcmePlugin;PLUGIN_PATHS=plugins/acme.jar
-jdbc:h2:./data/demo;PLUGIN_SERVICE_LOADER=TRUE
-jdbc:h2:./data/demo;STORAGE_ENGINE=acme_storage
-```
 
 ## Minimal Plugin
 
@@ -158,7 +164,7 @@ The current phase does not support:
 | Capability | Notes |
 | --- | --- |
 | Hot loading, unloading, or online replacement | Plugins are loaded only during database open |
-| Plugin manifest and signing | Discovery currently uses class names or `ServiceLoader` |
+| Plugin manifest and signing | Discovery currently uses `ServiceLoader` |
 | Multiple plugin versions at the same time | Dependencies currently check plugin ids; complex version resolution is deferred |
 | Parser/function/auth extension points | The current provider whitelist only allows storage and table providers |
-| Dedicated permission sandbox | Current boundaries are provider type whitelist, classloader usage, and configuration diagnostics |
+| Dedicated permission sandbox | Current boundaries are provider type whitelist and load diagnostics |

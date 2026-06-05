@@ -2,7 +2,7 @@
 
 This is the English companion of [h2db-plugin-developer-guide.md](h2db-plugin-developer-guide.md).
 
-This guide is for plugin authors. It describes the currently available SPI, its stability boundaries, and minimal implementation patterns. For URL settings and SQL examples from a user perspective, see [plugin-usage.en.md](plugin/plugin-usage.en.md).
+This guide is for plugin authors. It describes the currently available SPI, its stability boundaries, and minimal implementation patterns. For automatic discovery, URL provider selection, and SQL examples from a user perspective, see [plugin-usage.en.md](plugin/plugin-usage.en.md).
 
 ## Current Scope
 
@@ -13,11 +13,9 @@ H2 plugins expose their plugin descriptor through `org.h2.api.H2Plugin` and exte
 - `StorageMaintenance`: exposes maintenance capabilities such as compact and vacuum.
 - `SystemCatalogProvider`: a prerequisite extension point for non-MVStore main paths and system catalog ownership.
 - `JdbcUrlPrefixProvider`: a Driver-level URL prefix extension point for mapping custom URLs such as `jdbc:adb:*` to `jdbc:h2:*`.
-- Explicit class loading: `PLUGIN_CLASSES=a.b.Plugin`.
-- Isolated path loading: `PLUGIN_PATHS=/path/to/plugin.jar`.
-- Optional discovery: `PLUGIN_SERVICE_LOADER=TRUE` discovers `META-INF/services/org.h2.api.H2Plugin`.
+- Automatic discovery: H2 reads `META-INF/services/org.h2.api.H2Plugin` from the classpath.
 
-ServiceLoader plugins on the classpath are not enabled by default. This keeps provider conflicts and startup behavior explicit.
+Plugin loading no longer depends on JDBC URL parameters. Once a plugin jar is on the application classpath and publishes the `ServiceLoader` file, it is discovered both by the Driver early path and by the database-open path.
 
 The current plugin model is static at database-open time. After plugins are loaded, the registry is fixed; hot loading, unloading, online replacement, and multiple active versions of the same plugin are not supported.
 
@@ -43,7 +41,7 @@ Version ranges support three forms:
 - Exact version, such as `2.2`.
 - Ranges, such as `[2.2,3.0)` or `[2.2,2.3]`.
 
-Dependencies are declared with `PluginDependency`. When multiple explicit plugins are loaded, H2 registers them in dependency order. Missing dependencies or dependency cycles fail database startup.
+Dependencies are declared with `PluginDependency`. When multiple automatically discovered plugins are loaded, H2 registers them in dependency order. Missing dependencies or dependency cycles fail database startup.
 
 Minimal plugin descriptor example:
 
@@ -107,18 +105,9 @@ New capabilities should use stable strings and should normally stay under the `t
 
 ## Driver-Level Plugin Loading
 
-`JdbcUrlPrefixProvider` registers JDBC URL prefixes before a database is opened, for example by mapping `jdbc:adb:*` to a regular `jdbc:h2:*` URL. Because `Driver.acceptsURL()` and `Driver.connect()` run before `Database` is created, these providers cannot rely on `PLUGIN_CLASSES` inside the database URL.
+`JdbcUrlPrefixProvider` registers JDBC URL prefixes before a database is opened, for example by mapping `jdbc:adb:*` to a regular `jdbc:h2:*` URL. Because `Driver.acceptsURL()` and `Driver.connect()` run before `Database` is created, these providers cannot rely on plugin-loading parameters inside the database URL.
 
-Driver-level plugins are loaded from global plugin system properties, Driver-only system properties, or `ServiceLoader`. If the same plugin also provides table or storage providers, prefer the global properties so Driver URL resolution and Database provider registration use the same plugin set.
-
-| System property | Meaning |
-| --- | --- |
-| `h2.pluginClasses` | Comma-separated `H2Plugin` class names loaded both by the Driver early path and by Database provider registration. |
-| `h2.pluginPaths` | Comma-separated plugin jar or directory paths, used with `h2.pluginClasses`. |
-| `h2.pluginServiceLoader` | When set to `true`, both Driver and Database discover plugins through `META-INF/services/org.h2.api.H2Plugin`. |
-| `h2.driverPluginClasses` | Comma-separated `H2Plugin` class names loaded only by the Driver early path. |
-| `h2.driverPluginPaths` | Comma-separated plugin jar or directory paths, used with `h2.driverPluginClasses`. |
-| `h2.driverPluginServiceLoader` | When set to `true`, only the Driver discovers plugins through `META-INF/services/org.h2.api.H2Plugin`. |
+Driver-level plugins are discovered only through `ServiceLoader`. If the same plugin also provides table or storage providers, Driver URL resolution and Database provider registration use the same classpath service file.
 
 `JdbcUrlPrefixProvider.toH2Url()` must return a URL that starts with `jdbc:h2:`; other prefixes fail the connection. The mapped URL then uses the existing H2 connection, authorization, storage, and table provider flow.
 
@@ -273,21 +262,7 @@ The sidecar metadata file name is the database path plus the `.storage` suffix. 
 
 ## Loading Modes
 
-Explicit class loading:
-
-```sql
-jdbc:h2:./data/demo;PLUGIN_CLASSES=com.acme.AcmePlugin
-```
-
-Loading from a jar or directory:
-
-```sql
-jdbc:h2:./data/demo;PLUGIN_CLASSES=com.acme.AcmePlugin;PLUGIN_PATHS=plugins/acme.jar
-```
-
-`PLUGIN_PATHS` creates a separate `URLClassLoader` for explicit plugin classes and attempts to close it after loading. Plugins should not depend on the loader keeping mutable resources open for the full database lifetime.
-
-ServiceLoader loading is disabled by default. To enable discovery, add this file to the plugin jar:
+Plugins are discovered automatically through `ServiceLoader`. Add this file to the plugin jar:
 
 ```text
 META-INF/services/org.h2.api.H2Plugin
@@ -299,11 +274,7 @@ The file contains the plugin class name:
 com.acme.AcmePlugin
 ```
 
-Then enable discovery explicitly:
-
-```sql
-jdbc:h2:./data/demo;PLUGIN_SERVICE_LOADER=TRUE
-```
+After the plugin jar is on the application classpath, no JDBC URL plugin-loading parameter is needed. URL settings may still select already discovered providers with `STORAGE_ENGINE`, `DEFAULT_TABLE_ENGINE`, or SQL `ENGINE`.
 
 ## Diagnostics
 

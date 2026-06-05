@@ -103,8 +103,7 @@ public class SystemCatalogProviderTest {
      */
     @Test
     public void storageProviderWithoutMatchingSystemCatalogProviderFailsOpen() {
-        String url = "jdbc:h2:mem:pluginSystemCatalogMissing;PLUGIN_CLASSES="
-                + StorageOnlyPlugin.class.getName() + ";STORAGE_ENGINE=" + StorageOnlyProvider.ID;
+        String url = "jdbc:h2:mem:pluginSystemCatalogMissing;STORAGE_ENGINE=" + StorageOnlyProvider.ID;
 
         SQLException e = assertThrows(SQLException.class, () ->
                 DriverManager.getConnection(url, "sa", ""));
@@ -119,7 +118,7 @@ public class SystemCatalogProviderTest {
      */
     @Test
     public void configuredSystemCatalogProviderCanRegister() throws Exception {
-        String url = "jdbc:h2:mem:pluginSystemCatalog;PLUGIN_CLASSES=" + CatalogPlugin.class.getName();
+        String url = "jdbc:h2:mem:pluginSystemCatalog";
 
         try (Connection conn = DriverManager.getConnection(url, "sa", "")) {
             Database db = database(conn);
@@ -133,8 +132,7 @@ public class SystemCatalogProviderTest {
      */
     @Test
     public void systemCatalogProviderIsVisibleInDiagnostics() throws Exception {
-        String url = "jdbc:h2:mem:pluginSystemCatalogDiagnostics;PLUGIN_CLASSES="
-                + CatalogPlugin.class.getName();
+        String url = "jdbc:h2:mem:pluginSystemCatalogDiagnostics";
 
         try (Connection conn = DriverManager.getConnection(url, "sa", "");
                 Statement stat = conn.createStatement()) {

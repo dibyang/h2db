@@ -8,7 +8,7 @@ Included in this round:
 
 | Area | Content |
 | --- | --- |
-| Plugin entrypoints | `H2Plugin`, `PluginProvider`, explicit class loading, `PLUGIN_PATHS`, optional `ServiceLoader` |
+| Plugin entrypoints | `H2Plugin`, `PluginProvider`, default `ServiceLoader` automatic discovery |
 | Registry | Provider type/id uniqueness, source, capabilities, diagnostic snapshots |
 | Storage engines | `StorageEngineProvider`, `StorageEngine`, persisted storage engine id, read-only downgrade policy |
 | Table engines | `TableEngineProvider`, `TableEngineContext`, built-in MVStore table engine provider path |
@@ -67,7 +67,7 @@ P1-P8 are complete. The plugin foundation currently provides:
 | Capability | Status |
 | --- | --- |
 | Plugin registry | Provider registration, uniqueness checks, capability diagnostics, invalid descriptor rejection |
-| Plugin loading | Explicit classes, `PLUGIN_PATHS` classloader, optional `ServiceLoader`, version ranges, dependency ordering, missing dependency diagnostics, and dependency-cycle diagnostics |
+| Plugin loading | Default `ServiceLoader` automatic discovery, version ranges, dependency ordering, missing dependency diagnostics, and dependency-cycle diagnostics |
 | Built-in plugins | MVStore storage/table providers registered and resolved through the built-in registry path |
 | Table-engine extension | External `TableEngineProvider` can create tables through SQL engine ids and receive table/schema params |
 | Storage-engine extension | Storage provider resolution, storage id persistence, mismatch rejection, read-only downgrade, and maintenance capability boundaries |

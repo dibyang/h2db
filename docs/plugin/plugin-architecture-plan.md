@@ -8,7 +8,7 @@
 
 | 领域 | 内容 |
 | --- | --- |
-| 插件入口 | `H2Plugin`、`PluginProvider`、显式 class 加载、`PLUGIN_PATHS`、可选 `ServiceLoader` |
+| 插件入口 | `H2Plugin`、`PluginProvider`、默认 `ServiceLoader` 自动发现 |
 | 注册中心 | provider type/id 唯一性、来源、能力、诊断快照 |
 | 存储引擎 | `StorageEngineProvider`、`StorageEngine`、持久化 storage engine id、只读降级策略 |
 | 表引擎 | `TableEngineProvider`、`TableEngineContext`、内置 MVStore table engine provider 路径 |
@@ -67,7 +67,7 @@ P1-P8 已完成。插件化基础设施当前具备：
 | 能力 | 状态 |
 | --- | --- |
 | 插件注册中心 | 支持 provider 注册、唯一性校验、能力诊断、无效描述符拒绝 |
-| 插件加载 | 支持显式 class、`PLUGIN_PATHS` classloader、可选 `ServiceLoader`、版本范围、依赖排序、依赖缺失和依赖环诊断 |
+| 插件加载 | 支持默认 `ServiceLoader` 自动发现、版本范围、依赖排序、依赖缺失和依赖环诊断 |
 | 内置插件 | MVStore storage/table provider 通过 builtin registry 路径注册和解析 |
 | 表引擎扩展 | 支持外部 `TableEngineProvider` 通过 SQL engine id 建表，并传递 table/schema params |
 | 存储引擎扩展 | 支持 storage provider 解析、storage id 持久化、不匹配拒绝、只读降级和维护能力边界 |

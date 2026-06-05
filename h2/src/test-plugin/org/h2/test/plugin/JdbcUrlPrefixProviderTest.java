@@ -31,26 +31,19 @@ import org.junit.jupiter.api.Test;
 public class JdbcUrlPrefixProviderTest {
 
     /**
-     * T-PLUGIN-P5-JDBC-PREFIX-CONFIG-01.
+     * T-PLUGIN-P5-JDBC-PREFIX-AUTO-01.
      */
     @Test
-    public void configuredDriverPluginMapsCustomJdbcPrefixAndRegistersDatabaseProviders() throws Exception {
-        withSystemProperty("h2.pluginClasses", ConfiguredPrefixPlugin.class.getName(), () -> {
-            withSystemProperty("h2.driverPluginClasses", null, () -> {
-                withSystemProperty("h2.driverPluginServiceLoader", null, () -> {
-                    java.sql.Driver driver = Driver.load();
+    public void serviceLoaderMapsAdbJdbcPrefixAndRegistersDatabaseProviders() throws Exception {
+        java.sql.Driver driver = Driver.load();
 
-                    assertTrue(driver.acceptsURL("jdbc:adb:mem:pluginJdbcPrefixConfigured"));
+        assertTrue(driver.acceptsURL("jdbc:adb:mem:pluginJdbcPrefixAuto"));
 
-                    try (Connection conn = DriverManager.getConnection("jdbc:adb:mem:pluginJdbcPrefixConfigured",
-                            "sa", "")) {
-                        assertFalse(conn.createStatement().execute("create table test(id int)"));
-                        assertTrue(database(conn).getPluginRegistry().findProvider(TableEngineProvider.TYPE,
-                                ConfiguredPrefixPlugin.TABLE_PROVIDER_ID) instanceof TableEngineProvider);
-                    }
-                });
-            });
-        });
+        try (Connection conn = DriverManager.getConnection("jdbc:adb:mem:pluginJdbcPrefixAuto", "sa", "")) {
+            assertFalse(conn.createStatement().execute("create table test(id int)"));
+            assertTrue(database(conn).getPluginRegistry().findProvider(TableEngineProvider.TYPE,
+                    ServicePrefixPlugin.TABLE_PROVIDER_ID) instanceof TableEngineProvider);
+        }
     }
 
     /**
@@ -58,29 +51,21 @@ public class JdbcUrlPrefixProviderTest {
      */
     @Test
     public void serviceLoaderDriverPluginMapsCustomJdbcPrefix() throws Exception {
-        withSystemProperty("h2.driverPluginClasses", null, () -> {
-            withSystemProperty("h2.pluginServiceLoader", "true", () -> {
-                java.sql.Driver driver = Driver.load();
+        java.sql.Driver driver = Driver.load();
 
-                assertTrue(driver.acceptsURL("jdbc:svc:mem:pluginJdbcPrefixService"));
+        assertTrue(driver.acceptsURL("jdbc:svc:mem:pluginJdbcPrefixService"));
 
-                try (Connection conn = DriverManager.getConnection("jdbc:svc:mem:pluginJdbcPrefixService", "sa", "")) {
-                    assertTrue(conn.createStatement().execute("select 1"));
-                }
-            });
-        });
+        try (Connection conn = DriverManager.getConnection("jdbc:svc:mem:pluginJdbcPrefixService", "sa", "")) {
+            assertTrue(conn.createStatement().execute("select 1"));
+        }
     }
 
     /**
-     * T-PLUGIN-P5-JDBC-PREFIX-OFF-01.
+     * T-PLUGIN-P5-JDBC-PREFIX-NOMATCH-01.
      */
     @Test
-    public void customJdbcPrefixIsIgnoredWithoutDriverPluginConfiguration() throws Exception {
-        withSystemProperty("h2.pluginClasses", null, () ->
-                withSystemProperty("h2.pluginServiceLoader", null, () ->
-                        withSystemProperty("h2.driverPluginClasses", null, () ->
-                                withSystemProperty("h2.driverPluginServiceLoader", null, () ->
-                                        assertFalse(Driver.load().acceptsURL("jdbc:adb:mem:pluginJdbcPrefixOff"))))));
+    public void customJdbcPrefixIsIgnoredWhenNoDiscoveredProviderMatches() throws Exception {
+        assertFalse(Driver.load().acceptsURL("jdbc:unknownprefix:mem:pluginJdbcPrefixNoMatch"));
     }
 
     private static Database database(Connection conn) {
@@ -88,32 +73,9 @@ public class JdbcUrlPrefixProviderTest {
         return session.getDatabase();
     }
 
-    public static final class ConfiguredPrefixPlugin implements H2Plugin {
+    public static final class ServicePrefixPlugin implements H2Plugin {
         static final String TABLE_PROVIDER_ID = "jdbc_prefix_table";
 
-        @Override
-        public String getId() {
-            return "test.jdbc.prefix.configured";
-        }
-
-        @Override
-        public String getVersion() {
-            return "1";
-        }
-
-        @Override
-        public String getDisplayName() {
-            return "Configured JDBC Prefix Plugin";
-        }
-
-        @Override
-        public Iterable<? extends PluginProvider> getProviders() {
-            return Arrays.asList(new PrefixProvider("configured_prefix", "jdbc:adb:"),
-                    new TestTableProvider(TABLE_PROVIDER_ID));
-        }
-    }
-
-    public static final class ServicePrefixPlugin implements H2Plugin {
         @Override
         public String getId() {
             return "test.jdbc.prefix.service";
@@ -131,7 +93,9 @@ public class JdbcUrlPrefixProviderTest {
 
         @Override
         public Iterable<? extends PluginProvider> getProviders() {
-            return Arrays.asList(new PrefixProvider("service_prefix", "jdbc:svc:"));
+            return Arrays.asList(new PrefixProvider("adb_prefix", "jdbc:adb:"),
+                    new PrefixProvider("service_prefix", "jdbc:svc:"),
+                    new TestTableProvider(TABLE_PROVIDER_ID));
         }
     }
 
@@ -198,25 +162,4 @@ public class JdbcUrlPrefixProviderTest {
         }
     }
 
-    private static void withSystemProperty(String key, String value, CheckedRunnable runnable) throws Exception {
-        String old = System.getProperty(key);
-        try {
-            if (value == null) {
-                System.clearProperty(key);
-            } else {
-                System.setProperty(key, value);
-            }
-            runnable.run();
-        } finally {
-            if (old == null) {
-                System.clearProperty(key);
-            } else {
-                System.setProperty(key, old);
-            }
-        }
-    }
-
-    private interface CheckedRunnable {
-        void run() throws Exception;
-    }
 }

@@ -1,2 +1,7 @@
 org.h2.test.plugin.SampleServiceLoaderPlugin
 org.h2.test.plugin.JdbcUrlPrefixProviderTest$ServicePrefixPlugin
+org.h2.test.plugin.PluginLoaderTest$ConfiguredPlugin
+org.h2.test.plugin.MVStoreTableEngineProviderTest$ExternalTablePlugin
+org.h2.test.plugin.ContractTablePlugin
+org.h2.test.plugin.SystemCatalogProviderTest$CatalogPlugin
+org.h2.test.plugin.SystemCatalogProviderTest$StorageOnlyPlugin

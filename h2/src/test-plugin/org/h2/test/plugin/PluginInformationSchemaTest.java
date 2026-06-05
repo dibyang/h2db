@@ -69,15 +69,14 @@ public class PluginInformationSchemaTest {
      * T-PLUGIN-P7-EXTERNAL-INFO-SCHEMA-01.
      */
     @Test
-    public void exposesConfiguredPluginProviderRows() throws Exception {
-        String url = "jdbc:h2:mem:pluginConfiguredInfo;PLUGIN_CLASSES="
-                + PluginLoaderTest.ConfiguredPlugin.class.getName();
+    public void exposesDiscoveredPluginProviderRows() throws Exception {
+        String url = "jdbc:h2:mem:pluginDiscoveredInfo";
         try (Connection conn = DriverManager.getConnection(url, "sa", "");
                 Statement stat = conn.createStatement()) {
             try (ResultSet rs = stat.executeQuery("select source, is_builtin from information_schema.plugins "
                     + "where plugin_id = 'test.configured'")) {
                 assertTrue(rs.next());
-                assertEquals("CONFIGURED_CLASS", rs.getString(1));
+                assertEquals("SERVICE_LOADER", rs.getString(1));
                 assertTrue(!rs.getBoolean(2));
             }
             try (ResultSet rs = stat.executeQuery("select provider_type, provider_id from "

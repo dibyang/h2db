@@ -31,8 +31,8 @@ public class PluginHelpResourceTest {
             }
             String text = new String(out.toByteArray(), "UTF-8");
             assertTrue(text.contains("\"Advanced\",\"Plugins\""));
-            assertTrue(text.contains("PLUGIN_CLASSES"));
-            assertTrue(text.contains("PLUGIN_SERVICE_LOADER"));
+            assertTrue(text.contains("META-INF/services/org.h2.api.H2Plugin"));
+            assertTrue(text.contains("discovers these plugins automatically"));
             assertTrue(text.contains("STORAGE_ENGINE"));
         }
     }

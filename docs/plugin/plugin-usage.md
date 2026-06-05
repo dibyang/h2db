@@ -1,25 +1,31 @@
 # 插件化使用说明
 
-本文档面向希望扩展 H2 存储引擎或表引擎的使用者和开发者。当前插件机制是静态加载模型：数据库打开时加载插件，运行中不支持热加载、卸载或在线替换。
+本文档面向希望扩展 H2 存储引擎或表引擎的使用者和开发者。当前插件机制是静态加载模型：插件通过 `ServiceLoader` 自动发现，并在 Driver 解析自定义 JDBC URL 前缀和数据库打开时加载；运行中不支持热加载、卸载或在线替换。
 
-## 配置项
+## 自动发现
+
+插件 jar 需要在 classpath 上提供标准服务文件：
+
+```text
+META-INF/services/org.h2.api.H2Plugin
+```
+
+文件内容是插件实现类名，每行一个：
+
+```text
+com.acme.AcmePlugin
+```
+
+H2 不再通过 JDBC URL 加载插件类。URL 只用于选择已发现 provider，例如：
+
+```sql
+jdbc:h2:./data/demo;STORAGE_ENGINE=acme_storage
+```
 
 | 配置项 | 默认值 | 说明 |
 | --- | --- | --- |
-| `PLUGIN_CLASSES` | 空 | 逗号分隔的 `org.h2.api.H2Plugin` 实现类名，数据库打开时显式加载 |
-| `PLUGIN_PATHS` | 空 | 逗号分隔的 jar 或目录路径，用于为显式插件类创建独立 classloader |
-| `PLUGIN_SERVICE_LOADER` | `FALSE` | 是否通过 `ServiceLoader` 发现 `H2Plugin`；默认关闭 |
 | `STORAGE_ENGINE` | `mvstore` | 数据库级存储引擎 provider id |
 | `MISSING_STORAGE_READ_ONLY_DOWNGRADE` | `FALSE` | 缺失 storage provider 时是否允许只读降级打开；必须同时只读打开才生效 |
-
-示例：
-
-```sql
-jdbc:h2:./data/demo;PLUGIN_CLASSES=com.acme.AcmePlugin
-jdbc:h2:./data/demo;PLUGIN_CLASSES=com.acme.AcmePlugin;PLUGIN_PATHS=plugins/acme.jar
-jdbc:h2:./data/demo;PLUGIN_SERVICE_LOADER=TRUE
-jdbc:h2:./data/demo;STORAGE_ENGINE=acme_storage
-```
 
 ## 最小插件
 
@@ -158,7 +164,7 @@ SELECT * FROM INFORMATION_SCHEMA.PLUGIN_CAPABILITIES;
 | 能力 | 说明 |
 | --- | --- |
 | 热加载、卸载、在线替换 | 插件只在数据库打开时加载 |
-| 插件 manifest 和签名 | 当前通过类名或 `ServiceLoader` 发现 |
+| 插件 manifest 和签名 | 当前通过 `ServiceLoader` 自动发现 |
 | 多版本插件并存 | 当前依赖只检查插件 id，复杂版本解算留待后续 |
 | parser/function/auth 等扩展点 | 当前白名单只允许 storage 和 table provider |
-| 独立权限沙箱 | 当前主要边界是 provider type 白名单、classloader 和配置诊断 |
+| 独立权限沙箱 | 当前主要边界是 provider type 白名单和加载诊断 |

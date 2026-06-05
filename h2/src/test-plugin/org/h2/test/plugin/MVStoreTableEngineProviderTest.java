@@ -150,8 +150,7 @@ public class MVStoreTableEngineProviderTest {
      */
     @Test
     public void createsTableThroughExternalTableProviderId() throws Exception {
-        String url = "jdbc:h2:mem:pluginExternalTableProvider;PLUGIN_CLASSES="
-                + ExternalTablePlugin.class.getName();
+        String url = "jdbc:h2:mem:pluginExternalTableProvider";
         try (Connection conn = DriverManager.getConnection(url, "sa", "");
                 Statement stat = conn.createStatement()) {
             assertNotNull(database(conn).getPluginRegistry().findProvider(TableEngineProvider.TYPE,
@@ -167,9 +166,7 @@ public class MVStoreTableEngineProviderTest {
      */
     @Test
     public void passesSchemaDefaultParamsToExternalTableProvider() throws Exception {
-        String url = "jdbc:h2:mem:pluginExternalDefaultParams;PLUGIN_CLASSES="
-                + ExternalTablePlugin.class.getName()
-                + ";DEFAULT_TABLE_ENGINE=external_mvstore";
+        String url = "jdbc:h2:mem:pluginExternalDefaultParams;DEFAULT_TABLE_ENGINE=external_mvstore";
         try (Connection conn = DriverManager.getConnection(url, "sa", "");
                 Statement stat = conn.createStatement()) {
             stat.execute("create schema s with \"schema_param\"");

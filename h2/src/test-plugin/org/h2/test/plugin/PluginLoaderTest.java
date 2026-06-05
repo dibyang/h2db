@@ -9,7 +9,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Arrays;
@@ -21,12 +20,11 @@ import org.h2.api.PluginCapability;
 import org.h2.api.PluginProvider;
 import org.h2.api.TableEngineProvider;
 import org.h2.command.ddl.CreateTableData;
-import org.h2.engine.Database;
+import org.h2.engine.BuiltinPlugins;
 import org.h2.engine.PluginLoader;
 import org.h2.engine.PluginRegistry;
 import org.h2.engine.PluginSource;
-import org.h2.engine.SessionLocal;
-import org.h2.jdbc.JdbcConnection;
+import org.h2.message.DbException;
 import org.h2.table.Table;
 import org.junit.jupiter.api.Test;
 
@@ -39,13 +37,10 @@ public class PluginLoaderTest {
      * T-PLUGIN-F4-LOAD-CLASS-01.
      */
     @Test
-    public void loadsConfiguredPluginClass() throws Exception {
-        try (Connection conn = DriverManager.getConnection(url("pluginLoad",
-                ConfiguredPlugin.class.getName()), "sa", "")) {
-            Database db = database(conn);
+    public void loadsConfiguredPluginClass() {
+        PluginRegistry registry = configuredRegistry();
 
-            assertNotNull(db.getPluginRegistry().findProvider(TableEngineProvider.TYPE, "external_table"));
-        }
+        assertNotNull(registry.findProvider(TableEngineProvider.TYPE, "external_table"));
     }
 
     /**
@@ -53,8 +48,8 @@ public class PluginLoaderTest {
      */
     @Test
     public void failsWhenConfiguredPluginClassIsMissing() {
-        SQLException e = assertThrows(SQLException.class, () ->
-                DriverManager.getConnection(url("pluginMissing", "example.MissingPlugin"), "sa", ""));
+        DbException e = assertThrows(DbException.class, () ->
+                configuredRegistry("example.MissingPlugin"));
 
         assertTrue(e.getMessage().contains("Could not load configured plugin class"));
         assertTrue(e.getMessage().toLowerCase().contains("missingplugin"));
@@ -65,8 +60,8 @@ public class PluginLoaderTest {
      */
     @Test
     public void rejectsConfiguredPluginConflictWithBuiltinProvider() {
-        SQLException e = assertThrows(SQLException.class, () ->
-                DriverManager.getConnection(url("pluginConflict", ConflictingPlugin.class.getName()), "sa", ""));
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () ->
+                configuredRegistry(ConflictingPlugin.class.getName()));
 
         assertTrue(e.getMessage().contains("Duplicate built-in plugin provider"));
         assertTrue(e.getMessage().contains("id=mvstore"));
@@ -77,8 +72,8 @@ public class PluginLoaderTest {
      */
     @Test
     public void rejectsUnsupportedH2VersionRange() {
-        SQLException e = assertThrows(SQLException.class, () ->
-                DriverManager.getConnection(url("pluginVersion", VersionMismatchPlugin.class.getName()), "sa", ""));
+        DbException e = assertThrows(DbException.class, () ->
+                configuredRegistry(VersionMismatchPlugin.class.getName()));
 
         assertTrue(e.getMessage().contains("does not support this H2 version"));
         assertTrue(e.getMessage().contains("required=0.0"));
@@ -88,13 +83,10 @@ public class PluginLoaderTest {
      * T-PLUGIN-R7-VERSION-RANGE-SEMANTICS-01.
      */
     @Test
-    public void acceptsSupportedH2VersionRange() throws Exception {
-        try (Connection conn = DriverManager.getConnection(url("pluginVersionRange",
-                SupportedRangePlugin.class.getName()), "sa", "")) {
-            Database db = database(conn);
+    public void acceptsSupportedH2VersionRange() {
+        PluginRegistry registry = configuredRegistry(SupportedRangePlugin.class.getName());
 
-            assertNotNull(db.getPluginRegistry().findProvider(TableEngineProvider.TYPE, "version_range_table"));
-        }
+        assertNotNull(registry.findProvider(TableEngineProvider.TYPE, "version_range_table"));
     }
 
     /**
@@ -102,9 +94,8 @@ public class PluginLoaderTest {
      */
     @Test
     public void rejectsMissingPluginDependency() {
-        SQLException e = assertThrows(SQLException.class, () ->
-                DriverManager.getConnection(url("pluginDependency", MissingDependencyPlugin.class.getName()),
-                        "sa", ""));
+        DbException e = assertThrows(DbException.class, () ->
+                configuredRegistry(MissingDependencyPlugin.class.getName()));
 
         assertTrue(e.getMessage().contains("Configured plugin dependency is missing"));
         assertTrue(e.getMessage().contains("dependency=missing.plugin"));
@@ -116,8 +107,7 @@ public class PluginLoaderTest {
     @Test
     public void rejectsPluginDependencyCycle() {
         String classes = CycleAPlugin.class.getName() + "," + CycleBPlugin.class.getName();
-        SQLException e = assertThrows(SQLException.class, () ->
-                DriverManager.getConnection(url("pluginDependencyCycle", classes), "sa", ""));
+        DbException e = assertThrows(DbException.class, () -> configuredRegistry(classes));
 
         assertTrue(e.getMessage().contains("Configured plugin dependency cycle"));
         assertTrue(e.getMessage().contains("plugin=test.cycle.a"));
@@ -128,9 +118,8 @@ public class PluginLoaderTest {
      */
     @Test
     public void rejectsInvalidPluginDescriptorBeforeSecurityValidation() {
-        SQLException e = assertThrows(SQLException.class, () ->
-                DriverManager.getConnection(url("pluginInvalidDescriptor", EmptyIdPlugin.class.getName()),
-                        "sa", ""));
+        DbException e = assertThrows(DbException.class, () ->
+                configuredRegistry(EmptyIdPlugin.class.getName()));
 
         assertTrue(e.getMessage().contains("Configured plugin descriptor is invalid"));
         assertTrue(e.getMessage().contains("plugin id is empty"));
@@ -141,9 +130,8 @@ public class PluginLoaderTest {
      */
     @Test
     public void rejectsPluginWithoutProviders() {
-        SQLException e = assertThrows(SQLException.class, () ->
-                DriverManager.getConnection(url("pluginNoProvider", NoProviderPlugin.class.getName()),
-                        "sa", ""));
+        DbException e = assertThrows(DbException.class, () ->
+                configuredRegistry(NoProviderPlugin.class.getName()));
 
         assertTrue(e.getMessage().contains("Configured plugin descriptor is invalid"));
         assertTrue(e.getMessage().contains("reason=no providers"));
@@ -155,12 +143,10 @@ public class PluginLoaderTest {
     @Test
     public void registersConfiguredPluginsInDependencyOrder() throws Exception {
         String classes = DependentPlugin.class.getName() + "," + ConfiguredPlugin.class.getName();
-        try (Connection conn = DriverManager.getConnection(url("pluginDependencyOrder", classes), "sa", "")) {
-            Database db = database(conn);
+        PluginRegistry registry = configuredRegistry(classes);
 
-            assertNotNull(db.getPluginRegistry().findProvider(TableEngineProvider.TYPE, "external_table"));
-            assertNotNull(db.getPluginRegistry().findProvider(TableEngineProvider.TYPE, "dependent_table"));
-        }
+        assertNotNull(registry.findProvider(TableEngineProvider.TYPE, "external_table"));
+        assertNotNull(registry.findProvider(TableEngineProvider.TYPE, "dependent_table"));
     }
 
     /**
@@ -168,9 +154,8 @@ public class PluginLoaderTest {
      */
     @Test
     public void providerConflictIncludesPluginDiagnostics() {
-        SQLException e = assertThrows(SQLException.class, () ->
-                DriverManager.getConnection(url("pluginConflictDiagnostics", ConflictingPlugin.class.getName()),
-                        "sa", ""));
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () ->
+                configuredRegistry(ConflictingPlugin.class.getName()));
 
         assertTrue(e.getMessage().contains("existingPlugin=h2.mvstore"));
         assertTrue(e.getMessage().contains("newSource=CONFIGURED_CLASS"));
@@ -181,9 +166,8 @@ public class PluginLoaderTest {
      */
     @Test
     public void rejectsForbiddenProviderType() {
-        SQLException e = assertThrows(SQLException.class, () ->
-                DriverManager.getConnection(url("pluginForbiddenType", ForbiddenProviderPlugin.class.getName()),
-                        "sa", ""));
+        DbException e = assertThrows(DbException.class, () ->
+                configuredRegistry(ForbiddenProviderPlugin.class.getName()));
 
         assertTrue(e.getMessage().contains("provider type is not allowed"));
         assertTrue(e.getMessage().contains("type=parser"));
@@ -231,7 +215,7 @@ public class PluginLoaderTest {
      * T-PLUGIN-R8-SAMPLE-PLUGIN-01.
      */
     @Test
-    public void serviceLoaderStillRequiresExplicitEnablement() {
+    public void serviceLoaderCanStillBeDisabledForLowLevelTests() {
         PluginRegistry registry = new PluginRegistry();
         int loaded = PluginLoader.loadServiceLoaderPlugins(registry, false);
 
@@ -250,13 +234,28 @@ public class PluginLoaderTest {
         assertTrue(plugin.getH2VersionRange().equals("*"));
     }
 
-    private static String url(String name, String pluginClass) {
-        return "jdbc:h2:mem:" + name + ";PLUGIN_CLASSES=" + pluginClass;
+    /**
+     * T-PLUGIN-P5-URL-LOAD-DISABLED-01.
+     */
+    @Test
+    public void rejectsPluginLoadingFromJdbcUrlSettings() {
+        SQLException e = assertThrows(SQLException.class, () -> DriverManager.getConnection(
+                "jdbc:h2:mem:pluginUrlLoadingDisabled;PLUGIN_CLASSES="
+                        + ConfiguredPlugin.class.getName(), "sa", ""));
+
+        assertTrue(e.getMessage().contains("Unsupported connection setting"));
+        assertTrue(e.getMessage().contains("PLUGIN_CLASSES"));
     }
 
-    private static Database database(Connection conn) {
-        SessionLocal session = (SessionLocal) ((JdbcConnection) conn).getSession();
-        return session.getDatabase();
+    private static PluginRegistry configuredRegistry() {
+        return configuredRegistry(ConfiguredPlugin.class.getName());
+    }
+
+    private static PluginRegistry configuredRegistry(String pluginClasses) {
+        PluginRegistry registry = new PluginRegistry();
+        BuiltinPlugins.register(registry);
+        PluginLoader.loadConfiguredPlugins(registry, pluginClasses);
+        return registry;
     }
 
     /**

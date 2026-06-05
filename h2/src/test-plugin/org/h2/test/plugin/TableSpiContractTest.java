@@ -48,8 +48,7 @@ public class TableSpiContractTest {
     @Test
     public void configuredTableProviderCanCreateTable() throws Exception {
         ContractTableProvider.reset();
-        String url = "jdbc:h2:mem:pluginTableCreate;PLUGIN_CLASSES=" + ContractTablePlugin.class.getName()
-                + ";DEFAULT_TABLE_ENGINE=" + ContractTableProvider.ID;
+        String url = "jdbc:h2:mem:pluginTableCreate;DEFAULT_TABLE_ENGINE=" + ContractTableProvider.ID;
 
         try (Connection conn = DriverManager.getConnection(url, "sa", "");
                 Statement stat = conn.createStatement()) {
@@ -72,8 +71,7 @@ public class TableSpiContractTest {
     @Test
     public void tableProviderIntegratesWithBasicCrud() throws Exception {
         ContractTableProvider.reset();
-        String url = "jdbc:h2:mem:pluginTableCrud;PLUGIN_CLASSES=" + ContractTablePlugin.class.getName()
-                + ";DEFAULT_TABLE_ENGINE=" + ContractTableProvider.ID;
+        String url = "jdbc:h2:mem:pluginTableCrud;DEFAULT_TABLE_ENGINE=" + ContractTableProvider.ID;
 
         try (Connection conn = DriverManager.getConnection(url, "sa", "");
                 Statement stat = conn.createStatement()) {
@@ -98,8 +96,7 @@ public class TableSpiContractTest {
     @Test
     public void tableProviderIntegratesWithUpdateAndDelete() throws Exception {
         ContractTableProvider.reset();
-        String url = "jdbc:h2:mem:pluginTableUpdateDelete;PLUGIN_CLASSES="
-                + ContractTablePlugin.class.getName() + ";DEFAULT_TABLE_ENGINE=" + ContractTableProvider.ID;
+        String url = "jdbc:h2:mem:pluginTableUpdateDelete;DEFAULT_TABLE_ENGINE=" + ContractTableProvider.ID;
 
         try (Connection conn = DriverManager.getConnection(url, "sa", "");
                 Statement stat = conn.createStatement()) {
@@ -122,8 +119,7 @@ public class TableSpiContractTest {
     @Test
     public void tableProviderKeepsPrimaryKeyIndexUsable() throws Exception {
         ContractTableProvider.reset();
-        String url = "jdbc:h2:mem:pluginTableIndexPlan;PLUGIN_CLASSES="
-                + ContractTablePlugin.class.getName() + ";DEFAULT_TABLE_ENGINE=" + ContractTableProvider.ID;
+        String url = "jdbc:h2:mem:pluginTableIndexPlan;DEFAULT_TABLE_ENGINE=" + ContractTableProvider.ID;
 
         try (Connection conn = DriverManager.getConnection(url, "sa", "");
                 Statement stat = conn.createStatement()) {
@@ -143,8 +139,7 @@ public class TableSpiContractTest {
     @Test
     public void tableProviderIntegratesWithDrop() throws Exception {
         ContractTableProvider.reset();
-        String url = "jdbc:h2:mem:pluginTableDrop;PLUGIN_CLASSES=" + ContractTablePlugin.class.getName()
-                + ";DEFAULT_TABLE_ENGINE=" + ContractTableProvider.ID;
+        String url = "jdbc:h2:mem:pluginTableDrop;DEFAULT_TABLE_ENGINE=" + ContractTableProvider.ID;
 
         try (Connection conn = DriverManager.getConnection(url, "sa", "");
                 Statement stat = conn.createStatement()) {
@@ -165,8 +160,7 @@ public class TableSpiContractTest {
     @Test
     public void tableProviderCreateSqlRemainsScriptable() throws Exception {
         ContractTableProvider.reset();
-        String url = "jdbc:h2:mem:pluginTableScript;PLUGIN_CLASSES=" + ContractTablePlugin.class.getName()
-                + ";DEFAULT_TABLE_ENGINE=" + ContractTableProvider.ID;
+        String url = "jdbc:h2:mem:pluginTableScript;DEFAULT_TABLE_ENGINE=" + ContractTableProvider.ID;
 
         try (Connection conn = DriverManager.getConnection(url, "sa", "");
                 Statement stat = conn.createStatement()) {
@@ -188,8 +182,7 @@ public class TableSpiContractTest {
     @Test
     public void explicitWithParamsIsPassedToContext() throws Exception {
         ContractTableProvider.reset();
-        String url = "jdbc:h2:mem:pluginTableParams;MODE=REGULAR;PLUGIN_CLASSES="
-                + ContractTablePlugin.class.getName();
+        String url = "jdbc:h2:mem:pluginTableParams;MODE=REGULAR";
 
         try (Connection conn = DriverManager.getConnection(url, "sa", "");
                 Statement stat = conn.createStatement()) {
@@ -210,8 +203,7 @@ public class TableSpiContractTest {
     @Test
     public void tableContextExposesStorageAndDatabaseState() throws Exception {
         ContractTableProvider.reset();
-        String url = "jdbc:h2:mem:pluginTableContext;PLUGIN_CLASSES=" + ContractTablePlugin.class.getName()
-                + ";DEFAULT_TABLE_ENGINE=" + ContractTableProvider.ID;
+        String url = "jdbc:h2:mem:pluginTableContext;DEFAULT_TABLE_ENGINE=" + ContractTableProvider.ID;
 
         try (Connection conn = DriverManager.getConnection(url, "sa", "");
                 Statement stat = conn.createStatement()) {
@@ -231,8 +223,7 @@ public class TableSpiContractTest {
     @Test
     public void tableContextContainsExpectedSchema() throws Exception {
         ContractTableProvider.reset();
-        String url = "jdbc:h2:mem:pluginTableSchemaContext;PLUGIN_CLASSES=" + ContractTablePlugin.class.getName()
-                + ";DEFAULT_TABLE_ENGINE=" + ContractTableProvider.ID;
+        String url = "jdbc:h2:mem:pluginTableSchemaContext;DEFAULT_TABLE_ENGINE=" + ContractTableProvider.ID;
 
         try (Connection conn = DriverManager.getConnection(url, "sa", "");
                 Statement stat = conn.createStatement()) {
@@ -250,8 +241,7 @@ public class TableSpiContractTest {
     @Test
     public void schemaDefaultParamsArePassedToContext() throws Exception {
         ContractTableProvider.reset();
-        String url = "jdbc:h2:mem:pluginTableSchemaParams;PLUGIN_CLASSES=" + ContractTablePlugin.class.getName()
-                + ";DEFAULT_TABLE_ENGINE=" + ContractTableProvider.ID;
+        String url = "jdbc:h2:mem:pluginTableSchemaParams;DEFAULT_TABLE_ENGINE=" + ContractTableProvider.ID;
 
         try (Connection conn = DriverManager.getConnection(url, "sa", "");
                 Statement stat = conn.createStatement()) {
@@ -267,15 +257,15 @@ public class TableSpiContractTest {
      * T-PLUGIN-F5-TABLE-SPI-DIAGNOSTIC-01.
      */
     @Test
-    public void configuredTableProviderIsVisibleInDiagnostics() throws Exception {
-        String url = "jdbc:h2:mem:pluginTableDiagnostics;PLUGIN_CLASSES=" + ContractTablePlugin.class.getName();
+    public void discoveredTableProviderIsVisibleInDiagnostics() throws Exception {
+        String url = "jdbc:h2:mem:pluginTableDiagnostics";
 
         try (Connection conn = DriverManager.getConnection(url, "sa", "");
                 Statement stat = conn.createStatement()) {
             try (ResultSet rs = stat.executeQuery("select source, is_builtin from information_schema.plugins "
                     + "where plugin_id = '" + ContractTableProvider.PLUGIN_ID + "'")) {
                 assertTrue(rs.next());
-                assertEquals("CONFIGURED_CLASS", rs.getString(1));
+                assertEquals("SERVICE_LOADER", rs.getString(1));
                 assertTrue(!rs.getBoolean(2));
             }
             try (ResultSet rs = stat.executeQuery("select provider_type, provider_id from "

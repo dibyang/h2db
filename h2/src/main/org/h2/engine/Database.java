@@ -332,8 +332,7 @@ public final class Database implements DataHandler, CastDataProvider {
                 deleteOldTempFiles();
             }
             BuiltinPlugins.register(pluginRegistry);
-            PluginLoader.loadConfiguredPlugins(pluginRegistry, dbSettings.pluginClasses, dbSettings.pluginPaths);
-            PluginLoader.loadServiceLoaderPlugins(pluginRegistry, dbSettings.pluginServiceLoader);
+            PluginLoader.loadServiceLoaderPlugins(pluginRegistry, true);
             starting = true;
             if (dbSettings.mvStore) {
                 String requestedStorageEngineId = StorageEngineResolver.resolveRequested(dbSettings);

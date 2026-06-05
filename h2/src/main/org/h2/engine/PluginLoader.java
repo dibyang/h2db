@@ -7,6 +7,7 @@ package org.h2.engine;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.ServiceConfigurationError;
 import java.util.ServiceLoader;
 
 import org.h2.api.H2Plugin;
@@ -93,10 +94,17 @@ public final class PluginLoader {
         }
         int count = 0;
         ArrayList<H2Plugin> discovered = new ArrayList<>();
-        for (H2Plugin plugin : plugins) {
-            validateVersionAndSecurity(registry, plugin, plugin.getClass().getName());
-            discovered.add(plugin);
-            count++;
+        try {
+            for (H2Plugin plugin : plugins) {
+                String className = plugin == null ? "<null>" : plugin.getClass().getName();
+                validateVersionAndSecurity(registry, plugin, className);
+                discovered.add(plugin);
+                count++;
+            }
+        } catch (ServiceConfigurationError e) {
+            String sourceName = source == null ? "unknown" : source.name();
+            throw DbException.getUnsupportedException("ServiceLoader plugin discovery failed: source="
+                    + sourceName + ", cause=" + e.getClass().getName() + ": " + e.getMessage());
         }
         registerPluginsInDependencyOrder(registry, discovered, source);
         return count;

@@ -362,7 +362,7 @@ and `INFORMATION_SCHEMA.PLUGIN_CAPABILITIES` includes `PLUGIN_VERSION` on every 
 `INFORMATION_SCHEMA.PLUGIN_DEPENDENCIES` reports the declaring plugin id/version, dependency plugin id,
 dependency version range, and source for every loaded dependency declaration.
 
-Plugin load failures, version mismatches, missing dependencies, provider conflicts, and forbidden provider types fail during database open. Error messages should include plugin id, provider type/id, or class name to make configuration issues diagnosable.
+Plugin load failures, ServiceLoader discovery failures, version mismatches, missing dependencies, provider conflicts, and forbidden provider types fail during database open. Error messages should include plugin id, provider type/id, source, cause, or class name to make configuration issues diagnosable.
 
 ## Testing
 

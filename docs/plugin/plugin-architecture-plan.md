@@ -67,15 +67,16 @@
 | P15 | 已完成 | 多版本诊断闭环 | `INFORMATION_SCHEMA.PLUGINS` 按 plugin id/version 输出，`PLUGIN_CAPABILITIES` 能力行包含 `PLUGIN_VERSION` | `runPluginArchitectureCheck` |
 | P16 | 已完成 | 依赖诊断闭环 | 注册中心保存插件依赖快照并暴露 `INFORMATION_SCHEMA.PLUGIN_DEPENDENCIES`；加固非法依赖描述符 | `runPluginArchitectureCheck` |
 | P17 | 已完成 | 描述符诊断闭环 | 校验插件展示名称并在 `INFORMATION_SCHEMA.PLUGINS` 暴露 `DISPLAY_NAME`；修正多版本文档漂移 | `runPluginArchitectureCheck` |
+| P18 | 已完成 | ServiceLoader 失败诊断 | 自动发现失败时输出来源和 cause 诊断，不直接泄漏原始 service configuration error | `runPluginArchitectureCheck` |
 
 ## 当前收口状态
 
-P1-P8、P10、P11、P13、P14、P15、P16 与 P17 已完成。插件化基础设施当前具备：
+P1-P8、P10、P11、P13、P14、P15、P16、P17 与 P18 已完成。插件化基础设施当前具备：
 
 | 能力 | 状态 |
 | --- | --- |
 | 插件注册中心 | 支持 provider 注册、唯一性校验、描述符/能力/依赖诊断、无效描述符拒绝 |
-| 插件加载 | 支持默认 `ServiceLoader` 自动发现、版本范围、依赖排序、依赖缺失和依赖环诊断 |
+| 插件加载 | 支持默认 `ServiceLoader` 自动发现、发现失败诊断、版本范围、依赖排序、依赖缺失和依赖环诊断 |
 | 内置插件 | MVStore storage/table provider 通过 builtin registry 路径注册和解析 |
 | 表引擎扩展 | 支持外部 `TableEngineProvider` 通过 SQL engine id 建表，并传递 table/schema params |
 | Table provider 支撑层 | `TableProviderSupport` 覆盖只读 gate、storage 类型校验和 provider 失败诊断包装 |

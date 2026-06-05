@@ -67,15 +67,16 @@ If full acceptance fails in a network phase with a connection timeout, rerun the
 | P15 | Done | Multi-version diagnostics | Report each plugin id/version pair in `INFORMATION_SCHEMA.PLUGINS` and include `PLUGIN_VERSION` in capability rows | `runPluginArchitectureCheck` |
 | P16 | Done | Dependency diagnostics | Add plugin dependency snapshots to the registry and expose `INFORMATION_SCHEMA.PLUGIN_DEPENDENCIES`; harden invalid dependency descriptors | `runPluginArchitectureCheck` |
 | P17 | Done | Descriptor diagnostics | Validate plugin display names and expose `DISPLAY_NAME` in `INFORMATION_SCHEMA.PLUGINS`; fix multi-version documentation drift | `runPluginArchitectureCheck` |
+| P18 | Done | ServiceLoader failure diagnostics | Wrap ServiceLoader discovery failures with source and cause diagnostics instead of leaking raw service configuration errors | `runPluginArchitectureCheck` |
 
 ## Current Closeout Status
 
-P1-P8, P10, P11, P13, P14, P15, P16, and P17 are complete. The plugin foundation currently provides:
+P1-P8, P10, P11, P13, P14, P15, P16, P17, and P18 are complete. The plugin foundation currently provides:
 
 | Capability | Status |
 | --- | --- |
 | Plugin registry | Provider registration, uniqueness checks, descriptor/capability/dependency diagnostics, invalid descriptor rejection |
-| Plugin loading | Default `ServiceLoader` automatic discovery, version ranges, dependency ordering, missing dependency diagnostics, and dependency-cycle diagnostics |
+| Plugin loading | Default `ServiceLoader` automatic discovery, discovery failure diagnostics, version ranges, dependency ordering, missing dependency diagnostics, and dependency-cycle diagnostics |
 | Built-in plugins | MVStore storage/table providers registered and resolved through the built-in registry path |
 | Table-engine extension | External `TableEngineProvider` can create tables through SQL engine ids and receive table/schema params |
 | Table provider support layer | `TableProviderSupport` covers read-only gates, storage type checks, and provider failure wrapping |

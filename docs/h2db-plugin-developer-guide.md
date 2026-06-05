@@ -332,7 +332,7 @@ com.acme.AcmePlugin
 `INFORMATION_SCHEMA.PLUGIN_DEPENDENCIES` 会输出每条已加载依赖声明的声明方 plugin id/version、
 依赖 plugin id、依赖版本范围和来源。
 
-插件加载失败、版本不匹配、依赖缺失、provider 冲突和 provider type 禁止都会在数据库打开时报错。错误消息应包含 plugin id、provider type/id 或 class name，便于定位配置问题。
+插件加载失败、ServiceLoader 自动发现失败、版本不匹配、依赖缺失、provider 冲突和 provider type 禁止都会在数据库打开时报错。错误消息应包含 plugin id、provider type/id、source、cause 或 class name，便于定位配置问题。
 
 ## 测试建议
 

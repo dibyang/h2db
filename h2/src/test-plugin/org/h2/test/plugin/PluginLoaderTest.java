@@ -13,6 +13,8 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Iterator;
+import java.util.ServiceConfigurationError;
 
 import org.h2.api.H2Plugin;
 import org.h2.api.PluginDependency;
@@ -311,6 +313,20 @@ public class PluginLoaderTest {
     }
 
     /**
+     * T-PLUGIN-P18-SERVICELOADER-FAILURE-DIAGNOSTIC-01.
+     */
+    @Test
+    public void wrapsServiceLoaderDiscoveryFailures() {
+        DbException e = assertThrows(DbException.class, () ->
+                PluginLoader.loadDiscoveredPlugins(new PluginRegistry(), true,
+                        new FailingServiceLoaderPlugins(), PluginSource.SERVICE_LOADER));
+
+        assertTrue(e.getMessage().contains("ServiceLoader plugin discovery failed"));
+        assertTrue(e.getMessage().contains("source=SERVICE_LOADER"));
+        assertTrue(e.getMessage().contains("bad service entry"));
+    }
+
+    /**
      * T-PLUGIN-R8-SERVICE-RESOURCE-01.
      */
     @Test
@@ -367,6 +383,23 @@ public class PluginLoaderTest {
         BuiltinPlugins.register(registry);
         PluginLoader.loadConfiguredPlugins(registry, pluginClasses);
         return registry;
+    }
+
+    private static final class FailingServiceLoaderPlugins implements Iterable<H2Plugin> {
+        @Override
+        public Iterator<H2Plugin> iterator() {
+            return new Iterator<H2Plugin>() {
+                @Override
+                public boolean hasNext() {
+                    return true;
+                }
+
+                @Override
+                public H2Plugin next() {
+                    throw new ServiceConfigurationError("bad service entry");
+                }
+            };
+        }
     }
 
     /**

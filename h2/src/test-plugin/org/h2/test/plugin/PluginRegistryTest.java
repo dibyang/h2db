@@ -98,6 +98,9 @@ public class PluginRegistryTest {
         assertIllegalArgumentContains(() -> registry.registerPlugin(new TestPlugin("test.plugin", "",
                 Arrays.asList(provider)), PluginSource.BUILTIN), "Plugin version must not be empty");
         assertIllegalArgumentContains(() -> registry.registerPlugin(new TestPlugin("test.plugin", "1",
+                "", Arrays.asList(provider), Collections.<PluginDependency>emptyList()), PluginSource.BUILTIN),
+                "Plugin display name must not be empty");
+        assertIllegalArgumentContains(() -> registry.registerPlugin(new TestPlugin("test.plugin", "1",
                 null), PluginSource.BUILTIN), "Plugin providers must not be null");
         assertIllegalArgumentContains(() -> registry.registerPlugin(new TestPlugin("test.plugin", "1",
                 Collections.<PluginProvider>emptyList()), PluginSource.BUILTIN),
@@ -205,6 +208,26 @@ public class PluginRegistryTest {
     }
 
     /**
+     * T-PLUGIN-P17-DISPLAY-NAME-DIAGNOSTIC-01.
+     */
+    @Test
+    public void returnsPluginDisplayNameDiagnostics() {
+        PluginRegistry registry = new PluginRegistry();
+        PluginProvider provider = new TestProvider(TableEngineProvider.TYPE, "sample",
+                PluginCapability.TABLE_CREATE);
+
+        registry.registerPlugin(new TestPlugin("test.plugin", "1", "Display Plugin",
+                Arrays.asList(provider), Collections.<PluginDependency>emptyList()), PluginSource.CONFIGURED_CLASS);
+
+        List<PluginRegistry.PluginDiagnostic> diagnostics = registry.getPluginDiagnostics();
+        assertEquals(1, diagnostics.size());
+        assertEquals("test.plugin", diagnostics.get(0).getPluginId());
+        assertEquals("1", diagnostics.get(0).getPluginVersion());
+        assertEquals("Display Plugin", diagnostics.get(0).getDisplayName());
+        assertEquals(PluginSource.CONFIGURED_CLASS, diagnostics.get(0).getSource());
+    }
+
+    /**
      * T-PLUGIN-P14-VERSION-RANGE-REGISTRY-01.
      */
     @Test
@@ -268,6 +291,7 @@ public class PluginRegistryTest {
     private static final class TestPlugin implements H2Plugin {
         private final String id;
         private final String version;
+        private final String displayName;
         private final Iterable<? extends PluginProvider> providers;
         private final Iterable<PluginDependency> dependencies;
 
@@ -276,13 +300,19 @@ public class PluginRegistryTest {
         }
 
         TestPlugin(String id, String version, Iterable<? extends PluginProvider> providers) {
-            this(id, version, providers, Collections.<PluginDependency>emptyList());
+            this(id, version, "Test Plugin", providers, Collections.<PluginDependency>emptyList());
         }
 
         TestPlugin(String id, String version, Iterable<? extends PluginProvider> providers,
                 Iterable<PluginDependency> dependencies) {
+            this(id, version, "Test Plugin", providers, dependencies);
+        }
+
+        TestPlugin(String id, String version, String displayName, Iterable<? extends PluginProvider> providers,
+                Iterable<PluginDependency> dependencies) {
             this.id = id;
             this.version = version;
+            this.displayName = displayName;
             this.providers = providers;
             this.dependencies = dependencies;
         }
@@ -299,7 +329,7 @@ public class PluginRegistryTest {
 
         @Override
         public String getDisplayName() {
-            return "Test Plugin";
+            return displayName;
         }
 
         @Override

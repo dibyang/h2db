@@ -870,6 +870,7 @@ public final class InformationSchemaTable extends MetaTable {
             cols = new Column[] {
                     column("PLUGIN_ID"), //
                     column("PLUGIN_VERSION"), //
+                    column("DISPLAY_NAME"), //
                     column("SOURCE"), //
                     column("IS_BUILTIN", TypeInfo.TYPE_BOOLEAN), //
             };
@@ -3119,6 +3120,8 @@ public final class InformationSchemaTable extends MetaTable {
                     pluginId,
                     // PLUGIN_VERSION
                     diagnostic.getPluginVersion(),
+                    // DISPLAY_NAME
+                    diagnostic.getDisplayName(),
                     // SOURCE
                     source.name(),
                     // IS_BUILTIN

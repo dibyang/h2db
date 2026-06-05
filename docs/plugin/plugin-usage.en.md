@@ -196,7 +196,7 @@ SELECT * FROM INFORMATION_SCHEMA.PLUGIN_CAPABILITIES;
 SELECT * FROM INFORMATION_SCHEMA.PLUGIN_DEPENDENCIES;
 ```
 
-These views expose plugin id, version, source, provider type/id, whether the plugin is built in, and provider capabilities.
+These views expose plugin id, version, display name, source, provider type/id, whether the plugin is built in, and provider capabilities.
 When multiple versions of the same plugin id are loaded, `PLUGINS` reports one row per plugin id/version
 and `PLUGIN_CAPABILITIES` includes `PLUGIN_VERSION` so provider capabilities remain attributable.
 `PLUGIN_DEPENDENCIES` exposes each loaded plugin dependency with the declaring plugin id/version,

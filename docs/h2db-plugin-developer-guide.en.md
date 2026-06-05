@@ -19,7 +19,7 @@ H2 plugins expose their plugin descriptor through `org.h2.api.H2Plugin` and exte
 
 Plugin loading no longer depends on JDBC URL parameters. Once a plugin jar is on the application classpath and publishes the `ServiceLoader` file, it is discovered both by the Driver early path and by the database-open path.
 
-The current plugin model is static at database-open time. After plugins are loaded, the registry is fixed; hot loading, unloading, online replacement, and multiple active versions of the same plugin are not supported.
+The current plugin model is static at database-open time. After plugins are loaded, the registry is fixed; hot loading, unloading, and online replacement are not supported. Multiple versions of the same plugin id may coexist, but provider ids remain globally unique and cannot be overloaded by version.
 
 ## API Stability Commitment
 
@@ -356,7 +356,7 @@ Plugin diagnostics are available through these INFORMATION_SCHEMA tables:
 - `INFORMATION_SCHEMA.PLUGIN_CAPABILITIES`
 - `INFORMATION_SCHEMA.PLUGIN_DEPENDENCIES`
 
-These tables are read-only and expose plugin id, plugin version, provider type/id, source, and capability information.
+These tables are read-only and expose plugin id, plugin version, display name, provider type/id, source, and capability information.
 For multi-version plugin deployments, `INFORMATION_SCHEMA.PLUGINS` reports each plugin id/version pair
 and `INFORMATION_SCHEMA.PLUGIN_CAPABILITIES` includes `PLUGIN_VERSION` on every capability row.
 `INFORMATION_SCHEMA.PLUGIN_DEPENDENCIES` reports the declaring plugin id/version, dependency plugin id,

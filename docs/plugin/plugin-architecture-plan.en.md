@@ -66,14 +66,15 @@ If full acceptance fails in a network phase with a connection timeout, rerun the
 | P14 | Done | Plugin version coexistence and dependency resolution | Allow distinct versions of the same plugin id to coexist when provider ids do not conflict; resolve dependency versions with exact, wildcard, and interval matching | `runPluginArchitectureCheck` |
 | P15 | Done | Multi-version diagnostics | Report each plugin id/version pair in `INFORMATION_SCHEMA.PLUGINS` and include `PLUGIN_VERSION` in capability rows | `runPluginArchitectureCheck` |
 | P16 | Done | Dependency diagnostics | Add plugin dependency snapshots to the registry and expose `INFORMATION_SCHEMA.PLUGIN_DEPENDENCIES`; harden invalid dependency descriptors | `runPluginArchitectureCheck` |
+| P17 | Done | Descriptor diagnostics | Validate plugin display names and expose `DISPLAY_NAME` in `INFORMATION_SCHEMA.PLUGINS`; fix multi-version documentation drift | `runPluginArchitectureCheck` |
 
 ## Current Closeout Status
 
-P1-P8, P10, P11, P13, P14, P15, and P16 are complete. The plugin foundation currently provides:
+P1-P8, P10, P11, P13, P14, P15, P16, and P17 are complete. The plugin foundation currently provides:
 
 | Capability | Status |
 | --- | --- |
-| Plugin registry | Provider registration, uniqueness checks, capability and dependency diagnostics, invalid descriptor rejection |
+| Plugin registry | Provider registration, uniqueness checks, descriptor/capability/dependency diagnostics, invalid descriptor rejection |
 | Plugin loading | Default `ServiceLoader` automatic discovery, version ranges, dependency ordering, missing dependency diagnostics, and dependency-cycle diagnostics |
 | Built-in plugins | MVStore storage/table providers registered and resolved through the built-in registry path |
 | Table-engine extension | External `TableEngineProvider` can create tables through SQL engine ids and receive table/schema params |

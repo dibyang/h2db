@@ -177,6 +177,18 @@ public class PluginLoaderTest {
     }
 
     /**
+     * T-PLUGIN-P17-INVALID-DISPLAY-NAME-01.
+     */
+    @Test
+    public void rejectsEmptyPluginDisplayName() {
+        DbException e = assertThrows(DbException.class, () ->
+                configuredRegistry(EmptyDisplayNamePlugin.class.getName()));
+
+        assertTrue(e.getMessage().contains("Configured plugin descriptor is invalid"));
+        assertTrue(e.getMessage().contains("plugin display name is empty"));
+    }
+
+    /**
      * T-PLUGIN-P3-NO-PROVIDER-01.
      */
     @Test
@@ -595,6 +607,18 @@ public class PluginLoaderTest {
         @Override
         public String getId() {
             return " ";
+        }
+    }
+
+    public static final class EmptyDisplayNamePlugin extends ConfiguredPlugin {
+        @Override
+        public String getId() {
+            return "test.empty.display.name";
+        }
+
+        @Override
+        public String getDisplayName() {
+            return "";
         }
     }
 

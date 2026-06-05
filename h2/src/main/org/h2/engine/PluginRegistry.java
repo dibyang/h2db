@@ -37,6 +37,7 @@ public final class PluginRegistry {
         }
         String pluginId = requireNonBlank(plugin.getId(), "Plugin id");
         String pluginVersion = requireNonBlank(plugin.getVersion(), "Plugin version");
+        String displayName = requireNonBlank(plugin.getDisplayName(), "Plugin display name");
         if (source == null) {
             throw new IllegalArgumentException("Plugin source must not be null");
         }
@@ -62,7 +63,7 @@ public final class PluginRegistry {
         for (PluginProvider provider : checkedProviders) {
             registerProvider(pluginId, pluginVersion, provider, source);
         }
-        addPlugin(pluginId, pluginVersion, source, dependencies);
+        addPlugin(pluginId, pluginVersion, displayName, source, dependencies);
     }
 
     /**
@@ -98,7 +99,7 @@ public final class PluginRegistry {
         }
         byId.put(id, new RegisteredProvider(pluginId, pluginVersion, provider, source));
         addPluginVersion(pluginId, pluginVersion);
-        addPlugin(pluginId, pluginVersion, source, Collections.<DependencyDiagnostic>emptyList());
+        addPlugin(pluginId, pluginVersion, pluginId, source, Collections.<DependencyDiagnostic>emptyList());
     }
 
     /**
@@ -239,11 +240,12 @@ public final class PluginRegistry {
         return value;
     }
 
-    private void addPlugin(String pluginId, String pluginVersion, PluginSource source,
+    private void addPlugin(String pluginId, String pluginVersion, String displayName, PluginSource source,
             List<DependencyDiagnostic> dependencies) {
         String key = pluginKey(pluginId, pluginVersion);
-        if (!plugins.containsKey(key) || !dependencies.isEmpty()) {
-            plugins.put(key, new PluginDiagnostic(pluginId, pluginVersion, source, dependencies));
+        PluginDiagnostic existing = plugins.get(key);
+        if (existing == null || !dependencies.isEmpty() || !existing.getDisplayName().equals(displayName)) {
+            plugins.put(key, new PluginDiagnostic(pluginId, pluginVersion, displayName, source, dependencies));
         }
     }
 
@@ -356,13 +358,15 @@ public final class PluginRegistry {
     public static final class PluginDiagnostic {
         private final String pluginId;
         private final String pluginVersion;
+        private final String displayName;
         private final PluginSource source;
         private final List<DependencyDiagnostic> dependencies;
 
-        PluginDiagnostic(String pluginId, String pluginVersion, PluginSource source,
+        PluginDiagnostic(String pluginId, String pluginVersion, String displayName, PluginSource source,
                 List<DependencyDiagnostic> dependencies) {
             this.pluginId = pluginId;
             this.pluginVersion = pluginVersion;
+            this.displayName = displayName;
             this.source = source;
             ArrayList<DependencyDiagnostic> checkedDependencies = new ArrayList<>();
             for (DependencyDiagnostic dependency : dependencies) {
@@ -388,6 +392,15 @@ public final class PluginRegistry {
          */
         public String getPluginVersion() {
             return pluginVersion;
+        }
+
+        /**
+         * Get the display name.
+         *
+         * @return display name
+         */
+        public String getDisplayName() {
+            return displayName;
         }
 
         /**

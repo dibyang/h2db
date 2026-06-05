@@ -34,13 +34,14 @@ public class PluginInformationSchemaTest {
         try (Connection conn = DriverManager.getConnection("jdbc:h2:mem:pluginInfoSchema;DB_CLOSE_DELAY=-1",
                 "sa", "");
                 Statement stat = conn.createStatement()) {
-            try (ResultSet rs = stat.executeQuery("select plugin_id, plugin_version, source, is_builtin "
+            try (ResultSet rs = stat.executeQuery("select plugin_id, plugin_version, display_name, source, is_builtin "
                     + "from information_schema.plugins where plugin_id = 'h2.mvstore'")) {
                 assertTrue(rs.next());
                 assertEquals("h2.mvstore", rs.getString(1));
                 assertEquals(Constants.VERSION, rs.getString(2));
-                assertEquals("BUILTIN", rs.getString(3));
-                assertTrue(rs.getBoolean(4));
+                assertEquals("h2.mvstore", rs.getString(3));
+                assertEquals("BUILTIN", rs.getString(4));
+                assertTrue(rs.getBoolean(5));
             }
             try (ResultSet rs = stat.executeQuery("select provider_type, provider_id from "
                     + "information_schema.plugin_providers where plugin_id = 'h2.mvstore' "
@@ -77,11 +78,13 @@ public class PluginInformationSchemaTest {
         String url = "jdbc:h2:mem:pluginDiscoveredInfo";
         try (Connection conn = DriverManager.getConnection(url, "sa", "");
                 Statement stat = conn.createStatement()) {
-            try (ResultSet rs = stat.executeQuery("select source, is_builtin from information_schema.plugins "
+            try (ResultSet rs = stat.executeQuery("select display_name, source, is_builtin "
+                    + "from information_schema.plugins "
                     + "where plugin_id = 'test.configured'")) {
                 assertTrue(rs.next());
-                assertEquals("SERVICE_LOADER", rs.getString(1));
-                assertTrue(!rs.getBoolean(2));
+                assertEquals("Configured Plugin", rs.getString(1));
+                assertEquals("SERVICE_LOADER", rs.getString(2));
+                assertTrue(!rs.getBoolean(3));
             }
             try (ResultSet rs = stat.executeQuery("select provider_type, provider_id from "
                     + "information_schema.plugin_providers where plugin_id = 'test.configured'")) {

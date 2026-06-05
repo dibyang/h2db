@@ -205,6 +205,7 @@ public final class PluginLoader {
         }
         String pluginId = requireNonBlank(plugin.getId(), "plugin id", className);
         requireNonBlank(plugin.getVersion(), "plugin version", className);
+        requireNonBlank(plugin.getDisplayName(), "plugin display name", className);
         Iterable<? extends PluginProvider> providers = plugin.getProviders();
         if (providers == null) {
             throw DbException.getUnsupportedException("Configured plugin descriptor is invalid: class=" + className

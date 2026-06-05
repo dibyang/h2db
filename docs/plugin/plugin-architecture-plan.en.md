@@ -68,10 +68,11 @@ If full acceptance fails in a network phase with a connection timeout, rerun the
 | P16 | Done | Dependency diagnostics | Add plugin dependency snapshots to the registry and expose `INFORMATION_SCHEMA.PLUGIN_DEPENDENCIES`; harden invalid dependency descriptors | `runPluginArchitectureCheck` |
 | P17 | Done | Descriptor diagnostics | Validate plugin display names and expose `DISPLAY_NAME` in `INFORMATION_SCHEMA.PLUGINS`; fix multi-version documentation drift | `runPluginArchitectureCheck` |
 | P18 | Done | ServiceLoader failure diagnostics | Wrap ServiceLoader discovery failures with source and cause diagnostics instead of leaking raw service configuration errors | `runPluginArchitectureCheck` |
+| P19 | Done | Release readiness closeout | Add the release scope, non-goals, and required gates for publishing the plugin baseline | `runPluginArchitectureCheck`, `runH2LegacySmoke` |
 
 ## Current Closeout Status
 
-P1-P8, P10, P11, P13, P14, P15, P16, P17, and P18 are complete. The plugin foundation currently provides:
+P1-P8, P10, P11, P13, P14, P15, P16, P17, P18, and P19 are complete. The plugin foundation currently provides:
 
 | Capability | Status |
 | --- | --- |

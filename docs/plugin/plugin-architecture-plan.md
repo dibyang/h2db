@@ -68,10 +68,11 @@
 | P16 | 已完成 | 依赖诊断闭环 | 注册中心保存插件依赖快照并暴露 `INFORMATION_SCHEMA.PLUGIN_DEPENDENCIES`；加固非法依赖描述符 | `runPluginArchitectureCheck` |
 | P17 | 已完成 | 描述符诊断闭环 | 校验插件展示名称并在 `INFORMATION_SCHEMA.PLUGINS` 暴露 `DISPLAY_NAME`；修正多版本文档漂移 | `runPluginArchitectureCheck` |
 | P18 | 已完成 | ServiceLoader 失败诊断 | 自动发现失败时输出来源和 cause 诊断，不直接泄漏原始 service configuration error | `runPluginArchitectureCheck` |
+| P19 | 已完成 | 发布就绪收口 | 补充插件化基线发布范围、非目标和必跑门禁 | `runPluginArchitectureCheck`、`runH2LegacySmoke` |
 
 ## 当前收口状态
 
-P1-P8、P10、P11、P13、P14、P15、P16、P17 与 P18 已完成。插件化基础设施当前具备：
+P1-P8、P10、P11、P13、P14、P15、P16、P17、P18 与 P19 已完成。插件化基础设施当前具备：
 
 | 能力 | 状态 |
 | --- | --- |

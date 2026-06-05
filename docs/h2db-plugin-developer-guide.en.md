@@ -195,6 +195,7 @@ The current version stabilizes these boundaries:
 
 - External plugins may register a `system_catalog` provider.
 - Diagnostic tables expose the provider and the `system.catalog` capability.
+- When a database opens, the selected storage provider id must have a matching `system_catalog` provider id; otherwise open fails.
 - Providers can use `validate(SystemCatalogContext)` to declare whether they can serve the current database context.
 
 The current version does not yet promise:

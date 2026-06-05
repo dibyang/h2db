@@ -193,6 +193,7 @@ ADB 原型阶段如果发现 `TableEngineContext` 信息不足，按以下优先
 
 - 外部插件可注册 `system_catalog` provider。
 - 诊断表可展示该 provider 和 `system.catalog` capability。
+- 打开数据库时，实际选中的 storage provider id 必须存在同 id 的 `system_catalog` provider；缺失时数据库打开失败。
 - provider 可通过 `validate(SystemCatalogContext)` 声明自身能否服务当前数据库上下文。
 
 当前版本尚不承诺：

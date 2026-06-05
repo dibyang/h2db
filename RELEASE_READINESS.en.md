@@ -8,7 +8,7 @@ Check date: 2026-06-02
 
 h2db now has the baseline materials required for a public GitHub Release and Maven Central publication. Repository-side readiness includes:
 
-The target release version for this round is `2.3.0`. The current release configuration sets `version` in `h2/gradle.properties` to `2.3.0`.
+The official release version for this round is `2.3.0`. The current release configuration sets `version` in `h2/gradle.properties` to `2.3.0`.
 
 - Open-source materials: `LICENSE.txt`, `NOTICE.txt`, `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md`, `SECURITY.md`, `SUPPORT.md`, `CODE_OF_CONDUCT.md`.
 - Release guides: `OPEN_SOURCE_RELEASE.md`, `MAVEN_CENTRAL_RELEASE.md`, `GITHUB_RELEASE.md`, `RELEASE_NOTES_TEMPLATE.md`.

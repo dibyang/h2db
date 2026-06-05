@@ -8,7 +8,7 @@
 
 h2db 已具备公开 GitHub Release 和 Maven Central 发布所需的基础材料。当前仓库侧已完成以下事项：
 
-本轮待发布版本明确为 `2.3.0`。当前发布配置已将 `h2/gradle.properties` 中的 `version` 设置为 `2.3.0`。
+本轮正式发布版本为 `2.3.0`。当前发布配置已将 `h2/gradle.properties` 中的 `version` 设置为 `2.3.0`。
 
 - 开源材料：`LICENSE.txt`、`NOTICE.txt`、`README.md`、`CHANGELOG.md`、`CONTRIBUTING.md`、`SECURITY.md`、`SUPPORT.md`、`CODE_OF_CONDUCT.md`。
 - 发布指南：`OPEN_SOURCE_RELEASE.md`、`MAVEN_CENTRAL_RELEASE.md`、`GITHUB_RELEASE.md`、`RELEASE_NOTES_TEMPLATE.md`。

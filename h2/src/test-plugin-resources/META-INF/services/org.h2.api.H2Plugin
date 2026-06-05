@@ -5,3 +5,4 @@ org.h2.test.plugin.MVStoreTableEngineProviderTest$ExternalTablePlugin
 org.h2.test.plugin.ContractTablePlugin
 org.h2.test.plugin.SystemCatalogProviderTest$CatalogPlugin
 org.h2.test.plugin.SystemCatalogProviderTest$StorageOnlyPlugin
+org.h2.test.plugin.TransactionEventProviderTest$TransactionPlugin

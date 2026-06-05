@@ -21,6 +21,9 @@ import java.util.WeakHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import org.h2.api.ErrorCode;
 import org.h2.api.JavaObjectSerializer;
+import org.h2.api.PluginProvider;
+import org.h2.api.TransactionContext;
+import org.h2.api.TransactionEventProvider;
 import org.h2.command.Command;
 import org.h2.command.CommandInterface;
 import org.h2.command.Parser;
@@ -673,6 +676,8 @@ public final class SessionLocal extends Session implements TransactionStore.Roll
     public void commit(boolean ddl) {
         beforeCommitOrRollback();
         if (hasTransaction()) {
+            TransactionEventContext transactionContext = new TransactionEventContext(ddl, true);
+            fireTransactionEvent(transactionContext, TransactionEvent.BEFORE_COMMIT);
             try {
                 markUsedTablesAsUpdated();
                 transaction.commit();
@@ -681,6 +686,7 @@ public final class SessionLocal extends Session implements TransactionStore.Roll
             } finally {
                 transaction = null;
             }
+            fireTransactionEvent(transactionContext, TransactionEvent.AFTER_COMMIT);
             if (!ddl) {
                 // do not clean the temp tables if the last command was a
                 // create/drop
@@ -792,6 +798,10 @@ public final class SessionLocal extends Session implements TransactionStore.Roll
      */
     public void rollback() {
         beforeCommitOrRollback();
+        TransactionEventContext transactionContext = hasTransaction() ? new TransactionEventContext(false, true) : null;
+        if (transactionContext != null) {
+            fireTransactionEvent(transactionContext, TransactionEvent.BEFORE_ROLLBACK);
+        }
         if (hasTransaction()) {
             rollbackTo(null);
         }
@@ -802,6 +812,86 @@ public final class SessionLocal extends Session implements TransactionStore.Roll
             autoCommitAtTransactionEnd = false;
         }
         endTransaction();
+        if (transactionContext != null) {
+            fireTransactionEvent(transactionContext, TransactionEvent.AFTER_ROLLBACK);
+        }
+    }
+
+    private enum TransactionEvent {
+        BEFORE_COMMIT,
+        AFTER_COMMIT,
+        BEFORE_ROLLBACK,
+        AFTER_ROLLBACK
+    }
+
+    private void fireTransactionEvent(TransactionEventContext context, TransactionEvent event) {
+        for (PluginRegistry.RegisteredProvider registered
+                : getDatabase().getPluginRegistry().getProviders(TransactionEventProvider.TYPE).values()) {
+            PluginProvider provider = registered.getProvider();
+            if (provider instanceof TransactionEventProvider) {
+                TransactionEventProvider transactionProvider = (TransactionEventProvider) provider;
+                try {
+                    switch (event) {
+                    case BEFORE_COMMIT:
+                        transactionProvider.beforeCommit(context);
+                        break;
+                    case AFTER_COMMIT:
+                        transactionProvider.afterCommit(context);
+                        break;
+                    case BEFORE_ROLLBACK:
+                        transactionProvider.beforeRollback(context);
+                        break;
+                    case AFTER_ROLLBACK:
+                        transactionProvider.afterRollback(context);
+                        break;
+                    default:
+                        throw DbException.getUnsupportedException("Unknown transaction event: " + event);
+                    }
+                } catch (DbException e) {
+                    throw e;
+                } catch (RuntimeException e) {
+                    throw DbException.get(ErrorCode.FEATURE_NOT_SUPPORTED_1, e,
+                            "Transaction event provider failed: provider=" + transactionProvider.getId()
+                                    + ", event=" + event + ", session=" + context.getSessionId()
+                                    + ", cause=" + e.getMessage());
+                }
+            }
+        }
+    }
+
+    private final class TransactionEventContext implements TransactionContext {
+        private final boolean ddl;
+        private final boolean hadTransaction;
+
+        TransactionEventContext(boolean ddl, boolean hadTransaction) {
+            this.ddl = ddl;
+            this.hadTransaction = hadTransaction;
+        }
+
+        @Override
+        public Database getDatabase() {
+            return database;
+        }
+
+        @Override
+        public int getSessionId() {
+            return id;
+        }
+
+        @Override
+        public boolean isDdl() {
+            return ddl;
+        }
+
+        @Override
+        public boolean isAutoCommit() {
+            return autoCommit;
+        }
+
+        @Override
+        public boolean hasTransaction() {
+            return hadTransaction;
+        }
     }
 
     /**

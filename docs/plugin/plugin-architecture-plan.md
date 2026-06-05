@@ -12,6 +12,7 @@
 | 注册中心 | provider type/id 唯一性、来源、能力、诊断快照 |
 | 存储引擎 | `StorageEngineProvider`、`StorageEngine`、持久化 storage engine id、只读降级策略 |
 | 表引擎 | `TableEngineProvider`、`TableEngineContext`、内置 MVStore table engine provider 路径 |
+| 事务事件 | `TransactionEventProvider`、`TransactionContext`、commit / rollback 事件诊断 |
 | 测试底座 | JUnit `pluginTest`、legacy smoke、完整 `TestAll ci` 阶段复核规则 |
 | 对外文档 | 中文文档和英文副本同步更新 |
 
@@ -22,7 +23,7 @@
 | 热加载、卸载、在线替换插件 | 插件生命周期稳定后单独设计 |
 | 插件包 manifest、签名、权限沙箱 | 外部插件分发阶段设计 |
 | 多版本插件并存与版本解算器 | dependency/version 语义扩展阶段设计 |
-| 非 storage/table/system catalog/JDBC URL prefix 的新扩展点 | parser、function、auth、optimizer、wire protocol 等当前规划不纳入 |
+| 非 storage/table/system catalog/JDBC URL prefix/transaction event 的新扩展点 | parser、function、auth、optimizer、wire protocol 等当前规划不纳入 |
 | 自动性能基线和大资源慢测 | 测试底座慢测阶段补齐 |
 
 ## 测试门禁
@@ -60,10 +61,11 @@
 | P7 | 已完成 | 完善可观测性 | 确认内置和外部配置插件在 `INFORMATION_SCHEMA.PLUGINS`、`PLUGIN_PROVIDERS`、`PLUGIN_CAPABILITIES` 中输出稳定 | `runPluginArchitectureCheck` |
 | P8 | 已完成 | 阶段验收与收口 | 已跑日常门禁；本轮改动集中在插件 SPI、加载、表/存储 provider 测试与诊断覆盖，未额外触发完整 `TestAll ci` | `clean test check build runH2LegacySmoke` |
 | P10 | 已完成 | Table / Index 迁移期适配层 | 新增 `TableProviderSupport`，统一只读 gate、storage 类型校验和 provider 失败诊断；补契约测试和文档 | `runPluginArchitectureCheck`、`runH2LegacySmoke` |
+| P11 | 已完成 | 事务事件扩展能力 | 新增 `TransactionEventProvider` / `TransactionContext`，接入 commit / rollback 前后事件，补诊断和失败测试 | `runPluginArchitectureCheck`、`runH2LegacySmoke` |
 
 ## 当前收口状态
 
-P1-P8 与 P10 已完成。插件化基础设施当前具备：
+P1-P8、P10 与 P11 已完成。插件化基础设施当前具备：
 
 | 能力 | 状态 |
 | --- | --- |
@@ -73,6 +75,7 @@ P1-P8 与 P10 已完成。插件化基础设施当前具备：
 | 表引擎扩展 | 支持外部 `TableEngineProvider` 通过 SQL engine id 建表，并传递 table/schema params |
 | Table provider 支撑层 | `TableProviderSupport` 覆盖只读 gate、storage 类型校验和 provider 失败诊断包装 |
 | 存储引擎扩展 | 支持 storage provider 解析、storage id 持久化、不匹配拒绝、只读降级和维护能力边界 |
+| 事务事件扩展 | 支持 transaction provider 监听 commit / rollback 前后事件，并在失败时输出 provider/event/session 诊断 |
 | 可观测性 | `INFORMATION_SCHEMA.PLUGINS`、`PLUGIN_PROVIDERS`、`PLUGIN_CAPABILITIES` 覆盖内置和外部配置插件 |
 | 测试门禁 | `runPluginArchitectureCheck` 与日常门禁已通过 |
 

@@ -21,6 +21,7 @@ import org.h2.api.PluginProvider;
 import org.h2.api.StorageEngineProvider;
 import org.h2.api.SystemCatalogProvider;
 import org.h2.api.TableEngineProvider;
+import org.h2.api.TransactionEventProvider;
 import org.h2.message.DbException;
 
 /**
@@ -32,7 +33,8 @@ public final class PluginSecurity {
             TableEngineProvider.TYPE,
             JdbcUrlPrefixProvider.TYPE,
             SystemCatalogProvider.TYPE,
-            StorageEngineProvider.TYPE));
+            StorageEngineProvider.TYPE,
+            TransactionEventProvider.TYPE));
 
     private PluginSecurity() {
     }

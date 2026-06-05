@@ -166,5 +166,5 @@ The current phase does not support:
 | Hot loading, unloading, or online replacement | Plugins are loaded only during database open |
 | Plugin manifest and signing | Discovery currently uses `ServiceLoader` |
 | Multiple plugin versions at the same time | Dependencies currently check plugin ids; complex version resolution is deferred |
-| Parser/function/auth/optimizer/wire protocol extension points | Not in the current plan; the provider whitelist only allows table, storage, system catalog, and JDBC URL prefix providers |
+| Parser/function/auth/optimizer/wire protocol extension points | Not in the current plan; the provider whitelist only allows table, storage, system catalog, JDBC URL prefix, and transaction event providers |
 | Dedicated permission sandbox | Current boundaries are provider type whitelist and load diagnostics |

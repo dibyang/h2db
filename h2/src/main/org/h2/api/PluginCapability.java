@@ -25,6 +25,11 @@ public final class PluginCapability {
     public static final String SYSTEM_CATALOG = "system.catalog";
 
     /**
+     * 支持监听事务事件。
+     */
+    public static final String TRANSACTION_EVENTS = "transaction.events";
+
+    /**
      * 支持持久化数据库。
      */
     public static final String STORAGE_PERSISTENT = "storage.persistent";
@@ -72,6 +77,7 @@ public final class PluginCapability {
     private static final List<String> ALL = Collections.unmodifiableList(Arrays.asList(
             TABLE_CREATE,
             SYSTEM_CATALOG,
+            TRANSACTION_EVENTS,
             STORAGE_PERSISTENT,
             STORAGE_TRANSACTIONAL,
             STORAGE_MVCC,

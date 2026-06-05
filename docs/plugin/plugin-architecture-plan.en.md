@@ -12,6 +12,7 @@ Included in this round:
 | Registry | Provider type/id uniqueness, source, capabilities, diagnostic snapshots |
 | Storage engines | `StorageEngineProvider`, `StorageEngine`, persisted storage engine id, read-only downgrade policy |
 | Table engines | `TableEngineProvider`, `TableEngineContext`, built-in MVStore table engine provider path |
+| Transaction events | `TransactionEventProvider`, `TransactionContext`, commit / rollback event diagnostics |
 | Test foundation | JUnit `pluginTest`, legacy smoke, full `TestAll ci` phase rerun rules |
 | External docs | Chinese documentation and English copy kept in sync |
 
@@ -22,7 +23,7 @@ Not included in this round:
 | Hot loading, unloading, or online plugin replacement | Design after the plugin lifecycle is stable |
 | Plugin package manifest, signing, and permission sandbox | Design during external plugin distribution |
 | Multiple plugin versions and version resolution | Design during dependency/version semantic expansion |
-| New extension points beyond storage/table/system catalog/JDBC URL prefix | Parser, function, auth, optimizer, wire protocol, and similar extension points are not in the current plan |
+| New extension points beyond storage/table/system catalog/JDBC URL prefix/transaction event | Parser, function, auth, optimizer, wire protocol, and similar extension points are not in the current plan |
 | Automated performance baselines and large-resource slow tests | Add during the slow-test foundation phase |
 
 ## Test Gates
@@ -60,10 +61,11 @@ If full acceptance fails in a network phase with a connection timeout, rerun the
 | P7 | Done | Complete observability | Stabilize built-in and configured plugin output in `INFORMATION_SCHEMA.PLUGINS`, `PLUGIN_PROVIDERS`, and `PLUGIN_CAPABILITIES` | `runPluginArchitectureCheck` |
 | P8 | Done | Acceptance and closeout | Ran the daily gate; this round focused on plugin SPI, loading, table/storage provider tests, and diagnostic coverage, so full `TestAll ci` was not rerun | `clean test check build runH2LegacySmoke` |
 | P10 | Done | Table / Index migration support layer | Add `TableProviderSupport` for read-only gates, storage type checks, and provider failure diagnostics; update contract tests and docs | `runPluginArchitectureCheck`, `runH2LegacySmoke` |
+| P11 | Done | Transaction event extension | Add `TransactionEventProvider` / `TransactionContext`, wire commit / rollback boundary events, and cover diagnostics and failures | `runPluginArchitectureCheck`, `runH2LegacySmoke` |
 
 ## Current Closeout Status
 
-P1-P8 and P10 are complete. The plugin foundation currently provides:
+P1-P8, P10, and P11 are complete. The plugin foundation currently provides:
 
 | Capability | Status |
 | --- | --- |
@@ -73,6 +75,7 @@ P1-P8 and P10 are complete. The plugin foundation currently provides:
 | Table-engine extension | External `TableEngineProvider` can create tables through SQL engine ids and receive table/schema params |
 | Table provider support layer | `TableProviderSupport` covers read-only gates, storage type checks, and provider failure wrapping |
 | Storage-engine extension | Storage provider resolution, storage id persistence, mismatch rejection, read-only downgrade, and maintenance capability boundaries |
+| Transaction event extension | Transaction providers can observe commit / rollback boundary events with provider/event/session diagnostics on failure |
 | Observability | `INFORMATION_SCHEMA.PLUGINS`, `PLUGIN_PROVIDERS`, and `PLUGIN_CAPABILITIES` cover built-in and configured external plugins |
 | Test gates | `runPluginArchitectureCheck` and the daily gate have passed |
 

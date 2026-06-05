@@ -13,6 +13,7 @@
 | 存储引擎 | `StorageEngineProvider`、`StorageEngine`、持久化 storage engine id、只读降级策略 |
 | 表引擎 | `TableEngineProvider`、`TableEngineContext`、内置 MVStore table engine provider 路径 |
 | 事务事件 | `TransactionEventProvider`、`TransactionContext`、commit / rollback 事件诊断 |
+| 数据库生命周期 | `DatabaseLifecycleProvider`、`DatabaseLifecycleContext`、close 事件诊断 |
 | 测试底座 | JUnit `pluginTest`、legacy smoke、完整 `TestAll ci` 阶段复核规则 |
 | 对外文档 | 中文文档和英文副本同步更新 |
 
@@ -62,10 +63,11 @@
 | P8 | 已完成 | 阶段验收与收口 | 已跑日常门禁；本轮改动集中在插件 SPI、加载、表/存储 provider 测试与诊断覆盖，未额外触发完整 `TestAll ci` | `clean test check build runH2LegacySmoke` |
 | P10 | 已完成 | Table / Index 迁移期适配层 | 新增 `TableProviderSupport`，统一只读 gate、storage 类型校验和 provider 失败诊断；补契约测试和文档 | `runPluginArchitectureCheck`、`runH2LegacySmoke` |
 | P11 | 已完成 | 事务事件扩展能力 | 新增 `TransactionEventProvider` / `TransactionContext`，接入 commit / rollback 前后事件，补诊断和失败测试 | `runPluginArchitectureCheck`、`runH2LegacySmoke` |
+| P13 | 已完成 | 数据库生命周期扩展能力 | 新增 `DatabaseLifecycleProvider` / `DatabaseLifecycleContext`，接入数据库关闭回调，补诊断和失败测试 | `runPluginArchitectureCheck` |
 
 ## 当前收口状态
 
-P1-P8、P10 与 P11 已完成。插件化基础设施当前具备：
+P1-P8、P10、P11 与 P13 已完成。插件化基础设施当前具备：
 
 | 能力 | 状态 |
 | --- | --- |
@@ -76,6 +78,7 @@ P1-P8、P10 与 P11 已完成。插件化基础设施当前具备：
 | Table provider 支撑层 | `TableProviderSupport` 覆盖只读 gate、storage 类型校验和 provider 失败诊断包装 |
 | 存储引擎扩展 | 支持 storage provider 解析、storage id 持久化、不匹配拒绝、只读降级和维护能力边界 |
 | 事务事件扩展 | 支持 transaction provider 监听 commit / rollback 前后事件，并在失败时输出 provider/event/session 诊断 |
+| 数据库生命周期扩展 | 支持 lifecycle provider 监听数据库关闭事件，不再需要通过 URL 注入 `DATABASE_EVENT_LISTENER` 做插件关闭适配 |
 | 可观测性 | `INFORMATION_SCHEMA.PLUGINS`、`PLUGIN_PROVIDERS`、`PLUGIN_CAPABILITIES` 覆盖内置和外部配置插件 |
 | 测试门禁 | `runPluginArchitectureCheck` 与日常门禁已通过 |
 

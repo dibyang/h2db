@@ -30,6 +30,11 @@ public final class PluginCapability {
     public static final String TRANSACTION_EVENTS = "transaction.events";
 
     /**
+     * Supports database lifecycle events.
+     */
+    public static final String DATABASE_LIFECYCLE = "database.lifecycle";
+
+    /**
      * 支持持久化数据库。
      */
     public static final String STORAGE_PERSISTENT = "storage.persistent";
@@ -78,6 +83,7 @@ public final class PluginCapability {
             TABLE_CREATE,
             SYSTEM_CATALOG,
             TRANSACTION_EVENTS,
+            DATABASE_LIFECYCLE,
             STORAGE_PERSISTENT,
             STORAGE_TRANSACTIONAL,
             STORAGE_MVCC,

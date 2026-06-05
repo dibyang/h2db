@@ -13,6 +13,7 @@ Included in this round:
 | Storage engines | `StorageEngineProvider`, `StorageEngine`, persisted storage engine id, read-only downgrade policy |
 | Table engines | `TableEngineProvider`, `TableEngineContext`, built-in MVStore table engine provider path |
 | Transaction events | `TransactionEventProvider`, `TransactionContext`, commit / rollback event diagnostics |
+| Database lifecycle | `DatabaseLifecycleProvider`, `DatabaseLifecycleContext`, close event diagnostics |
 | Test foundation | JUnit `pluginTest`, legacy smoke, full `TestAll ci` phase rerun rules |
 | External docs | Chinese documentation and English copy kept in sync |
 
@@ -62,10 +63,11 @@ If full acceptance fails in a network phase with a connection timeout, rerun the
 | P8 | Done | Acceptance and closeout | Ran the daily gate; this round focused on plugin SPI, loading, table/storage provider tests, and diagnostic coverage, so full `TestAll ci` was not rerun | `clean test check build runH2LegacySmoke` |
 | P10 | Done | Table / Index migration support layer | Add `TableProviderSupport` for read-only gates, storage type checks, and provider failure diagnostics; update contract tests and docs | `runPluginArchitectureCheck`, `runH2LegacySmoke` |
 | P11 | Done | Transaction event extension | Add `TransactionEventProvider` / `TransactionContext`, wire commit / rollback boundary events, and cover diagnostics and failures | `runPluginArchitectureCheck`, `runH2LegacySmoke` |
+| P13 | Done | Database lifecycle extension | Add `DatabaseLifecycleProvider` / `DatabaseLifecycleContext`, wire database close callbacks, and cover diagnostics and failure reporting | `runPluginArchitectureCheck` |
 
 ## Current Closeout Status
 
-P1-P8, P10, and P11 are complete. The plugin foundation currently provides:
+P1-P8, P10, P11, and P13 are complete. The plugin foundation currently provides:
 
 | Capability | Status |
 | --- | --- |
@@ -76,6 +78,7 @@ P1-P8, P10, and P11 are complete. The plugin foundation currently provides:
 | Table provider support layer | `TableProviderSupport` covers read-only gates, storage type checks, and provider failure wrapping |
 | Storage-engine extension | Storage provider resolution, storage id persistence, mismatch rejection, read-only downgrade, and maintenance capability boundaries |
 | Transaction event extension | Transaction providers can observe commit / rollback boundary events with provider/event/session diagnostics on failure |
+| Database lifecycle extension | Lifecycle providers can observe database close events without URL-level `DATABASE_EVENT_LISTENER` injection |
 | Observability | `INFORMATION_SCHEMA.PLUGINS`, `PLUGIN_PROVIDERS`, and `PLUGIN_CAPABILITIES` cover built-in and configured external plugins |
 | Test gates | `runPluginArchitectureCheck` and the daily gate have passed |
 

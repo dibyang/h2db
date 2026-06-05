@@ -145,6 +145,44 @@ public final class AcmeStorageProvider implements StorageEngineProvider {
 jdbc:h2:./data/demo;ACCESS_MODE_DATA=r;STORAGE_ENGINE=missing;MISSING_STORAGE_READ_ONLY_DOWNGRADE=TRUE
 ```
 
+## 数据库生命周期插件
+
+数据库生命周期 provider 实现 `DatabaseLifecycleProvider`。它通过插件自动发现获得数据库关闭回调，不需要使用 URL 级 `DATABASE_EVENT_LISTENER` 设置。
+
+```java
+package com.acme;
+
+import org.h2.api.DatabaseLifecycleContext;
+import org.h2.api.DatabaseLifecycleProvider;
+import org.h2.api.PluginCapability;
+
+public final class AcmeLifecycleProvider implements DatabaseLifecycleProvider {
+    public String getType() {
+        return TYPE;
+    }
+
+    public String getId() {
+        return "acme_lifecycle";
+    }
+
+    public boolean supports(String capability) {
+        return PluginCapability.DATABASE_LIFECYCLE.equals(capability);
+    }
+
+    public void beforeClose(DatabaseLifecycleContext context) {
+        // 释放必须早于 storage 文件关闭的插件资源
+    }
+
+    public void afterClose(DatabaseLifecycleContext context) {
+        // storage 资源关闭后发布诊断
+    }
+}
+```
+
+回调失败会在 H2 完成关闭路径之后报告，错误消息包含 provider id、lifecycle event、database name、storage engine id 和 cause。
+
+已有 `DATABASE_EVENT_LISTENER` 用法保持兼容。新的 storage 插件应使用 `DatabaseLifecycleProvider` 处理关闭事件，而不是通过改写 JDBC URL 注入 listener 设置。
+
 ## 诊断查询
 
 可以通过信息 schema 查看已注册插件和 provider：
@@ -166,5 +204,5 @@ SELECT * FROM INFORMATION_SCHEMA.PLUGIN_CAPABILITIES;
 | 热加载、卸载、在线替换 | 插件只在数据库打开时加载 |
 | 插件 manifest 和签名 | 当前通过 `ServiceLoader` 自动发现 |
 | 多版本插件并存 | 当前依赖只检查插件 id，复杂版本解算留待后续 |
-| parser/function/auth/optimizer/wire protocol 等扩展点 | 当前规划不纳入；白名单只允许 table、storage、system catalog、JDBC URL prefix 和 transaction event provider |
+| parser/function/auth/optimizer/wire protocol 等扩展点 | 当前规划不纳入；白名单只允许 table、storage、system catalog、JDBC URL prefix、transaction event 和 database lifecycle provider |
 | 独立权限沙箱 | 当前主要边界是 provider type 白名单和加载诊断 |

@@ -145,6 +145,44 @@ Read-only downgrade is only for explicitly configured compatibility or rescue sc
 jdbc:h2:./data/demo;ACCESS_MODE_DATA=r;STORAGE_ENGINE=missing;MISSING_STORAGE_READ_ONLY_DOWNGRADE=TRUE
 ```
 
+## Database Lifecycle Plugins
+
+A database lifecycle provider implements `DatabaseLifecycleProvider`. It receives database close callbacks without using URL-level `DATABASE_EVENT_LISTENER` settings.
+
+```java
+package com.acme;
+
+import org.h2.api.DatabaseLifecycleContext;
+import org.h2.api.DatabaseLifecycleProvider;
+import org.h2.api.PluginCapability;
+
+public final class AcmeLifecycleProvider implements DatabaseLifecycleProvider {
+    public String getType() {
+        return TYPE;
+    }
+
+    public String getId() {
+        return "acme_lifecycle";
+    }
+
+    public boolean supports(String capability) {
+        return PluginCapability.DATABASE_LIFECYCLE.equals(capability);
+    }
+
+    public void beforeClose(DatabaseLifecycleContext context) {
+        // release plugin-owned resources that must close before storage files
+    }
+
+    public void afterClose(DatabaseLifecycleContext context) {
+        // publish diagnostics after storage resources are closed
+    }
+}
+```
+
+Callback failures are reported after H2 finishes the close path, with provider id, lifecycle event, database name, storage engine id, and cause in the diagnostic message.
+
+Existing `DATABASE_EVENT_LISTENER` usage remains supported for application-level listener compatibility. New storage plugins should use `DatabaseLifecycleProvider` for close handling instead of injecting listener settings into rewritten JDBC URLs.
+
 ## Diagnostic Queries
 
 Registered plugins and providers can be inspected through information schema:
@@ -166,5 +204,5 @@ The current phase does not support:
 | Hot loading, unloading, or online replacement | Plugins are loaded only during database open |
 | Plugin manifest and signing | Discovery currently uses `ServiceLoader` |
 | Multiple plugin versions at the same time | Dependencies currently check plugin ids; complex version resolution is deferred |
-| Parser/function/auth/optimizer/wire protocol extension points | Not in the current plan; the provider whitelist only allows table, storage, system catalog, JDBC URL prefix, and transaction event providers |
+| Parser/function/auth/optimizer/wire protocol extension points | Not in the current plan; the provider whitelist only allows table, storage, system catalog, JDBC URL prefix, transaction event, and database lifecycle providers |
 | Dedicated permission sandbox | Current boundaries include the global provider type whitelist and optional per-plugin allowlists (`H2Plugin#getAllowedProviderTypes`) |

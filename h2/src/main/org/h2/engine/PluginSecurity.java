@@ -17,6 +17,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
+import org.h2.api.DatabaseLifecycleProvider;
 import org.h2.api.H2Plugin;
 import org.h2.api.JdbcUrlPrefixProvider;
 import org.h2.api.PluginProvider;
@@ -36,7 +37,8 @@ public final class PluginSecurity {
             JdbcUrlPrefixProvider.TYPE,
             SystemCatalogProvider.TYPE,
             StorageEngineProvider.TYPE,
-            TransactionEventProvider.TYPE));
+            TransactionEventProvider.TYPE,
+            DatabaseLifecycleProvider.TYPE));
 
     private PluginSecurity() {
     }

@@ -18,9 +18,12 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import org.h2.api.DatabaseLifecycleContext;
+import org.h2.api.DatabaseLifecycleProvider;
 import org.h2.api.DatabaseEventListener;
 import org.h2.api.ErrorCode;
 import org.h2.api.JavaObjectSerializer;
+import org.h2.api.PluginProvider;
 import org.h2.api.StorageEngine;
 import org.h2.api.StorageEngineContext;
 import org.h2.api.StorageEngineProvider;
@@ -1231,6 +1234,7 @@ public final class Database implements DataHandler, CastDataProvider {
     }
 
     private void closeImpl(boolean fromShutdownHook) {
+        DbException lifecycleException = null;
         synchronized (this) {
             if (closing || !fromShutdownHook && !userSessions.isEmpty()) {
                 return;
@@ -1258,6 +1262,9 @@ public final class Database implements DataHandler, CastDataProvider {
                 }
             }
         }
+        DatabaseLifecycleEventContext lifecycleContext = new DatabaseLifecycleEventContext(fromShutdownHook);
+        lifecycleException = fireDatabaseLifecycleEvent(lifecycleContext, DatabaseLifecycleEvent.BEFORE_CLOSE,
+                lifecycleException);
         try {
             try {
                 if (systemSession != null) {
@@ -1302,6 +1309,8 @@ public final class Database implements DataHandler, CastDataProvider {
             } catch (DbException | MVStoreException e) {
                 trace.error(e, "close");
             }
+            lifecycleException = fireDatabaseLifecycleEvent(lifecycleContext, DatabaseLifecycleEvent.AFTER_CLOSE,
+                    lifecycleException);
             trace.info("closed");
             traceSystem.close();
             OnExitDatabaseCloser.unregister(this);
@@ -1317,6 +1326,95 @@ public final class Database implements DataHandler, CastDataProvider {
             }
         } finally {
             Engine.close(databaseName);
+        }
+        if (lifecycleException != null) {
+            throw lifecycleException;
+        }
+    }
+
+    private enum DatabaseLifecycleEvent {
+        BEFORE_CLOSE,
+        AFTER_CLOSE
+    }
+
+    private DbException fireDatabaseLifecycleEvent(DatabaseLifecycleEventContext context, DatabaseLifecycleEvent event,
+            DbException firstFailure) {
+        DbException failure = firstFailure;
+        for (PluginRegistry.RegisteredProvider registered
+                : pluginRegistry.getProviders(DatabaseLifecycleProvider.TYPE).values()) {
+            PluginProvider provider = registered.getProvider();
+            if (provider instanceof DatabaseLifecycleProvider) {
+                DatabaseLifecycleProvider lifecycleProvider = (DatabaseLifecycleProvider) provider;
+                try {
+                    switch (event) {
+                    case BEFORE_CLOSE:
+                        lifecycleProvider.beforeClose(context);
+                        break;
+                    case AFTER_CLOSE:
+                        lifecycleProvider.afterClose(context);
+                        break;
+                    default:
+                        throw DbException.getUnsupportedException("Unknown database lifecycle event: " + event);
+                    }
+                } catch (DbException e) {
+                    failure = appendLifecycleFailure(failure, DbException.get(ErrorCode.FEATURE_NOT_SUPPORTED_1, e,
+                            "Database lifecycle provider failed: provider=" + lifecycleProvider.getId()
+                                    + ", event=" + event + ", database=" + databaseShortName
+                                    + ", storage=" + storageEngineId + ", cause=" + e.getMessage()));
+                } catch (RuntimeException e) {
+                    failure = appendLifecycleFailure(failure, DbException.get(ErrorCode.FEATURE_NOT_SUPPORTED_1, e,
+                            "Database lifecycle provider failed: provider=" + lifecycleProvider.getId()
+                                    + ", event=" + event + ", database=" + databaseShortName
+                                    + ", storage=" + storageEngineId + ", cause=" + e.getMessage()));
+                }
+            }
+        }
+        return failure;
+    }
+
+    private static DbException appendLifecycleFailure(DbException firstFailure, DbException failure) {
+        if (firstFailure == null) {
+            return failure;
+        }
+        firstFailure.addSuppressed(failure);
+        return firstFailure;
+    }
+
+    private final class DatabaseLifecycleEventContext implements DatabaseLifecycleContext {
+        private final boolean fromShutdownHook;
+
+        DatabaseLifecycleEventContext(boolean fromShutdownHook) {
+            this.fromShutdownHook = fromShutdownHook;
+        }
+
+        @Override
+        public Database getDatabase() {
+            return Database.this;
+        }
+
+        @Override
+        public String getDatabaseName() {
+            return databaseName;
+        }
+
+        @Override
+        public String getDatabaseUrl() {
+            return databaseURL;
+        }
+
+        @Override
+        public String getStorageEngineId() {
+            return storageEngineId;
+        }
+
+        @Override
+        public boolean isPersistent() {
+            return persistent;
+        }
+
+        @Override
+        public boolean isFromShutdownHook() {
+            return fromShutdownHook;
         }
     }
 

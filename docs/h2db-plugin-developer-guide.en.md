@@ -14,6 +14,7 @@ H2 plugins expose their plugin descriptor through `org.h2.api.H2Plugin` and exte
 - `SystemCatalogProvider`: a prerequisite extension point for non-MVStore main paths and system catalog ownership.
 - `JdbcUrlPrefixProvider`: a Driver-level URL prefix extension point for mapping custom URLs such as `jdbc:vendor:*` to `jdbc:h2:*`.
 - `TransactionEventProvider`: a transaction lifecycle extension point for commit / rollback events.
+- `DatabaseLifecycleProvider`: a database lifecycle extension point for close events.
 - Automatic discovery: H2 reads `META-INF/services/org.h2.api.H2Plugin` from the classpath.
 
 Plugin loading no longer depends on JDBC URL parameters. Once a plugin jar is on the application classpath and publishes the `ServiceLoader` file, it is discovered both by the Driver early path and by the database-open path.
@@ -26,7 +27,7 @@ The current plugin API has three layers:
 
 | Layer | Scope | Commitment |
 | --- | --- | --- |
-| Stable SPI | `H2Plugin`, `PluginProvider`, `TableEngineProvider`, `StorageEngineProvider`, `SystemCatalogProvider`, `JdbcUrlPrefixProvider`, `TransactionEventProvider`, `StorageMaintenance`, capability strings | Kept source-compatible as plugin entry points. New behavior should normally be added through default methods or new capabilities. |
+| Stable SPI | `H2Plugin`, `PluginProvider`, `TableEngineProvider`, `StorageEngineProvider`, `SystemCatalogProvider`, `JdbcUrlPrefixProvider`, `TransactionEventProvider`, `DatabaseLifecycleProvider`, `StorageMaintenance`, capability strings | Kept source-compatible as plugin entry points. New behavior should normally be added through default methods or new capabilities. |
 | Managed migration API | `TableEngineContext`, `StorageEngineContext`, `CreateTableData`, `Table` / `Index` related internal types | Usable during plugin migration periods, but contract tests must run before upgrading H2 minor versions. Long-term binary compatibility is not promised. |
 | Internal implementation | parser, optimizer, JDBC server, MVStore physical structures, deep `Database` lifecycle | Not exposed as plugin APIs. Plugins must not depend on call order or field layout here. |
 
@@ -108,7 +109,7 @@ Plugin classes must provide a public no-argument constructor. Plugin id, version
 
 ## Provider Constraints
 
-External plugins can currently register only table, storage, system catalog, JDBC URL prefix, and transaction event providers. SQL parser, function, auth, optimizer, wire protocol, and other core extension points are not in the current plan.
+External plugins can currently register only table, storage, system catalog, JDBC URL prefix, transaction event, and database lifecycle providers. SQL parser, function, auth, optimizer, wire protocol, and other core extension points are not in the current plan.
 
 Provider ids must be unique within the same provider type. Built-in providers cannot be overridden by external plugins.
 
@@ -121,6 +122,7 @@ Use a reverse-DNS or clear product prefix for plugin ids, such as `com.acme.plug
 | `table.create` | Provider can create tables |
 | `system.catalog` | Provider can own the system catalog |
 | `transaction.events` | Provider can observe transaction commit / rollback events |
+| `database.lifecycle` | Provider can observe database close lifecycle events |
 | `storage.persistent` | Storage supports persistent databases |
 | `storage.transactional` | Storage supports transactions |
 | `storage.mvcc` | Storage supports MVCC |
@@ -158,6 +160,19 @@ Providers should follow these rules:
 - A `beforeCommit()` failure blocks the commit; external pre-commit validation must keep failure paths retryable.
 - An `afterCommit()` failure does not roll back the already committed H2 transaction; it only returns provider diagnostics to the caller.
 - Rollback callbacks should not perform business writes; failures are reported with provider/event/session diagnostics.
+
+## Database Lifecycle Provider Constraints
+
+A database lifecycle provider implements `DatabaseLifecycleProvider`; its provider type is `database_lifecycle`. H2 invokes callbacks during database close:
+
+- `beforeClose(DatabaseLifecycleContext)`: after H2 has entered the close path and before storage resources are closed.
+- `afterClose(DatabaseLifecycleContext)`: after storage resources are closed and before the trace system is closed.
+
+`DatabaseLifecycleContext` exposes the current `Database`, database name, database URL, storage engine id, persistence flag, and whether the close came from the shutdown hook. It is intended for plugin-managed engine cleanup and diagnostics. It does not replace `DATABASE_EVENT_LISTENER` for general application progress reporting.
+
+Close callback failures do not leave the database half closed. H2 records the first provider failure, continues the close path, then reports a diagnostic exception that includes provider id, lifecycle event, database name, storage engine id, and cause. Later provider failures are attached as suppressed exceptions.
+
+Existing `DATABASE_EVENT_LISTENER` users remain compatible. New storage-engine plugins should prefer `DatabaseLifecycleProvider` instead of injecting `DATABASE_EVENT_LISTENER` through rewritten JDBC URLs.
 
 ## Table Provider Constraints
 

@@ -177,6 +177,8 @@ public final class LongRunConfigTest {
         assertEquals("comprehensive", comprehensive.getInstanceName());
         assertEquals(12, comprehensive.getCrashCycles());
         assertEquals("soak-30d", soak.getInstanceName());
+        assertEquals("bounded", soak.getLedgerMode());
+        assertEquals(10_000L, soak.getReclamationIntervalMillis());
         assertEquals(180, soak.getCrashCycles());
         assertTrue(fault.isFaultEnabled());
         assertEquals("fault-injection", fault.getInstanceName());

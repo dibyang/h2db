@@ -208,7 +208,7 @@ workload.ledgerMode=bounded
 workload.ledgerMaxEntries=100000
 ```
 
-`bounded` 会限制内部操作账本大小，避免测试工具自己的无限追加日志把 smoke 文件放大到几十 GB。nightly 同样默认使用 bounded，但上限更大。需要专门制造历史版本和 S2 回收压力时，可以改成 `workload.ledgerMode=append-only`。
+`bounded` 会限制内部操作账本大小，避免测试工具自己的无限追加日志把 smoke、nightly 或 soak 文件放大到几十 GB。nightly 和 30 天 soak 同样默认使用 bounded，但上限更大。需要专门制造历史版本和 S2 回收压力时，可以复制配置后改成 `workload.ledgerMode=append-only`。
 
 默认 smoke / nightly 每 10 秒触发一次 reclamation，并使用高写入压测预算：
 

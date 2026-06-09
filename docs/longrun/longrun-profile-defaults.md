@@ -41,4 +41,4 @@ crash.interval * 2 * crash.cycles
 | 验证 reopen bug | 使用 reopen，默认 1h；只想快速复现可 `--duration 10m`。 |
 | 验证 crash-safe publish/free | 使用 crash 或 comprehensive。 |
 | 发布前夜间验收 | 使用 comprehensive 或 nightly。 |
-| 长期空间整理稳定性 | 使用 soak-30d，并放在专机或受控磁盘目录下。 |
+| 长期空间整理稳定性 | 使用 soak-30d，并放在专机或受控磁盘目录下；默认使用 bounded ledger 和 10s 回收节奏，避免测试账本无限增长。 |

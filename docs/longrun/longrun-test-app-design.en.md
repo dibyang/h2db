@@ -262,7 +262,7 @@ The first MVStore version should use three maps:
 | `ledger` | `long sequence` or bounded slot | sequence + operation summary | Committed operation ledger. Bounded by default so smoke runs are not dominated by unbounded audit-log growth. |
 | `counters` | counter name | long value | Fast counts, versions, watermarks. |
 
-`workload.ledgerMode=bounded` uses `workload.ledgerMaxEntries` to cap the ledger map and is the default baseline for smoke and nightly profiles. This mode is closer to real workloads with bounded secondary data. `workload.ledgerMode=append-only` keeps all write / remove events and should be used when the goal is to manufacture historical-version pressure for S2 reclamation, not as the normal smoke file-size baseline.
+`workload.ledgerMode=bounded` uses `workload.ledgerMaxEntries` to cap the ledger map and is the default baseline for smoke, nightly, and soak profiles. This mode is closer to real workloads with bounded secondary data. `workload.ledgerMode=append-only` keeps all write / remove events and should be used when the goal is to manufacture historical-version pressure for S2 reclamation, not as the normal smoke or long-soak file-size baseline.
 
 The first SQL version should mirror the same semantics:
 

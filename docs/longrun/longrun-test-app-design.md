@@ -262,7 +262,7 @@ MVStore 首版建议使用三类 map：
 | `ledger` | `long sequence` 或 bounded slot | sequence + operation summary | 提交操作账本。默认 bounded，避免 smoke 被无限追加审计日志放大。 |
 | `counters` | counter name | long value | 快速校验计数、版本、水位。 |
 
-`workload.ledgerMode=bounded` 使用 `workload.ledgerMaxEntries` 控制账本 map 上限，作为 smoke / nightly 的默认基线，更接近真实业务里的有限二级数据。`workload.ledgerMode=append-only` 保留所有写入 / 删除事件，用于专门制造历史版本和 S2 回收压力，不作为普通 smoke 文件大小基线。
+`workload.ledgerMode=bounded` 使用 `workload.ledgerMaxEntries` 控制账本 map 上限，作为 smoke / nightly / soak 的默认基线，更接近真实业务里的有限二级数据。`workload.ledgerMode=append-only` 保留所有写入 / 删除事件，用于专门制造历史版本和 S2 回收压力，不作为普通 smoke 或长期 soak 文件大小基线。
 
 SQL 首版建议使用相同语义的表：
 

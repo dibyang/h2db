@@ -41,4 +41,4 @@ crash.interval * 2 * crash.cycles
 | Reopen bug validation | Use reopen, default 1h; use `--duration 10m` for quick reproduction. |
 | Crash-safe publish/free validation | Use crash or comprehensive. |
 | Pre-release overnight acceptance | Use comprehensive or nightly. |
-| Long-term space organization stability | Use soak-30d on a dedicated host or controlled disk directory. |
+| Long-term space organization stability | Use soak-30d on a dedicated host or controlled disk directory; it defaults to a bounded ledger and 10s reclamation cadence to avoid unbounded test-ledger growth. |

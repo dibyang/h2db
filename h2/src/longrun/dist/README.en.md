@@ -207,7 +207,7 @@ workload.ledgerMode=bounded
 workload.ledgerMaxEntries=100000
 ```
 
-`bounded` caps the internal operation ledger so the test tool's own audit log does not inflate smoke files to tens of GB. Nightly also defaults to bounded mode with a larger cap. Use `workload.ledgerMode=append-only` when the goal is to manufacture historical-version pressure for S2 reclamation.
+`bounded` caps the internal operation ledger so the test tool's own audit log does not inflate smoke, nightly, or soak files to tens of GB. Nightly and the 30-day soak also default to bounded mode with larger caps. Copy a config and use `workload.ledgerMode=append-only` when the goal is to manufacture historical-version pressure for S2 reclamation.
 
 Smoke and nightly trigger reclamation every 10 seconds by default with a high-write stress budget:
 

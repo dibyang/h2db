@@ -34,6 +34,11 @@ public final class LongRunConfigTest {
         assertEquals(500, config.getReclamationMaxRunMillis());
         assertEquals(500, config.getReclamationMaxTailCompactionMillis());
         assertEquals(0, config.getReclamationMinSchedulerIntervalMillis());
+        assertEquals(false, config.isBackupEnabled());
+        assertEquals(5L * 60L * 1000L, config.getBackupIntervalMillis());
+        assertEquals(new File("work/smoke/backup").getPath(), config.getBackupDirectory().getPath());
+        assertEquals(10, config.getBackupMaxRetained());
+        assertEquals(false, config.isBackupFailOnError());
         assertEquals(false, config.isFaultEnabled());
         assertEquals(30L * 60L * 1000L, config.getFaultIntervalMillis());
         assertEquals(4096, config.getFaultMaxBytes());
@@ -53,6 +58,10 @@ public final class LongRunConfigTest {
             writer.write("reclamation.maxTailCompaction=300\n");
             writer.write("reclamation.minSchedulerInterval=2s\n");
             writer.write("progress.interval=12s\n");
+            writer.write("backup.enabled=true\n");
+            writer.write("backup.interval=7m\n");
+            writer.write("backup.maxRetained=7\n");
+            writer.write("backup.failOnError=true\n");
         }
 
         LongRunConfig config = LongRunConfig.load(CommandLineOptions.parse("--config", configFile.getPath()));
@@ -65,6 +74,11 @@ public final class LongRunConfigTest {
         assertEquals(300, config.getReclamationMaxTailCompactionMillis());
         assertEquals(2_000, config.getReclamationMinSchedulerIntervalMillis());
         assertEquals(12_000L, config.getProgressIntervalMillis());
+        assertEquals(true, config.isBackupEnabled());
+        assertEquals(7L * 60L * 1000L, config.getBackupIntervalMillis());
+        assertEquals(new File("work/smoke/backup").getPath(), config.getBackupDirectory().getPath());
+        assertEquals(7, config.getBackupMaxRetained());
+        assertEquals(true, config.isBackupFailOnError());
     }
 
     @Test
@@ -180,6 +194,11 @@ public final class LongRunConfigTest {
         assertEquals("bounded", soak.getLedgerMode());
         assertEquals(10_000L, soak.getReclamationIntervalMillis());
         assertEquals(180, soak.getCrashCycles());
+        assertEquals(true, soak.isBackupEnabled());
+        assertEquals(5L * 60L * 1000L, soak.getBackupIntervalMillis());
+        assertEquals(new File("work/soak-30d/backup").getPath(), soak.getBackupDirectory().getPath());
+        assertEquals(10, soak.getBackupMaxRetained());
+        assertEquals(false, soak.isBackupFailOnError());
         assertTrue(fault.isFaultEnabled());
         assertEquals("fault-injection", fault.getInstanceName());
         assertEquals(120_000L, fault.getFaultIntervalMillis());

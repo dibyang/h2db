@@ -56,6 +56,11 @@ public final class LongRunConfig {
     private final long crashIntervalMillis;
     private final int crashCycles;
     private final long maxDbSizeBytes;
+    private final boolean backupEnabled;
+    private final long backupIntervalMillis;
+    private final File backupDirectory;
+    private final int backupMaxRetained;
+    private final boolean backupFailOnError;
 
     private LongRunConfig(Builder builder) {
         configFile = builder.configFile;
@@ -95,6 +100,11 @@ public final class LongRunConfig {
         crashIntervalMillis = builder.crashIntervalMillis;
         crashCycles = builder.crashCycles;
         maxDbSizeBytes = builder.maxDbSizeBytes;
+        backupEnabled = builder.backupEnabled;
+        backupIntervalMillis = builder.backupIntervalMillis;
+        backupDirectory = builder.backupDirectory;
+        backupMaxRetained = builder.backupMaxRetained;
+        backupFailOnError = builder.backupFailOnError;
     }
 
     public static LongRunConfig load(CommandLineOptions options) throws IOException {
@@ -151,6 +161,10 @@ public final class LongRunConfig {
         builder.crashIntervalMillis(parseDurationMillis(property(properties, "crash.interval", "120s")));
         builder.crashCycles(Integer.parseInt(property(properties, "crash.cycles", "1")));
         builder.maxDbSizeBytes(parseSizeBytes(property(properties, "limits.maxDbSizeGb", "0")));
+        builder.backupEnabled(Boolean.parseBoolean(property(properties, "backup.enabled", "false")));
+        builder.backupIntervalMillis(parseDurationMillis(property(properties, "backup.interval", "5m")));
+        builder.backupMaxRetained(Integer.parseInt(property(properties, "backup.maxRetained", "10")));
+        builder.backupFailOnError(Boolean.parseBoolean(property(properties, "backup.failOnError", "false")));
         String h2Jar = property(properties, "run.h2Jar", "");
         if (!h2Jar.trim().isEmpty()) {
             builder.h2Jar(new File(h2Jar));
@@ -220,6 +234,23 @@ public final class LongRunConfig {
         if (crashCycles != null && !crashCycles.trim().isEmpty()) {
             builder.crashCycles(Integer.parseInt(crashCycles));
         }
+        String backupEnabled = System.getProperty("h2.longrun.backup.enabled");
+        if (backupEnabled != null && !backupEnabled.trim().isEmpty()) {
+            builder.backupEnabled(Boolean.parseBoolean(backupEnabled));
+        }
+        String backupInterval = System.getProperty("h2.longrun.backup.interval");
+        if (backupInterval != null && !backupInterval.trim().isEmpty()) {
+            builder.backupIntervalMillis(parseDurationMillis(backupInterval));
+        }
+        String backupMaxRetained = System.getProperty("h2.longrun.backup.maxRetained");
+        if (backupMaxRetained != null && !backupMaxRetained.trim().isEmpty()) {
+            builder.backupMaxRetained(Integer.parseInt(backupMaxRetained));
+        }
+        String backupFailOnError = System.getProperty("h2.longrun.backup.failOnError");
+        if (backupFailOnError != null && !backupFailOnError.trim().isEmpty()) {
+            builder.backupFailOnError(Boolean.parseBoolean(backupFailOnError));
+        }
+        builder.backupDirectory(new File(builder.workDir, "backup"));
         return builder.build();
     }
 
@@ -371,6 +402,26 @@ public final class LongRunConfig {
         return maxDbSizeBytes;
     }
 
+    public boolean isBackupEnabled() {
+        return backupEnabled;
+    }
+
+    public long getBackupIntervalMillis() {
+        return backupIntervalMillis;
+    }
+
+    public File getBackupDirectory() {
+        return backupDirectory;
+    }
+
+    public int getBackupMaxRetained() {
+        return backupMaxRetained;
+    }
+
+    public boolean isBackupFailOnError() {
+        return backupFailOnError;
+    }
+
     public String summary() {
         return "instance=" + instanceName +
                 ", runName=" + runName +
@@ -405,6 +456,11 @@ public final class LongRunConfig {
                 ", crashIntervalMillis=" + crashIntervalMillis +
                 ", crashCycles=" + crashCycles +
                 ", maxDbSizeBytes=" + maxDbSizeBytes +
+                ", backupEnabled=" + backupEnabled +
+                ", backupIntervalMillis=" + backupIntervalMillis +
+                ", backupDirectory=" + backupDirectory.getPath() +
+                ", backupMaxRetained=" + backupMaxRetained +
+                ", backupFailOnError=" + backupFailOnError +
                 ", h2Jar=" + (h2Jar == null ? "" : h2Jar.getPath()) +
                 ", config=" + (configFile == null ? "" : configFile.getPath());
     }
@@ -531,6 +587,11 @@ public final class LongRunConfig {
         private long crashIntervalMillis = 120_000L;
         private int crashCycles = 1;
         private long maxDbSizeBytes;
+        private boolean backupEnabled;
+        private long backupIntervalMillis = 5L * 60L * 1000L;
+        private File backupDirectory = new File("backup");
+        private int backupMaxRetained = 10;
+        private boolean backupFailOnError;
 
         Builder configFile(File configFile) {
             this.configFile = configFile;
@@ -805,6 +866,40 @@ public final class LongRunConfig {
                 throw new IllegalArgumentException("limits.maxDbSizeGb");
             }
             this.maxDbSizeBytes = maxDbSizeBytes;
+            return this;
+        }
+
+        Builder backupEnabled(boolean backupEnabled) {
+            this.backupEnabled = backupEnabled;
+            return this;
+        }
+
+        Builder backupIntervalMillis(long backupIntervalMillis) {
+            if (backupIntervalMillis < 1L) {
+                throw new IllegalArgumentException("backup.interval");
+            }
+            this.backupIntervalMillis = backupIntervalMillis;
+            return this;
+        }
+
+        Builder backupDirectory(File backupDirectory) {
+            if (backupDirectory == null) {
+                throw new IllegalArgumentException("backup.directory");
+            }
+            this.backupDirectory = backupDirectory;
+            return this;
+        }
+
+        Builder backupMaxRetained(int backupMaxRetained) {
+            if (backupMaxRetained < 1) {
+                throw new IllegalArgumentException("backup.maxRetained");
+            }
+            this.backupMaxRetained = backupMaxRetained;
+            return this;
+        }
+
+        Builder backupFailOnError(boolean backupFailOnError) {
+            this.backupFailOnError = backupFailOnError;
             return this;
         }
 

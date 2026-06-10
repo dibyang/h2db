@@ -59,76 +59,93 @@ public final class WorkloadRunner {
         File workDir = config.getWorkDir();
         try (MetricsReporter metrics = new MetricsReporter(metricsDir);
                 LongRunWorkload workload = openWorkload(state)) {
-            metrics.resetBaseline(state);
-            ProgressReporter progress = new ProgressReporter(config, state, deadline);
-            boolean firstMetricSample = true;
-            if (config.isResume()) {
-                workload.verify();
-                state.recoveryCheck();
-                state.checkpoint(stateFile, config);
-                LongRunLog.info(config, "Longrun recovery verification passed, recoveryChecks="
-                        + state.getRecoveryChecks());
+            JdbcBackupCoordinator backupCoordinator = new JdbcBackupCoordinator(config, workload);
+            if (config.isBackupEnabled()) {
+                backupCoordinator.start(deadline);
             }
-            while (System.currentTimeMillis() < deadline) {
-                workload.step();
-                long now = System.currentTimeMillis();
-                if (now >= nextMetrics) {
-                    metrics.report(state, metricPhase(firstMetricSample));
-                    firstMetricSample = false;
-                    nextMetrics = now + config.getMetricsIntervalMillis();
-                }
-                if (now >= nextProgress) {
-                    progress.report(state, now);
-                    nextProgress = now + config.getProgressIntervalMillis();
-                }
-                if (now >= nextState) {
+            try {
+                metrics.resetBaseline(state);
+                ProgressReporter progress = new ProgressReporter(config, state, deadline);
+                boolean firstMetricSample = true;
+                if (config.isResume()) {
+                    workload.verify();
+                    state.recoveryCheck();
                     state.checkpoint(stateFile, config);
-                    enforceSizeLimit(workDir);
-                    nextState = now + config.getStateIntervalMillis();
+                    LongRunLog.info(config, "Longrun recovery verification passed, recoveryChecks="
+                            + state.getRecoveryChecks());
                 }
-                if (config.isReclamationEnabled() && now >= nextReclamation) {
+                while (System.currentTimeMillis() < deadline) {
+                    workload.step();
+                    long now = System.currentTimeMillis();
+                    if (now >= nextMetrics) {
+                        metrics.report(state, metricPhase(firstMetricSample));
+                        firstMetricSample = false;
+                        nextMetrics = now + config.getMetricsIntervalMillis();
+                    }
+                    if (now >= nextProgress) {
+                        progress.report(state, now);
+                        nextProgress = now + config.getProgressIntervalMillis();
+                    }
+                    if (now >= nextState) {
+                        state.checkpoint(stateFile, config);
+                        enforceSizeLimit(workDir);
+                        nextState = now + config.getStateIntervalMillis();
+                    }
+                    if (config.isReclamationEnabled() && now >= nextReclamation) {
+                        org.h2.mvstore.MVStoreOnlineReclamationResult result = workload.runReclamation();
+                        if (result != null) {
+                            metrics.reportReclamation(result);
+                        }
+                        nextReclamation = now + config.getReclamationIntervalMillis();
+                    }
+                    if (now >= nextReopen) {
+                        workload.reopenAndVerify();
+                        state.reopenCheck();
+                        state.checkpoint(stateFile, config);
+                        nextReopen = now + config.getReopenIntervalMillis();
+                    }
+                    if (now >= nextFault) {
+                        FaultInjectionResult result = workload.runFaultInjection(++faultEventId);
+                        if (result != null) {
+                            metrics.reportFaultInjection(result);
+                            if (result.isUnexpected()) {
+                                throw new LongRunFailure("Unexpected fault injection result: "
+                                        + result.getKind() + " " + result.getMessage());
+                            }
+                        }
+                        nextFault = now + config.getFaultIntervalMillis();
+                    }
+                    if (backupCoordinator.hasFailure()) {
+                        LongRunFailure failure = backupCoordinator.getAndClearFailure();
+                        if (failure != null) {
+                            if (config.isBackupFailOnError()) {
+                                throw failure;
+                            }
+                            LongRunLog.warn(config, "Backup encountered an issue: " + failure.getMessage());
+                        }
+                    }
+                }
+                workload.commit();
+                if (config.isReclamationEnabled()) {
                     org.h2.mvstore.MVStoreOnlineReclamationResult result = workload.runReclamation();
                     if (result != null) {
                         metrics.reportReclamation(result);
                     }
-                    nextReclamation = now + config.getReclamationIntervalMillis();
                 }
-                if (now >= nextReopen) {
-                    workload.reopenAndVerify();
-                    state.reopenCheck();
-                    state.checkpoint(stateFile, config);
-                    nextReopen = now + config.getReopenIntervalMillis();
-                }
-                if (now >= nextFault) {
-                    FaultInjectionResult result = workload.runFaultInjection(++faultEventId);
-                    if (result != null) {
-                        metrics.reportFaultInjection(result);
-                        if (result.isUnexpected()) {
-                            throw new LongRunFailure("Unexpected fault injection result: "
-                                    + result.getKind() + " " + result.getMessage());
-                        }
-                    }
-                    nextFault = now + config.getFaultIntervalMillis();
-                }
+                workload.verify();
+                state.checkpoint(stateFile, config);
+                metrics.report(state, MetricPhase.RUNNING);
+                long finalSize = directorySize(workDir);
+                Properties workloadProperties = new Properties();
+                workload.collectReportProperties(workloadProperties);
+                File finalReport = new File(workDir, "final-report.properties");
+                new FinalReportWriter().write(finalReport, config, state, finalSize, h2JarMetadata, workloadProperties);
+                LongRunLog.info(config, LongRunSummaryFormatter.finished(config, state, finalSize, finalReport,
+                        System.currentTimeMillis() - state.getStartedMillis()));
+                return 0;
+            } finally {
+                backupCoordinator.close();
             }
-            workload.commit();
-            if (config.isReclamationEnabled()) {
-                org.h2.mvstore.MVStoreOnlineReclamationResult result = workload.runReclamation();
-                if (result != null) {
-                    metrics.reportReclamation(result);
-                }
-            }
-            workload.verify();
-            state.checkpoint(stateFile, config);
-            metrics.report(state, MetricPhase.RUNNING);
-            long finalSize = directorySize(workDir);
-            Properties workloadProperties = new Properties();
-            workload.collectReportProperties(workloadProperties);
-            File finalReport = new File(workDir, "final-report.properties");
-            new FinalReportWriter().write(finalReport, config, state, finalSize, h2JarMetadata, workloadProperties);
-            LongRunLog.info(config, LongRunSummaryFormatter.finished(config, state, finalSize, finalReport,
-                    System.currentTimeMillis() - state.getStartedMillis()));
-            return 0;
         }
     }
 
@@ -152,6 +169,7 @@ public final class WorkloadRunner {
         deleteRecursively(new File(workDir, "metrics"));
         deleteRecursively(new File(workDir, "report"));
         deleteRecursively(new File(workDir, "fault"));
+        deleteRecursively(new File(workDir, "backup"));
         deleteRecursively(new File(workDir, "final-report.properties"));
         deleteRecursively(new File(workDir, "longrun-state.properties"));
     }

@@ -46,6 +46,8 @@ public final class MVStoreWorkload implements LongRunWorkload {
     private final LongRunState state;
     private final Random random;
     private final ReclamationObserver reclamationObserver = new ReclamationObserver();
+    private final File databaseFile;
+    private final File databaseBaseFile;
     private final File file;
     private MVStore store;
     private MVMap<Long, String> data;
@@ -58,7 +60,9 @@ public final class MVStoreWorkload implements LongRunWorkload {
         this.config = config;
         this.state = state;
         random = new Random(config.getSeed());
-        file = new File(config.getWorkDir(), "mvstore-longrun.mv.db");
+        databaseBaseFile = new File(config.getWorkDir(), "mvstore-longrun");
+        databaseFile = new File(databaseBaseFile.getPath() + ".mv.db");
+        file = databaseFile;
         if (!config.isResume() && file.exists() && !file.delete()) {
             throw new IllegalStateException("Could not delete old longrun store: " + file);
         }
@@ -155,6 +159,11 @@ public final class MVStoreWorkload implements LongRunWorkload {
         closeStore();
         openStore();
         verify();
+    }
+
+    @Override
+    public String getJdbcUrl() {
+        return "jdbc:h2:" + databaseBaseFile.getAbsolutePath();
     }
 
     @Override

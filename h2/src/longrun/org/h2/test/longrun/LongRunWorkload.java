@@ -13,6 +13,8 @@ import org.h2.mvstore.MVStoreOnlineReclamationResult;
  */
 public interface LongRunWorkload extends AutoCloseable {
 
+    String getJdbcUrl();
+
     void step() throws Exception;
 
     void commit() throws Exception;

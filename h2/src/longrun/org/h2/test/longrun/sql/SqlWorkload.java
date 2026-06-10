@@ -19,6 +19,7 @@ import org.h2.mvstore.MVStoreOnlineReclamationResult;
 import org.h2.test.longrun.LongRunConfig;
 import org.h2.test.longrun.LongRunState;
 import org.h2.test.longrun.LongRunWorkload;
+import org.h2.tools.Server;
 
 /**
  * JDBC / SQL workload for the standalone long-running stress test.
@@ -29,21 +30,39 @@ public final class SqlWorkload implements LongRunWorkload {
     private final LongRunState state;
     private final Random random;
     private final File file;
+    private final String fileJdbcUrl;
+    private final String workloadJdbcUrl;
+    private final Server tcpServer;
     private Connection connection;
+    private PreparedStatement putStatement;
+    private PreparedStatement getStatement;
+    private PreparedStatement deleteStatement;
+    private PreparedStatement existsStatement;
+    private PreparedStatement ledgerStatement;
+    private PreparedStatement dataCounterStatement;
+    private PreparedStatement activeCounterStatement;
+    private PreparedStatement incrementCounterStatement;
 
     public SqlWorkload(LongRunConfig config, LongRunState state) throws Exception {
         this.config = config;
         this.state = state;
         random = new Random(config.getSeed());
         file = new File(config.getWorkDir(), "sql-longrun");
+        fileJdbcUrl = "jdbc:h2:" + file.getAbsolutePath() + ";MODE=REGULAR";
         if (!config.isResume()) {
             File mv = new File(file.getPath() + ".mv.db");
             if (mv.exists() && !mv.delete()) {
                 throw new IllegalStateException("Could not delete old SQL longrun store: " + mv);
             }
         }
-        open();
-        initSchema();
+        tcpServer = startTcpServer();
+        workloadJdbcUrl = "jdbc:h2:tcp://127.0.0.1:" + tcpServer.getPort() + "/" + file.getName() + ";MODE=REGULAR";
+        try {
+            open();
+        } catch (Exception e) {
+            close();
+            throw e;
+        }
     }
 
     @Override
@@ -93,9 +112,14 @@ public final class SqlWorkload implements LongRunWorkload {
     @Override
     public void reopenAndVerify() throws Exception {
         commit();
-        close();
+        closeConnection();
         open();
         verify();
+    }
+
+    @Override
+    public String getJdbcUrl() {
+        return fileJdbcUrl;
     }
 
     @Override
@@ -105,15 +129,99 @@ public final class SqlWorkload implements LongRunWorkload {
 
     @Override
     public void close() throws Exception {
-        if (connection != null) {
-            connection.close();
-            connection = null;
+        Exception stopError = null;
+        try {
+            closeConnection();
+        } catch (Exception e) {
+            stopError = e;
+        }
+        try {
+            if (tcpServer != null) {
+                tcpServer.stop();
+            }
+        } catch (Exception e) {
+            if (stopError == null) {
+                stopError = e;
+            } else {
+                stopError.addSuppressed(e);
+            }
+        }
+        if (stopError != null) {
+            throw stopError;
         }
     }
 
+    private void closeConnection() throws Exception {
+        Exception stopError = null;
+        try {
+            closeIfNotNull(putStatement);
+            closeIfNotNull(getStatement);
+            closeIfNotNull(deleteStatement);
+            closeIfNotNull(existsStatement);
+            closeIfNotNull(ledgerStatement);
+            closeIfNotNull(dataCounterStatement);
+            closeIfNotNull(activeCounterStatement);
+            closeIfNotNull(incrementCounterStatement);
+            putStatement = null;
+            getStatement = null;
+            deleteStatement = null;
+            existsStatement = null;
+            ledgerStatement = null;
+            dataCounterStatement = null;
+            activeCounterStatement = null;
+            incrementCounterStatement = null;
+        } catch (Exception e) {
+            if (stopError == null) {
+                stopError = e;
+            } else {
+                stopError.addSuppressed(e);
+            }
+        }
+        try {
+            if (connection != null) {
+                connection.close();
+                connection = null;
+            }
+        } catch (Exception e) {
+            if (stopError == null) {
+                stopError = e;
+            } else {
+                stopError.addSuppressed(e);
+            }
+        }
+        if (stopError != null) {
+            throw stopError;
+        }
+    }
+
+    private Server startTcpServer() throws Exception {
+        File baseDir = file.getParentFile();
+        if (baseDir == null) {
+            throw new IllegalStateException("Could not determine SQL longrun base dir: " + file);
+        }
+        return Server.createTcpServer(
+                "-tcpPort", "0",
+                "-ifNotExists",
+                "-baseDir", baseDir.getAbsolutePath()).start();
+    }
+
     private void open() throws Exception {
-        connection = DriverManager.getConnection("jdbc:h2:" + file.getAbsolutePath() + ";MODE=REGULAR");
+        connection = DriverManager.getConnection(workloadJdbcUrl);
         connection.setAutoCommit(false);
+        initSchema();
+        prepareStatements();
+    }
+
+    private void prepareStatements() throws Exception {
+        putStatement = connection.prepareStatement("MERGE INTO LONGRUN_DATA KEY(ID) VALUES(?, ?, ?, ?)");
+        getStatement = connection.prepareStatement("SELECT PAYLOAD, CHECKSUM FROM LONGRUN_DATA WHERE ID = ?");
+        deleteStatement = connection.prepareStatement("DELETE FROM LONGRUN_DATA WHERE ID = ?");
+        existsStatement = connection.prepareStatement("SELECT COUNT(*) FROM LONGRUN_DATA WHERE ID = ?");
+        ledgerStatement = connection.prepareStatement("INSERT INTO LONGRUN_LEDGER(SEQ, OP) VALUES(?, ?)");
+        activeCounterStatement = connection.prepareStatement("SELECT COUNTER_VALUE FROM LONGRUN_COUNTERS WHERE NAME = ?");
+        incrementCounterStatement = connection.prepareStatement(
+                "UPDATE LONGRUN_COUNTERS SET COUNTER_VALUE = COUNTER_VALUE + ? WHERE NAME = ?");
+        dataCounterStatement = connection.prepareStatement("MERGE INTO LONGRUN_COUNTERS KEY(NAME) VALUES(?, ?)");
     }
 
     private void initSchema() throws Exception {
@@ -126,8 +234,8 @@ public final class SqlWorkload implements LongRunWorkload {
                     + "NAME VARCHAR PRIMARY KEY, COUNTER_VALUE BIGINT)");
             stat.execute("CREATE INDEX IF NOT EXISTS IDX_LONGRUN_DATA_VERSION ON LONGRUN_DATA(VERSION)");
         }
-        if (!hasCounter("activeKeys")) {
-            setCounter("activeKeys", 0L);
+        if (!hasCounterRaw("activeKeys")) {
+            setCounterRaw("activeKeys", 0L);
         }
         connection.commit();
     }
@@ -136,14 +244,11 @@ public final class SqlWorkload implements LongRunWorkload {
         long sequence = state.nextSequence();
         boolean existed = exists(key);
         String payload = payload(key, sequence);
-        try (PreparedStatement prep = connection.prepareStatement(
-                "MERGE INTO LONGRUN_DATA KEY(ID) VALUES(?, ?, ?, ?)")) {
-            prep.setLong(1, key);
-            prep.setLong(2, sequence);
-            prep.setString(3, payload);
-            prep.setLong(4, checksum(payload));
-            prep.executeUpdate();
-        }
+        putStatement.setLong(1, key);
+        putStatement.setLong(2, sequence);
+        putStatement.setString(3, payload);
+        putStatement.setLong(4, checksum(payload));
+        putStatement.executeUpdate();
         ledger(sequence, "PUT:" + key);
         if (!existed) {
             incrementCounter("activeKeys", 1L);
@@ -153,13 +258,10 @@ public final class SqlWorkload implements LongRunWorkload {
 
     private void get(long key) throws Exception {
         state.nextSequence();
-        try (PreparedStatement prep = connection.prepareStatement(
-                "SELECT PAYLOAD, CHECKSUM FROM LONGRUN_DATA WHERE ID = ?")) {
-            prep.setLong(1, key);
-            try (ResultSet rs = prep.executeQuery()) {
-                if (rs.next() && checksum(rs.getString(1)) != rs.getLong(2)) {
-                    throw new IllegalStateException("SQL checksum mismatch for key " + key);
-                }
+        getStatement.setLong(1, key);
+        try (ResultSet rs = getStatement.executeQuery()) {
+            if (rs.next() && checksum(rs.getString(1)) != rs.getLong(2)) {
+                throw new IllegalStateException("SQL checksum mismatch for key " + key);
             }
         }
         state.read();
@@ -168,10 +270,8 @@ public final class SqlWorkload implements LongRunWorkload {
     private void remove(long key) throws Exception {
         long sequence = state.nextSequence();
         int removed;
-        try (PreparedStatement prep = connection.prepareStatement("DELETE FROM LONGRUN_DATA WHERE ID = ?")) {
-            prep.setLong(1, key);
-            removed = prep.executeUpdate();
-        }
+        deleteStatement.setLong(1, key);
+        removed = deleteStatement.executeUpdate();
         ledger(sequence, "REMOVE:" + key);
         if (removed > 0) {
             incrementCounter("activeKeys", -1L);
@@ -183,14 +283,11 @@ public final class SqlWorkload implements LongRunWorkload {
         long sequence = state.nextSequence();
         String payload = payload(key, sequence);
         Savepoint savepoint = connection.setSavepoint();
-        try (PreparedStatement prep = connection.prepareStatement(
-                "MERGE INTO LONGRUN_DATA KEY(ID) VALUES(?, ?, ?, ?)")) {
-            prep.setLong(1, -key - 1);
-            prep.setLong(2, sequence);
-            prep.setString(3, payload);
-            prep.setLong(4, checksum(payload));
-            prep.executeUpdate();
-        }
+        putStatement.setLong(1, -key - 1);
+        putStatement.setLong(2, sequence);
+        putStatement.setString(3, payload);
+        putStatement.setLong(4, checksum(payload));
+        putStatement.executeUpdate();
         connection.rollback(savepoint);
         if (exists(-key - 1)) {
             throw new IllegalStateException("Rolled-back SQL row is visible: " + (-key - 1));
@@ -199,55 +296,69 @@ public final class SqlWorkload implements LongRunWorkload {
     }
 
     private boolean exists(long key) throws Exception {
-        try (PreparedStatement prep = connection.prepareStatement("SELECT COUNT(*) FROM LONGRUN_DATA WHERE ID = ?")) {
-            prep.setLong(1, key);
-            try (ResultSet rs = prep.executeQuery()) {
-                rs.next();
-                return rs.getLong(1) > 0L;
-            }
-        }
-    }
-
-    private void ledger(long sequence, String operation) throws Exception {
-        try (PreparedStatement prep = connection.prepareStatement(
-                "INSERT INTO LONGRUN_LEDGER(SEQ, OP) VALUES(?, ?)")) {
-            prep.setLong(1, sequence);
-            prep.setString(2, operation);
-            prep.executeUpdate();
+        existsStatement.setLong(1, key);
+        try (ResultSet rs = existsStatement.executeQuery()) {
+            rs.next();
+            return rs.getLong(1) > 0L;
         }
     }
 
     private boolean hasCounter(String name) throws Exception {
-        try (PreparedStatement prep = connection.prepareStatement(
-                "SELECT COUNT(*) FROM LONGRUN_COUNTERS WHERE NAME = ?")) {
-            prep.setString(1, name);
-            try (ResultSet rs = prep.executeQuery()) {
-                rs.next();
-                return rs.getLong(1) > 0L;
-            }
+        activeCounterStatement.setString(1, name);
+        try (ResultSet rs = activeCounterStatement.executeQuery()) {
+            return rs.next();
         }
     }
 
+    private void ledger(long sequence, String operation) throws Exception {
+        ledgerStatement.setLong(1, sequence);
+        ledgerStatement.setString(2, operation);
+        ledgerStatement.executeUpdate();
+    }
+
     private long counter(String name) throws Exception {
-        try (PreparedStatement prep = connection.prepareStatement(
-                "SELECT COUNTER_VALUE FROM LONGRUN_COUNTERS WHERE NAME = ?")) {
-            prep.setString(1, name);
-            try (ResultSet rs = prep.executeQuery()) {
-                return rs.next() ? rs.getLong(1) : 0L;
-            }
+        activeCounterStatement.setString(1, name);
+        try (ResultSet rs = activeCounterStatement.executeQuery()) {
+            return rs.next() ? rs.getLong(1) : 0L;
         }
     }
 
     private void incrementCounter(String name, long delta) throws Exception {
-        setCounter(name, counter(name) + delta);
+        incrementCounterStatement.setLong(1, delta);
+        incrementCounterStatement.setString(2, name);
+        if (incrementCounterStatement.executeUpdate() == 0) {
+            setCounter(name, delta);
+        }
     }
 
     private void setCounter(String name, long value) throws Exception {
-        try (PreparedStatement prep = connection.prepareStatement(
+        dataCounterStatement.setString(1, name);
+        dataCounterStatement.setLong(2, value);
+        dataCounterStatement.executeUpdate();
+    }
+
+    private boolean hasCounterRaw(String name) throws Exception {
+        try (PreparedStatement check = connection.prepareStatement(
+                "SELECT 1 FROM LONGRUN_COUNTERS WHERE NAME = ?")) {
+            check.setString(1, name);
+            try (ResultSet rs = check.executeQuery()) {
+                return rs.next();
+            }
+        }
+    }
+
+    private void setCounterRaw(String name, long value) throws Exception {
+        try (PreparedStatement set = connection.prepareStatement(
                 "MERGE INTO LONGRUN_COUNTERS KEY(NAME) VALUES(?, ?)")) {
-            prep.setString(1, name);
-            prep.setLong(2, value);
-            prep.executeUpdate();
+            set.setString(1, name);
+            set.setLong(2, value);
+            set.executeUpdate();
+        }
+    }
+
+    private static void closeIfNotNull(AutoCloseable closeable) throws Exception {
+        if (closeable != null) {
+            closeable.close();
         }
     }
 
@@ -259,7 +370,16 @@ public final class SqlWorkload implements LongRunWorkload {
     }
 
     private String payload(long key, long sequence) {
-        return key + ":" + sequence + ":" + random.nextLong();
+        int size = config.getValueSizeMin();
+        if (config.getValueSizeMax() > config.getValueSizeMin()) {
+            size += random.nextInt(config.getValueSizeMax() - config.getValueSizeMin() + 1);
+        }
+        StringBuilder builder = new StringBuilder(size + 64);
+        builder.append(key).append(':').append(sequence).append(':');
+        while (builder.length() < size) {
+            builder.append((char) ('a' + random.nextInt(26)));
+        }
+        return builder.toString();
     }
 
     private static long checksum(String value) {

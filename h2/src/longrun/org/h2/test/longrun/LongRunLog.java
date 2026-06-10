@@ -17,6 +17,10 @@ public final class LongRunLog {
         System.out.println(prefix(config) + " " + message);
     }
 
+    public static void warn(LongRunConfig config, String message) {
+        System.out.println(prefix(config) + " WARN " + message);
+    }
+
     public static void parent(String message) {
         System.out.println("[parent pid=" + processId() + "] " + message);
     }

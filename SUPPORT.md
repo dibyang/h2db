@@ -2,10 +2,13 @@
 
 [English](SUPPORT.en.md)
 
-h2db 的 bug、回归问题、发布问题和功能请求请使用本仓库的 issue tracker。
+h2db 的 bug、回归问题、发布问题和功能请求请优先使用项目反馈流程：
+
+* [问题反馈文档](docs/bug-reporting.md)
+* [贡献指南](CONTRIBUTING.md)
+* [安全政策](SECURITY.md)
 
 提交 issue 前请确认：
-
 * 搜索已有 issue 和上游 H2 文档。
 * 在相关场景中提供 h2db 版本、Java 版本、操作系统和数据库 URL 选项。
 * 对 SQL、JDBC、MVStore、文件锁、服务端或 Web Console 问题提供最小可复现示例。

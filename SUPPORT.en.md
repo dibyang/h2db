@@ -2,7 +2,11 @@
 
 [中文](SUPPORT.md)
 
-Use this repository's issue tracker for h2db bugs, regressions, release questions, and feature requests.
+Use the project intake flow for h2db bugs, regressions, release questions, and feature requests:
+
+* [Bug Reporting](docs/bug-reporting.en.md)
+* [Contributing Guide](CONTRIBUTING.en.md)
+* [Security Policy](SECURITY.en.md)
 
 Before filing an issue:
 

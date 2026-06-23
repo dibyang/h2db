@@ -1,0 +1,110 @@
+name: "Bug report"
+description: "Report a reproducible h2db problem"
+title: "[Component] Briefly describe the issue"
+labels: ["bug"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve h2db. Complete this form with as much detail as possible to help triage quickly.
+  - type: dropdown
+    id: component
+    attributes:
+      label: "Affected component"
+      options:
+        - "SQL engine"
+        - "JDBC"
+        - "MVStore / storage"
+        - "Server mode / TCP"
+        - "Console"
+        - "LongRun stress tool"
+        - "Maven/release/build"
+        - "Other"
+    validations:
+      required: true
+  - type: input
+    id: h2-version
+    attributes:
+      label: "h2db version"
+      description: "For example: 2.3.0 / 2.2.220 / snapshot hash"
+      placeholder: "2.3.0"
+    validations:
+      required: true
+  - type: input
+    id: java-version
+    attributes:
+      label: "Java version"
+      placeholder: "Oracle/OpenJDK 8 / 11 / 17"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: "OS and architecture"
+      placeholder: "Ubuntu 22.04 / Windows 10 x86_64"
+    validations:
+      required: true
+  - type: textarea
+    id: db-url
+    attributes:
+      label: "Database URL and key options"
+      description: "Please include JDBC URL (sensitive values removed) and key connection options"
+      placeholder: "jdbc:h2:./test;AUTO_SERVER=TRUE;..."
+  - type: textarea
+    id: repro
+    attributes:
+      label: "Minimal reproduction"
+      description: "Please provide a minimal SQL / Java / operational repro that can be executed independently."
+      placeholder: |
+        1. Create schema...
+        2. Run SQL...
+        3. Trigger failure...
+    validations:
+      required: true
+  - type: textarea
+    id: expectation
+    attributes:
+      label: "Expected behavior"
+      description: "What should have happened?"
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: "Observed behavior"
+      description: "What happened instead, including logs, exception stack, and error codes."
+      placeholder: "Paste exception and stack trace"
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: "Repro scale and environment details"
+      description: "Optional: thread count, workload shape, data size, and triggering interval."
+      placeholder: "16 threads, 10-minute run, about 1 GB data"
+  - type: dropdown
+    id: reproducible
+    attributes:
+      label: "Reproducibility"
+      options:
+        - "100% (always)"
+        - "Often"
+        - "Intermittent"
+        - "Not stable yet"
+  - type: checkboxes
+    id: triage
+    attributes:
+      label: "Triage checklist"
+      options:
+        - label: "I searched existing issues and confirmed this is likely unreported."
+          required: true
+        - label: "I confirmed this is specific to this fork (not only generic upstream H2 usage guidance)."
+          required: true
+        - label: "This is not a security vulnerability report."
+          required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: "Additional context"
+      description: "Attach repro projects, scripts, logs, relevant configs, and stack traces if available."

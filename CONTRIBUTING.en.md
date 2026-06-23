@@ -4,6 +4,15 @@
 
 Thank you for contributing to h2db. This project is a database engine, so small changes can affect compatibility, durability, and security. Keep changes focused and include enough verification for reviewers to reproduce your result.
 
+## Issue and security intake
+
+Before opening an ordinary issue:
+
+- Use the repository Bug report issue template for normal defects.
+- For security issues, report privately first and avoid public exploit details.
+
+See: [Bug Reporting](docs/bug-reporting.en.md).
+
 ## Development Setup
 
 The main Gradle project is in `h2/`.

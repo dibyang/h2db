@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: "安全漏洞报告"
+    url: "https://github.com/dibyang/h2db/security/advisories/new"
+    about: "疑似安全问题请先使用私有安全报告通道，不要在公开 issue 中披露细节。"
+  - name: "Security report (en)"
+    url: "https://github.com/dibyang/h2db/security/advisories/new"
+    about: "For suspected security vulnerabilities, use private reporting first and avoid public disclosure."
+  - name: "贡献指南"
+    url: "https://github.com/dibyang/h2db/blob/master/CONTRIBUTING.md"
+    about: "Before opening an issue or pull request, read the contribution workflow."

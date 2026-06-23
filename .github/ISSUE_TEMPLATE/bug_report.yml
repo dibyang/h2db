@@ -1,0 +1,110 @@
+name: "Bug 报告"
+description: "报告可复现的 h2db 问题"
+title: "[组件] 简述问题"
+labels: ["bug"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢提交问题反馈！请尽量按下列结构填写，信息越完整，修复越快。
+  - type: dropdown
+    id: component
+    attributes:
+      label: "受影响的组件"
+      options:
+        - "SQL 引擎"
+        - "JDBC"
+        - "MVStore / 存储"
+        - "服务器模式 / TCP"
+        - "Console"
+        - "LongRun 压测工具"
+        - "Maven/发布/构建"
+        - "其它"
+    validations:
+      required: true
+  - type: input
+    id: h2-version
+    attributes:
+      label: "h2db 版本"
+      description: "例如：2.3.0 / 2.2.220 / snapshot hash"
+      placeholder: "2.3.0"
+    validations:
+      required: true
+  - type: input
+    id: java-version
+    attributes:
+      label: "Java 版本"
+      placeholder: "Oracle/OpenJDK 8 / 11 / 17"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: "操作系统与架构"
+      placeholder: "Ubuntu 22.04 / Windows 10 x86_64"
+    validations:
+      required: true
+  - type: textarea
+    id: db-url
+    attributes:
+      label: "数据库连接串与关键参数"
+      description: "请贴出 JDBC URL（可脱敏）和关键参数"
+      placeholder: "jdbc:h2:./test;AUTO_SERVER=TRUE;..."
+  - type: textarea
+    id: repro
+    attributes:
+      label: "最小复现步骤"
+      description: "请尽量给出可以独立运行的最小 SQL、Java 或操作步骤"
+      placeholder: |
+        1. 建库建表...
+        2. 执行 SQL...
+        3. 触发异常...
+    validations:
+      required: true
+  - type: textarea
+    id: expectation
+    attributes:
+      label: "预期行为"
+      description: "你期望发生什么？"
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: "实际行为"
+      description: "实际发生了什么？包括日志、异常信息、错误码、堆栈"
+      placeholder: "贴出关键异常和栈..."
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: "复现环境与数据规模"
+      description: "可选填：是否有固定数据量、并发度、线程数、DDL/DML 比例、触发频率等"
+      placeholder: "并发 16，线程数 8，持续 10min，约 1GB 数据"
+  - type: dropdown
+    id: reproducible
+    attributes:
+      label: "复现频率"
+      options:
+        - "100%（每次都复现）"
+        - "高（大部分可复现）"
+        - "偶发"
+        - "未稳定复现"
+  - type: checkboxes
+    id: triage
+    attributes:
+      label: "排查协作"
+      options:
+        - label: "我已经搜索过现有 issue，并确认这个问题尚未被报告。"
+          required: true
+        - label: "我已经确认该问题与本仓库相关（不是纯上游 H2 教程/配置问题）。"
+          required: true
+        - label: "这不是安全漏洞报告（如需请使用安全反馈渠道）。"
+          required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: "补充信息"
+      description: "包括可复现工程、测试样例、日志片段、配置文件等（如有）。"

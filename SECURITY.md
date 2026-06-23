@@ -8,12 +8,12 @@
 
 ## 报告漏洞
 
-在维护者完成初步分流前，请不要通过公开 issue 报告疑似安全漏洞。
+在维护者完成初步分流前，请不要通过公开 issue 报告疑似安全漏洞。安全问题不应在公开线程里披露 PoC、敏感样本或可复现利用细节。
 
 首选报告路径：
 
-1. 如果本仓库启用了 GitHub private vulnerability reporting 或 Security Advisories，请优先使用。
-2. 如果 GitHub 私密报告不可用，请联系已发布 Maven POM 元数据中的维护者。
+1. GitHub Security Advisory: `https://github.com/dibyang/h2db/security/advisories/new`
+2. 如果 GitHub 私密报告不可用，请先以最少敏感信息提交公开占位 issue 请求安全联络，并注明“安全问题”。
 
 报告请包含：
 
@@ -22,4 +22,4 @@
 * 预期影响，例如认证绕过、数据泄露、远程代码执行、拒绝服务、数据损坏或权限提升。
 * 已知缓解方案。
 
-项目会在确认问题并准备修复或缓解措施后协调披露时间。
+项目会在确认问题并准备修复或缓解措施后，统一协调披露时间。

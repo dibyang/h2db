@@ -79,6 +79,10 @@ Maven 支持仍是实验性的，详见 [h2/MAVEN.md](h2/MAVEN.md)。
 
 ## 支持
 
-h2db 的 bug、回归问题、发布问题和功能请求请使用本仓库的 issue tracker。
+请先阅读并按下面入口提交：
+
+* [问题反馈](docs/bug-reporting.md)
+* [贡献指南](CONTRIBUTING.md)
+* [安全政策](SECURITY.md)
 
 一般 H2 使用问题如果与本 fork 无关，可以继续参考上游 H2 社区资源，例如 H2 mailing list 和 Stack Overflow 的 `h2` 标签。

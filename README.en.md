@@ -79,6 +79,10 @@ This project follows the H2 license terms and is available under MPL 2.0 or EPL 
 
 ## Support
 
-Use this repository's issue tracker for h2db bugs, regressions, release questions, and feature requests.
+Use the project intake docs before reporting:
+
+* [Bug Reporting](docs/bug-reporting.en.md)
+* [Contributing Guide](CONTRIBUTING.en.md)
+* [Security Policy](SECURITY.en.md)
 
 For general H2 usage questions that are not specific to this fork, upstream H2 community resources such as the H2 mailing list and the `h2` tag on Stack Overflow remain useful.

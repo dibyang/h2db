@@ -8,6 +8,7 @@ body:
     attributes:
       value: |
         Thanks for helping improve h2db. Complete this form with as much detail as possible to help triage quickly.
+        If the issue may involve data exposure, arbitrary file access, privilege bypass, exploitable deserialization, or remotely triggerable denial of service, do not open a public issue. Use the security reporting channel instead.
   - type: dropdown
     id: component
     attributes:
@@ -27,8 +28,8 @@ body:
     id: h2-version
     attributes:
       label: "h2db version"
-      description: "For example: 2.3.0 / 2.2.220 / snapshot hash"
-      placeholder: "2.3.0"
+      description: "For example: 2.3.0 / 2.2.220 / Maven coordinates / snapshot hash"
+      placeholder: "net.xdob.h2db:h2db:2.3.0"
     validations:
       required: true
   - type: input
@@ -51,6 +52,14 @@ body:
       label: "Database URL and key options"
       description: "Please include JDBC URL (sensitive values removed) and key connection options"
       placeholder: "jdbc:h2:./test;AUTO_SERVER=TRUE;..."
+  - type: input
+    id: usage-path
+    attributes:
+      label: "Usage path or integration layer"
+      description: "Direct JDBC, embedded mode, TCP server, Console, MVStore API, framework integration, or script/tool usage."
+      placeholder: "Direct JDBC / embedded / TCP server / Console / MVStore API / framework integration"
+    validations:
+      required: true
   - type: textarea
     id: repro
     attributes:
@@ -81,8 +90,8 @@ body:
     id: environment
     attributes:
       label: "Repro scale and environment details"
-      description: "Optional: thread count, workload shape, data size, and triggering interval."
-      placeholder: "16 threads, 10-minute run, about 1 GB data"
+      description: "Optional: concurrency, thread count, iteration count, first failure time, workload shape, data size, and triggering interval."
+      placeholder: "16 concurrent workers, 8 threads, 10000 iterations, 10-minute run, about 1 GB data"
   - type: dropdown
     id: reproducible
     attributes:
@@ -100,6 +109,8 @@ body:
         - label: "I searched existing issues and confirmed this is likely unreported."
           required: true
         - label: "I confirmed this is specific to this fork (not only generic upstream H2 usage guidance)."
+          required: true
+        - label: "I tried to confirm this still reproduces on the latest release or current main branch."
           required: true
         - label: "This is not a security vulnerability report."
           required: true

@@ -8,6 +8,7 @@ body:
     attributes:
       value: |
         感谢提交问题反馈！请尽量按下列结构填写，信息越完整，修复越快。
+        如果问题可能涉及数据泄露、任意文件访问、权限绕过、可利用反序列化或远程触发拒绝服务，请不要提交公开 issue，改用安全报告通道。
   - type: dropdown
     id: component
     attributes:
@@ -27,8 +28,8 @@ body:
     id: h2-version
     attributes:
       label: "h2db 版本"
-      description: "例如：2.3.0 / 2.2.220 / snapshot hash"
-      placeholder: "2.3.0"
+      description: "例如：2.3.0 / 2.2.220 / Maven 坐标 / snapshot hash"
+      placeholder: "net.xdob.h2db:h2db:2.3.0"
     validations:
       required: true
   - type: input
@@ -51,6 +52,14 @@ body:
       label: "数据库连接串与关键参数"
       description: "请贴出 JDBC URL（可脱敏）和关键参数"
       placeholder: "jdbc:h2:./test;AUTO_SERVER=TRUE;..."
+  - type: input
+    id: usage-path
+    attributes:
+      label: "使用路径或集成层"
+      description: "说明是直接 JDBC、嵌入式模式、TCP server、Console、MVStore API、框架集成还是脚本工具。"
+      placeholder: "Direct JDBC / embedded / TCP server / Console / MVStore API / framework integration"
+    validations:
+      required: true
   - type: textarea
     id: repro
     attributes:
@@ -81,8 +90,8 @@ body:
     id: environment
     attributes:
       label: "复现环境与数据规模"
-      description: "可选填：是否有固定数据量、并发度、线程数、DDL/DML 比例、触发频率等"
-      placeholder: "并发 16，线程数 8，持续 10min，约 1GB 数据"
+      description: "可选填：是否有固定数据量、并发度、线程数、迭代次数、首次失败时间、DDL/DML 比例、触发频率等"
+      placeholder: "并发 16，线程数 8，迭代 10000 次，持续 10min，约 1GB 数据"
   - type: dropdown
     id: reproducible
     attributes:
@@ -100,6 +109,8 @@ body:
         - label: "我已经搜索过现有 issue，并确认这个问题尚未被报告。"
           required: true
         - label: "我已经确认该问题与本仓库相关（不是纯上游 H2 教程/配置问题）。"
+          required: true
+        - label: "我已尽量在最新发布版本或当前主干验证该问题仍然存在。"
           required: true
         - label: "这不是安全漏洞报告（如需请使用安全反馈渠道）。"
           required: true

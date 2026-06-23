@@ -23,4 +23,6 @@ Include:
 * Expected impact, such as authentication bypass, data disclosure, remote code execution, denial of service, corruption, or privilege escalation.
 * Any known mitigations.
 
+Treat the following categories as security-sensitive: data exposure, unauthorized access, arbitrary file read or write, path traversal, exploitable deserialization, authentication or privilege bypass, denial of service reliably triggered by remote or untrusted input, and attack paths that can corrupt persistent data or bypass recovery.
+
 The project will coordinate disclosure timing after confirming the issue and preparing a fix or mitigation.

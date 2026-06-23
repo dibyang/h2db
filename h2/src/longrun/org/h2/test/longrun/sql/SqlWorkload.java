@@ -16,6 +16,7 @@ import java.sql.Statement;
 import java.util.Random;
 import java.util.zip.CRC32;
 import org.h2.mvstore.MVStoreOnlineReclamationResult;
+import org.h2.test.longrun.LongRunLog;
 import org.h2.test.longrun.LongRunConfig;
 import org.h2.test.longrun.LongRunState;
 import org.h2.test.longrun.LongRunWorkload;
@@ -210,6 +211,23 @@ public final class SqlWorkload implements LongRunWorkload {
         connection.setAutoCommit(false);
         initSchema();
         prepareStatements();
+        syncSequenceFromPersistence();
+    }
+
+    private void syncSequenceFromPersistence() throws Exception {
+        if (!config.isResume()) {
+            return;
+        }
+        long maxLedgerSeq = scalar("SELECT COALESCE(MAX(SEQ),0) FROM LONGRUN_LEDGER");
+        long lastCounterSeq = scalar(
+                "SELECT COALESCE((SELECT COUNTER_VALUE FROM LONGRUN_COUNTERS WHERE NAME = 'lastSequence'),0)");
+        long maxSeq = Math.max(maxLedgerSeq, lastCounterSeq);
+        long before = state.getOperationSequence();
+        if (maxSeq > before) {
+            LongRunLog.info(config, "SQL state sequence synchronized from " + before + " to max persisted sequence " + maxSeq
+                    + " (ledgerMax=" + maxLedgerSeq + ", counterMax=" + lastCounterSeq + ")");
+        }
+        state.ensureOperationSequenceAtLeast(maxSeq);
     }
 
     private void prepareStatements() throws Exception {
@@ -237,6 +255,9 @@ public final class SqlWorkload implements LongRunWorkload {
         if (!hasCounterRaw("activeKeys")) {
             setCounterRaw("activeKeys", 0L);
         }
+        if (!hasCounterRaw("lastSequence")) {
+            setCounterRaw("lastSequence", 0L);
+        }
         connection.commit();
     }
 
@@ -253,6 +274,7 @@ public final class SqlWorkload implements LongRunWorkload {
         if (!existed) {
             incrementCounter("activeKeys", 1L);
         }
+        setCounter("lastSequence", sequence);
         state.write();
     }
 
@@ -273,6 +295,7 @@ public final class SqlWorkload implements LongRunWorkload {
         deleteStatement.setLong(1, key);
         removed = deleteStatement.executeUpdate();
         ledger(sequence, "REMOVE:" + key);
+        setCounter("lastSequence", sequence);
         if (removed > 0) {
             incrementCounter("activeKeys", -1L);
         }

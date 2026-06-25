@@ -21,6 +21,7 @@ import java.util.Arrays;
 
 import org.h2.api.BoundParameterBatchView;
 import org.h2.api.BoundParameterView;
+import org.h2.api.BulkInsertTable;
 import org.h2.api.DmlExecutionContext;
 import org.h2.api.DmlExecutionPlan;
 import org.h2.api.DmlExecutionProvider;
@@ -28,7 +29,14 @@ import org.h2.api.DmlPrepareContext;
 import org.h2.api.H2Plugin;
 import org.h2.api.PluginCapability;
 import org.h2.api.PluginProvider;
+import org.h2.api.TableEngineContext;
+import org.h2.api.TableEngineProvider;
+import org.h2.api.TableProviderSupport;
+import org.h2.command.ddl.CreateTableData;
 import org.h2.engine.SessionLocal;
+import org.h2.mvstore.db.MVStoreBackedStorageEngine;
+import org.h2.mvstore.db.MVTable;
+import org.h2.mvstore.db.Store;
 import org.h2.result.Row;
 import org.h2.table.Column;
 import org.h2.table.Table;
@@ -103,10 +111,12 @@ public class DmlExecutionProviderTest {
 
     /**
      * T-DML-HOOK-BATCH-01.
+     * T-DML-HOOK-BULK-FALLBACK-01.
      */
     @Test
     public void executeBatchExposesBatchParameterView() throws Exception {
         RecordingDmlProvider.reset();
+        BulkRecordingTable.reset();
 
         try (Connection conn = DriverManager.getConnection("jdbc:h2:mem:dmlBatchHook;DB_CLOSE_DELAY=-1", "sa", "");
                 Statement stat = conn.createStatement()) {
@@ -125,6 +135,7 @@ public class DmlExecutionProviderTest {
                 assertEquals("[1, 1]", RecordingDmlProvider.describe(prep.executeLargeBatch()));
                 assertEquals(1, RecordingDmlProvider.batchExecuteCalls);
                 assertEquals(2, RecordingDmlProvider.batchRowCount);
+                assertEquals(0, BulkRecordingTable.addRowsCalls);
             }
 
             try (ResultSet rs = stat.executeQuery("select id, name from test_target order by id")) {
@@ -199,6 +210,38 @@ public class DmlExecutionProviderTest {
     }
 
     /**
+     * T-DML-HOOK-BULK-TABLE-01.
+     */
+    @Test
+    public void batchFastPathCanDelegateToBulkInsertTable() throws Exception {
+        RecordingDmlProvider.reset();
+        BulkRecordingTable.reset();
+        String url = "jdbc:h2:mem:dmlBulkTable;DEFAULT_TABLE_ENGINE=" + BulkRecordingTableProvider.ID;
+
+        try (Connection conn = DriverManager.getConnection(url, "sa", "");
+                Statement stat = conn.createStatement()) {
+            stat.execute("create table bulk_target(id int, name varchar)");
+            RecordingDmlProvider.reset();
+
+            try (PreparedStatement prep = conn.prepareStatement(
+                    "insert into bulk_target(id, name) values (?, ?)")) {
+                prep.setInt(1, 10);
+                prep.setString(2, "ten");
+                prep.addBatch();
+                prep.setInt(1, 20);
+                prep.setString(2, "twenty");
+                prep.addBatch();
+                assertEquals("[1, 1]", RecordingDmlProvider.describe(prep.executeLargeBatch()));
+            }
+
+            assertEquals(1, RecordingDmlProvider.batchExecuteCalls);
+            assertEquals(1, BulkRecordingTable.addRowsCalls);
+            assertEquals(2, BulkRecordingTable.rowCount);
+            assertEquals("[10:ten, 20:twenty]", BulkRecordingTable.rows.toString());
+        }
+    }
+
+    /**
      * Service-loaded plugin for DML hook tests.
      */
     public static final class RecordingDmlPlugin implements H2Plugin {
@@ -220,7 +263,7 @@ public class DmlExecutionProviderTest {
 
         @Override
         public Iterable<? extends PluginProvider> getProviders() {
-            return Arrays.asList(new RecordingDmlProvider());
+            return Arrays.asList(new RecordingDmlProvider(), new BulkRecordingTableProvider());
         }
     }
 
@@ -274,7 +317,8 @@ public class DmlExecutionProviderTest {
         public boolean supports(String capability) {
             return PluginCapability.DML_INSERT_VALUES_FAST_PATH.equals(capability)
                     || PluginCapability.PARAMETERS_BOUND_VIEW.equals(capability)
-                    || PluginCapability.DML_INSERT_BATCH_FAST_PATH.equals(capability);
+                    || PluginCapability.DML_INSERT_BATCH_FAST_PATH.equals(capability)
+                    || PluginCapability.TABLE_BULK_INSERT.equals(capability);
         }
 
         @Override
@@ -314,6 +358,14 @@ public class DmlExecutionProviderTest {
             BoundParameterBatchView batch = context.getBatchParameters();
             RecordingDmlProvider.batchRowCount = batch.size();
             long[] counts = new long[batch.size()];
+            if (context.getTable() instanceof BulkInsertTable) {
+                long inserted = ((BulkInsertTable) context.getTable()).addRows(context, batch);
+                if (inserted != batch.size()) {
+                    throw new IllegalStateException("unexpected bulk insert count: " + inserted);
+                }
+                Arrays.fill(counts, 1L);
+                return counts;
+            }
             for (int i = 0; i < batch.size(); i++) {
                 insertRow(context, batch.get(i));
                 counts[i] = 1;
@@ -331,6 +383,62 @@ public class DmlExecutionProviderTest {
             }
             table.convertInsertRow(session, row, null);
             table.addRow(session, row);
+        }
+    }
+
+    private static final class BulkRecordingTableProvider implements TableEngineProvider {
+
+        private static final String ID = "bulk_recording";
+
+        @Override
+        public String getType() {
+            return TYPE;
+        }
+
+        @Override
+        public String getId() {
+            return ID;
+        }
+
+        @Override
+        public boolean supports(String capability) {
+            return PluginCapability.TABLE_CREATE.equals(capability)
+                    || PluginCapability.TABLE_BULK_INSERT.equals(capability);
+        }
+
+        @Override
+        public Table createTable(CreateTableData data, TableEngineContext context) {
+            MVStoreBackedStorageEngine engine = TableProviderSupport.requireStorageEngine(context,
+                    MVStoreBackedStorageEngine.class, ID, data);
+            return new BulkRecordingTable(data, engine.getStore());
+        }
+    }
+
+    private static final class BulkRecordingTable extends MVTable implements BulkInsertTable {
+
+        private static int addRowsCalls;
+        private static long rowCount;
+        private static ArrayList<String> rows = new ArrayList<>();
+
+        BulkRecordingTable(CreateTableData data, Store store) {
+            super(data, store);
+        }
+
+        @Override
+        public long addRows(DmlExecutionContext context, BoundParameterBatchView rows) {
+            addRowsCalls++;
+            for (int i = 0; i < rows.size(); i++) {
+                BoundParameterView row = rows.get(i);
+                BulkRecordingTable.rows.add(row.getValue(0).getString() + ':' + row.getValue(1).getString());
+                rowCount++;
+            }
+            return rows.size();
+        }
+
+        static void reset() {
+            addRowsCalls = 0;
+            rowCount = 0;
+            rows = new ArrayList<>();
         }
     }
 }

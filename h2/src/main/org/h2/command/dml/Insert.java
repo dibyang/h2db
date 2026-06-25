@@ -9,6 +9,9 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map.Entry;
 
+import org.h2.api.BoundParameterBatchView;
+import org.h2.api.BoundParameterView;
+import org.h2.api.DmlExecutionContext;
 import org.h2.api.DmlExecutionPlan;
 import org.h2.api.DmlExecutionProvider;
 import org.h2.api.DmlPrepareContext;
@@ -74,6 +77,7 @@ public final class Insert extends CommandWithValues implements ResultTarget {
     private ResultOption deltaChangeCollectionMode;
 
     private DmlExecutionPlan dmlExecutionPlan = DmlExecutionPlan.NONE;
+    private DmlExecutionProvider dmlExecutionProvider;
 
     public Insert(SessionLocal session) {
         super(session);
@@ -147,6 +151,10 @@ public final class Insert extends CommandWithValues implements ResultTarget {
     }
 
     private long insertRows() {
+        Long fastPathRowCount = executeSingleRowDmlFastPathIfEligible();
+        if (fastPathRowCount != null) {
+            return fastPathRowCount.longValue();
+        }
         session.getUser().checkTableRight(table, Right.INSERT);
         setCurrentRowNumber(0);
         table.fire(session, Trigger.INSERT, true);
@@ -329,6 +337,7 @@ public final class Insert extends CommandWithValues implements ResultTarget {
      */
     private void prepareDmlFastPathPlan() {
         dmlExecutionPlan = DmlExecutionPlan.NONE;
+        dmlExecutionProvider = null;
         if (valuesExpressionList.isEmpty()) {
             return;
         }
@@ -340,6 +349,7 @@ public final class Insert extends CommandWithValues implements ResultTarget {
                     && provider.supports(PluginCapability.DML_INSERT_VALUES_FAST_PATH)) {
                 DmlExecutionPlan plan = ((DmlExecutionProvider) provider).prepareDml(context);
                 if (plan != null && plan.isSupported()) {
+                    dmlExecutionProvider = (DmlExecutionProvider) provider;
                     dmlExecutionPlan = plan;
                     session.getTrace().info("DML fast path candidate matched: provider={0}, table={1}",
                             provider.getId(), table.getName());
@@ -356,6 +366,74 @@ public final class Insert extends CommandWithValues implements ResultTarget {
      */
     public boolean hasDmlExecutionPlan() {
         return dmlExecutionPlan.isSupported();
+    }
+
+    /**
+     * Execute the first guarded DML fast-path shape.
+     * <p>
+     * P3 deliberately accepts only the shape that can be represented by a
+     * simple bound-parameter view without changing existing INSERT semantics:
+     * one VALUES row, all table columns in physical order, no generated keys,
+     * no row triggers or constraints, no IGNORE / ON DUPLICATE behavior, and no
+     * DEFAULT expressions. Broader SQL semantics are added by later phases and
+     * stay on the native path for now.
+     *
+     * @return row count, or {@code null} when native INSERT execution should be
+     *         used
+     */
+    private Long executeSingleRowDmlFastPathIfEligible() {
+        if (!isSingleRowDmlFastPathEligible()) {
+            return null;
+        }
+        session.getUser().checkTableRight(table, Right.INSERT);
+        setCurrentRowNumber(0);
+        table.fire(session, Trigger.INSERT, true);
+        boolean completed = false;
+        try {
+            table.lock(session, Table.WRITE_LOCK);
+            rowNumber = dmlExecutionPlan.execute(new SingleRowDmlExecutionContext());
+            completed = true;
+            return Long.valueOf(rowNumber);
+        } finally {
+            if (completed) {
+                table.fire(session, Trigger.INSERT, false);
+            }
+        }
+    }
+
+    private boolean isSingleRowDmlFastPathEligible() {
+        if (dmlExecutionProvider == null || !dmlExecutionPlan.isSupported()
+                || !dmlExecutionProvider.supports(PluginCapability.PARAMETERS_BOUND_VIEW)) {
+            return false;
+        }
+        if (valuesExpressionList.size() != 1 || query != null || insertFromSelect || ignore
+                || duplicateKeyAssignmentMap != null || deltaChangeCollector != null || overridingSystem != null
+                || table.fireRow()) {
+            return false;
+        }
+        Column[] tableColumns = table.getColumns();
+        if (columns.length != tableColumns.length || parameters == null || parameters.isEmpty()) {
+            return false;
+        }
+        for (int i = 0; i < columns.length; i++) {
+            if (columns[i] != tableColumns[i]) {
+                return false;
+            }
+        }
+        Expression[] row = valuesExpressionList.get(0);
+        if (row.length != columns.length || row.length != parameters.size()) {
+            return false;
+        }
+        for (int i = 0; i < row.length; i++) {
+            if (!(row[i] instanceof Parameter)) {
+                return false;
+            }
+            Parameter parameter = parameters.get(i);
+            if (row[i] != parameter || !parameter.isValueSet()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     @Override
@@ -529,6 +607,69 @@ public final class Insert extends CommandWithValues implements ResultTarget {
             // Generated-key requests are only known at execute time in the
             // current command flow; later phases must re-check and fallback.
             return false;
+        }
+    }
+
+    private final class SingleRowDmlExecutionContext implements DmlExecutionContext {
+
+        private final BoundParameterView parameters = new SingleRowBoundParameterView();
+
+        @Override
+        public Object getSession() {
+            return session;
+        }
+
+        @Override
+        public Object getTable() {
+            return table;
+        }
+
+        @Override
+        public BoundParameterView getParameters() {
+            return parameters;
+        }
+
+        @Override
+        public BoundParameterBatchView getBatchParameters() {
+            return EmptyBoundParameterBatchView.INSTANCE;
+        }
+
+        @Override
+        public boolean isBatch() {
+            return false;
+        }
+
+        @Override
+        public boolean isAutoCommit() {
+            return session.getAutoCommit();
+        }
+    }
+
+    private final class SingleRowBoundParameterView implements BoundParameterView {
+
+        @Override
+        public int size() {
+            return parameters.size();
+        }
+
+        @Override
+        public Value getValue(int index) {
+            return parameters.get(index).getValue(session);
+        }
+    }
+
+    private static final class EmptyBoundParameterBatchView implements BoundParameterBatchView {
+
+        private static final EmptyBoundParameterBatchView INSTANCE = new EmptyBoundParameterBatchView();
+
+        @Override
+        public int size() {
+            return 0;
+        }
+
+        @Override
+        public BoundParameterView get(int rowIndex) {
+            throw new IndexOutOfBoundsException("No batch parameter row: " + rowIndex);
         }
     }
 

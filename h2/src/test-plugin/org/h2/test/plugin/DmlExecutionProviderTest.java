@@ -16,6 +16,7 @@ import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.Arrays;
 
+import org.h2.api.BoundParameterView;
 import org.h2.api.DmlExecutionContext;
 import org.h2.api.DmlExecutionPlan;
 import org.h2.api.DmlExecutionProvider;
@@ -23,6 +24,10 @@ import org.h2.api.DmlPrepareContext;
 import org.h2.api.H2Plugin;
 import org.h2.api.PluginCapability;
 import org.h2.api.PluginProvider;
+import org.h2.engine.SessionLocal;
+import org.h2.result.Row;
+import org.h2.table.Column;
+import org.h2.table.Table;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -39,7 +44,7 @@ public class DmlExecutionProviderTest {
 
         try (Connection conn = DriverManager.getConnection("jdbc:h2:mem:dmlPrepareHook;DB_CLOSE_DELAY=-1", "sa", "");
                 Statement stat = conn.createStatement()) {
-            stat.execute("create table test_target(id int primary key, name varchar)");
+            stat.execute("create table test_target(id int, name varchar)");
             RecordingDmlProvider.reset();
 
             try (PreparedStatement prep = conn.prepareStatement(
@@ -55,6 +60,8 @@ public class DmlExecutionProviderTest {
                 prep.setInt(1, 1);
                 prep.setString(2, "one");
                 assertEquals(1, prep.executeUpdate());
+                assertEquals(1, RecordingDmlProvider.executeCalls);
+                assertEquals(2, RecordingDmlProvider.parameterCount);
             }
 
             try (ResultSet rs = stat.executeQuery("select name from test_target where id = 1")) {
@@ -81,6 +88,7 @@ public class DmlExecutionProviderTest {
 
             assertEquals(1, stat.executeUpdate("insert into target_table select id from source_table"));
             assertEquals(0, RecordingDmlProvider.prepareCalls);
+            assertEquals(0, RecordingDmlProvider.executeCalls);
 
             try (ResultSet rs = stat.executeQuery("select count(*) from target_table")) {
                 assertTrue(rs.next());
@@ -124,6 +132,8 @@ public class DmlExecutionProviderTest {
         private static int columnCount;
         private static boolean batchCapable;
         private static boolean generatedKeys;
+        private static int executeCalls;
+        private static int parameterCount;
 
         static void reset() {
             prepareCalls = 0;
@@ -133,6 +143,8 @@ public class DmlExecutionProviderTest {
             columnCount = 0;
             batchCapable = false;
             generatedKeys = false;
+            executeCalls = 0;
+            parameterCount = 0;
         }
 
         @Override
@@ -147,7 +159,8 @@ public class DmlExecutionProviderTest {
 
         @Override
         public boolean supports(String capability) {
-            return PluginCapability.DML_INSERT_VALUES_FAST_PATH.equals(capability);
+            return PluginCapability.DML_INSERT_VALUES_FAST_PATH.equals(capability)
+                    || PluginCapability.PARAMETERS_BOUND_VIEW.equals(capability);
         }
 
         @Override
@@ -174,7 +187,19 @@ public class DmlExecutionProviderTest {
 
         @Override
         public long execute(DmlExecutionContext context) {
-            throw new UnsupportedOperationException("P2 only matches DML plans");
+            RecordingDmlProvider.executeCalls++;
+            BoundParameterView parameters = context.getParameters();
+            RecordingDmlProvider.parameterCount = parameters.size();
+            SessionLocal session = (SessionLocal) context.getSession();
+            Table table = (Table) context.getTable();
+            Row row = table.getTemplateRow();
+            Column[] columns = table.getColumns();
+            for (int i = 0; i < parameters.size(); i++) {
+                row.setValue(columns[i].getColumnId(), parameters.getValue(i));
+            }
+            table.convertInsertRow(session, row, null);
+            table.addRow(session, row);
+            return 1;
         }
     }
 }

@@ -121,7 +121,7 @@
 
 | 项 | 内容 |
 | --- | --- |
-| 产出文件 | 本计划更新、接口草案、兼容矩阵。 |
+| 产出文件 | [plugin-dml-fast-path-rfc.md](plugin-dml-fast-path-rfc.md)。 |
 | 目标 | 防止范围膨胀到全 SQL 执行器改造。 |
 | 退出条件 | V1 SQL 范围、fallback 行为、generated keys 处理策略确认。 |
 

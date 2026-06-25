@@ -113,7 +113,7 @@ Suggested capabilities:
 | Phase | Output | Goal | Exit condition |
 | --- | --- | --- | --- |
 | P0 | [dml-fast-path-p0-baseline.md](../perf/dml-fast-path-p0-baseline.md) | Use one machine, JDK, config, data scale, and batch size for future comparisons. | Current 0.93x ratio is reproducible and tied to commit/config/command. |
-| P1 | Interface draft and matrix | Prevent scope creep into all SQL execution. | V1 SQL scope, fallback, and generated-key handling are confirmed. |
+| P1 | [plugin-dml-fast-path-rfc.en.md](plugin-dml-fast-path-rfc.en.md) | Prevent scope creep into all SQL execution. | V1 SQL scope, fallback, and generated-key handling are confirmed. |
 | P2 | Plan matching code | Build identification only, no behavior change. | Native `INSERT`, `SELECT`, `UPDATE`, and legacy table behavior unchanged. |
 | P3/P4 | Single-row and batch parameter views | Remove ADB external setter-capture proxy need. | NULL, conversion, unbound parameters, clearParameters, and clearBatch match native behavior. |
 | P5 | Bulk table hook | Let plugin tables receive batch data without per-row `Row` overhead. | Plugin table update count matches native path; normal tables unaffected. |

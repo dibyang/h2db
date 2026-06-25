@@ -35,6 +35,26 @@ public final class PluginCapability {
     public static final String DATABASE_LIFECYCLE = "database.lifecycle";
 
     /**
+     * Supports matching simple INSERT VALUES statements for a DML fast path.
+     */
+    public static final String DML_INSERT_VALUES_FAST_PATH = "dml.insert.values.fastPath";
+
+    /**
+     * Supports reading H2 bound parameters through a read-only view.
+     */
+    public static final String PARAMETERS_BOUND_VIEW = "parameters.bound.view";
+
+    /**
+     * Supports JDBC batch INSERT fast path.
+     */
+    public static final String DML_INSERT_BATCH_FAST_PATH = "dml.insert.batch.fastPath";
+
+    /**
+     * Supports table-side bulk insert.
+     */
+    public static final String TABLE_BULK_INSERT = "table.bulkInsert";
+
+    /**
      * 支持持久化数据库。
      */
     public static final String STORAGE_PERSISTENT = "storage.persistent";
@@ -84,6 +104,10 @@ public final class PluginCapability {
             SYSTEM_CATALOG,
             TRANSACTION_EVENTS,
             DATABASE_LIFECYCLE,
+            DML_INSERT_VALUES_FAST_PATH,
+            PARAMETERS_BOUND_VIEW,
+            DML_INSERT_BATCH_FAST_PATH,
+            TABLE_BULK_INSERT,
             STORAGE_PERSISTENT,
             STORAGE_TRANSACTIONAL,
             STORAGE_MVCC,

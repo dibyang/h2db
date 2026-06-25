@@ -9,7 +9,12 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map.Entry;
 
+import org.h2.api.DmlExecutionPlan;
+import org.h2.api.DmlExecutionProvider;
+import org.h2.api.DmlPrepareContext;
 import org.h2.api.ErrorCode;
+import org.h2.api.PluginCapability;
+import org.h2.api.PluginProvider;
 import org.h2.api.Trigger;
 import org.h2.command.Command;
 import org.h2.command.CommandInterface;
@@ -67,6 +72,8 @@ public final class Insert extends CommandWithValues implements ResultTarget {
     private ResultTarget deltaChangeCollector;
 
     private ResultOption deltaChangeCollectionMode;
+
+    private DmlExecutionPlan dmlExecutionPlan = DmlExecutionPlan.NONE;
 
     public Insert(SessionLocal session) {
         super(session);
@@ -312,6 +319,43 @@ public final class Insert extends CommandWithValues implements ResultTarget {
                 throw DbException.get(ErrorCode.COLUMN_COUNT_DOES_NOT_MATCH);
             }
         }
+        prepareDmlFastPathPlan();
+    }
+
+    /**
+     * P2 only discovers an eligible plugin DML plan. Execution intentionally
+     * stays on the native INSERT path until parameter and transaction views are
+     * added in later phases.
+     */
+    private void prepareDmlFastPathPlan() {
+        dmlExecutionPlan = DmlExecutionPlan.NONE;
+        if (valuesExpressionList.isEmpty()) {
+            return;
+        }
+        DmlPrepareContext context = new InsertDmlPrepareContext();
+        for (org.h2.engine.PluginRegistry.RegisteredProvider registered
+                : session.getDatabase().getPluginRegistry().getProviders(DmlExecutionProvider.TYPE).values()) {
+            PluginProvider provider = registered.getProvider();
+            if (provider instanceof DmlExecutionProvider
+                    && provider.supports(PluginCapability.DML_INSERT_VALUES_FAST_PATH)) {
+                DmlExecutionPlan plan = ((DmlExecutionProvider) provider).prepareDml(context);
+                if (plan != null && plan.isSupported()) {
+                    dmlExecutionPlan = plan;
+                    session.getTrace().info("DML fast path candidate matched: provider={0}, table={1}",
+                            provider.getId(), table.getName());
+                    return;
+                }
+            }
+        }
+    }
+
+    /**
+     * Exposed for tests and later execution phases.
+     *
+     * @return true if a DML fast-path provider accepted this INSERT plan
+     */
+    public boolean hasDmlExecutionPlan() {
+        return dmlExecutionPlan.isSupported();
     }
 
     @Override
@@ -450,6 +494,41 @@ public final class Insert extends CommandWithValues implements ResultTarget {
             }
         } else {
             query.isEverything(visitor);
+        }
+    }
+
+    private final class InsertDmlPrepareContext implements DmlPrepareContext {
+
+        @Override
+        public String getStatementType() {
+            return DmlPrepareContext.INSERT_VALUES;
+        }
+
+        @Override
+        public String getTableName() {
+            return table.getName();
+        }
+
+        @Override
+        public String getTableEngineProviderId() {
+            return null;
+        }
+
+        @Override
+        public int getColumnCount() {
+            return columns.length;
+        }
+
+        @Override
+        public boolean isBatchCapable() {
+            return parameters != null && !parameters.isEmpty();
+        }
+
+        @Override
+        public boolean requestsGeneratedKeys() {
+            // Generated-key requests are only known at execute time in the
+            // current command flow; later phases must re-check and fallback.
+            return false;
         }
     }
 

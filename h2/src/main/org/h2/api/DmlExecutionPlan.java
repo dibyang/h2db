@@ -40,4 +40,19 @@ public interface DmlExecutionPlan {
      * @return update count
      */
     long execute(DmlExecutionContext context);
+
+    /**
+     * Execute the plan for a JDBC batch.
+     * <p>
+     * Providers that do not support batch execution return {@code null}, so H2
+     * can continue with the native per-row batch path before any plugin write
+     * has happened.
+     *
+     * @param context execution context with batch parameters
+     * @return per-row update counts, or {@code null} when batch fast path is
+     *         not supported
+     */
+    default long[] executeBatch(DmlExecutionContext context) {
+        return null;
+    }
 }

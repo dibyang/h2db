@@ -5,6 +5,7 @@
  */
 package org.h2.command.dml;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map.Entry;
@@ -369,6 +370,57 @@ public final class Insert extends CommandWithValues implements ResultTarget {
     }
 
     /**
+     * Check whether the current INSERT can execute a JDBC batch through the
+     * provider. This guard is intentionally side-effect free because JDBC needs
+     * to fall back to the legacy per-row batch loop when any condition is not
+     * supported.
+     *
+     * @param batchParameters batch parameter snapshots
+     * @return true if the fast path can execute the whole batch
+     */
+    public boolean canExecuteBatchDmlFastPath(ArrayList<Value[]> batchParameters) {
+        return isCommonDmlFastPathEligible()
+                && dmlExecutionProvider.supports(PluginCapability.DML_INSERT_BATCH_FAST_PATH)
+                && batchParameters != null && !batchParameters.isEmpty() && isBatchShapeCompatible(batchParameters);
+    }
+
+    /**
+     * Execute a JDBC batch through the accepted provider plan.
+     *
+     * @param batchParameters batch parameter snapshots
+     * @return per-row update counts
+     */
+    public long[] updateBatch(ArrayList<Value[]> batchParameters) {
+        if (!canExecuteBatchDmlFastPath(batchParameters)) {
+            return null;
+        }
+        session.getUser().checkTableRight(table, Right.INSERT);
+        setCurrentRowNumber(0);
+        table.fire(session, Trigger.INSERT, true);
+        boolean completed = false;
+        try {
+            table.lock(session, Table.WRITE_LOCK);
+            long[] result = dmlExecutionPlan.executeBatch(new BatchDmlExecutionContext(batchParameters));
+            if (result == null) {
+                throw DbException.getInternalError("DML fast path batch provider returned no update counts");
+            }
+            if (result.length != batchParameters.size()) {
+                throw DbException.getInternalError("Invalid DML fast path batch update count");
+            }
+            rowNumber = 0;
+            for (long count : result) {
+                rowNumber += count;
+            }
+            completed = true;
+            return result;
+        } finally {
+            if (completed) {
+                table.fire(session, Trigger.INSERT, false);
+            }
+        }
+    }
+
+    /**
      * Execute the first guarded DML fast-path shape.
      * <p>
      * P3 deliberately accepts only the shape that can be represented by a
@@ -402,6 +454,10 @@ public final class Insert extends CommandWithValues implements ResultTarget {
     }
 
     private boolean isSingleRowDmlFastPathEligible() {
+        return isCommonDmlFastPathEligible() && areCurrentParametersCompatible();
+    }
+
+    private boolean isCommonDmlFastPathEligible() {
         if (dmlExecutionProvider == null || !dmlExecutionPlan.isSupported()
                 || !dmlExecutionProvider.supports(PluginCapability.PARAMETERS_BOUND_VIEW)) {
             return false;
@@ -425,11 +481,28 @@ public final class Insert extends CommandWithValues implements ResultTarget {
             return false;
         }
         for (int i = 0; i < row.length; i++) {
-            if (!(row[i] instanceof Parameter)) {
+            if (!(row[i] instanceof Parameter) || row[i] != parameters.get(i)) {
                 return false;
             }
+        }
+        return true;
+    }
+
+    private boolean areCurrentParametersCompatible() {
+        Expression[] row = valuesExpressionList.get(0);
+        for (int i = 0; i < row.length; i++) {
             Parameter parameter = parameters.get(i);
             if (row[i] != parameter || !parameter.isValueSet()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean isBatchShapeCompatible(ArrayList<Value[]> batchParameters) {
+        int parameterCount = parameters.size();
+        for (Value[] row : batchParameters) {
+            if (row == null || row.length != parameterCount) {
                 return false;
             }
         }
@@ -645,6 +718,45 @@ public final class Insert extends CommandWithValues implements ResultTarget {
         }
     }
 
+    private final class BatchDmlExecutionContext implements DmlExecutionContext {
+
+        private final BoundParameterBatchView batchParameters;
+
+        BatchDmlExecutionContext(ArrayList<Value[]> batchParameters) {
+            this.batchParameters = new ArrayBoundParameterBatchView(batchParameters);
+        }
+
+        @Override
+        public Object getSession() {
+            return session;
+        }
+
+        @Override
+        public Object getTable() {
+            return table;
+        }
+
+        @Override
+        public BoundParameterView getParameters() {
+            return EmptyBoundParameterView.INSTANCE;
+        }
+
+        @Override
+        public BoundParameterBatchView getBatchParameters() {
+            return batchParameters;
+        }
+
+        @Override
+        public boolean isBatch() {
+            return true;
+        }
+
+        @Override
+        public boolean isAutoCommit() {
+            return session.getAutoCommit();
+        }
+    }
+
     private final class SingleRowBoundParameterView implements BoundParameterView {
 
         @Override
@@ -655,6 +767,59 @@ public final class Insert extends CommandWithValues implements ResultTarget {
         @Override
         public Value getValue(int index) {
             return parameters.get(index).getValue(session);
+        }
+    }
+
+    private static final class ArrayBoundParameterBatchView implements BoundParameterBatchView {
+
+        private final ArrayList<Value[]> rows;
+
+        ArrayBoundParameterBatchView(ArrayList<Value[]> rows) {
+            this.rows = rows;
+        }
+
+        @Override
+        public int size() {
+            return rows.size();
+        }
+
+        @Override
+        public BoundParameterView get(int rowIndex) {
+            return new ArrayBoundParameterView(rows.get(rowIndex));
+        }
+    }
+
+    private static final class ArrayBoundParameterView implements BoundParameterView {
+
+        private final Value[] values;
+
+        ArrayBoundParameterView(Value[] values) {
+            this.values = values;
+        }
+
+        @Override
+        public int size() {
+            return values.length;
+        }
+
+        @Override
+        public Value getValue(int index) {
+            return values[index];
+        }
+    }
+
+    private static final class EmptyBoundParameterView implements BoundParameterView {
+
+        private static final EmptyBoundParameterView INSTANCE = new EmptyBoundParameterView();
+
+        @Override
+        public int size() {
+            return 0;
+        }
+
+        @Override
+        public Value getValue(int index) {
+            throw new IndexOutOfBoundsException("No single-row parameter: " + index);
         }
     }
 

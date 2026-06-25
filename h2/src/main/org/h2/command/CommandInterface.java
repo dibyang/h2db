@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import org.h2.expression.ParameterInterface;
 import org.h2.result.ResultInterface;
 import org.h2.result.ResultWithGeneratedKeys;
+import org.h2.value.Value;
 
 /**
  * Represents a SQL statement.
@@ -599,6 +600,20 @@ public interface CommandInterface extends AutoCloseable {
      * @return the update count and generated keys, if any
      */
     ResultWithGeneratedKeys executeUpdate(Object generatedKeysRequest);
+
+    /**
+     * Try to execute the prepared statement batch in one command-level call.
+     * Implementations return {@code null} when they do not support a guarded
+     * batch fast path, so JDBC can continue with the existing per-row batch
+     * execution.
+     *
+     * @param batchParameters batch parameter snapshots
+     * @param generatedKeysRequest generated keys request
+     * @return per-row update counts, or {@code null} when unsupported
+     */
+    default long[] executeBatchUpdate(ArrayList<Value[]> batchParameters, Object generatedKeysRequest) {
+        return null;
+    }
 
     /**
      * Stop the command execution, release all locks and resources

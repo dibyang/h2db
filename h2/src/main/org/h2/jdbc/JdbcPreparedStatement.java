@@ -1259,6 +1259,15 @@ public class JdbcPreparedStatement extends JdbcStatement implements PreparedStat
             int[] result = new int[size];
             SQLException exception = new SQLException();
             checkClosed();
+            long[] fastPathResult = executeFastBatchUpdate();
+            if (fastPathResult != null) {
+                for (int i = 0; i < size; i++) {
+                    long updateCount = fastPathResult[i];
+                    result[i] = updateCount <= Integer.MAX_VALUE ? (int) updateCount : SUCCESS_NO_INFO;
+                }
+                batchParameters = null;
+                return result;
+            }
             for (int i = 0; i < size; i++) {
                 long updateCount = executeBatchElement(batchParameters.get(i), exception);
                 result[i] = updateCount <= Integer.MAX_VALUE ? (int) updateCount : SUCCESS_NO_INFO;
@@ -1293,6 +1302,11 @@ public class JdbcPreparedStatement extends JdbcStatement implements PreparedStat
             long[] result = new long[size];
             SQLException exception = new SQLException();
             checkClosed();
+            long[] fastPathResult = executeFastBatchUpdate();
+            if (fastPathResult != null) {
+                batchParameters = null;
+                return fastPathResult;
+            }
             for (int i = 0; i < size; i++) {
                 result[i] = executeBatchElement(batchParameters.get(i), exception);
             }
@@ -1304,6 +1318,21 @@ public class JdbcPreparedStatement extends JdbcStatement implements PreparedStat
             return result;
         } catch (Exception e) {
             throw logAndConvert(e);
+        }
+    }
+
+    private long[] executeFastBatchUpdate() {
+        if (batchParameters.isEmpty()) {
+            return null;
+        }
+        closeOldResultSet();
+        synchronized (session) {
+            try {
+                setExecutingStatement(command);
+                return command.executeBatchUpdate(batchParameters, generatedKeysRequest);
+            } finally {
+                setExecutingStatement(null);
+            }
         }
     }
 

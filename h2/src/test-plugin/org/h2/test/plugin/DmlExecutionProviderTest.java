@@ -7,15 +7,19 @@ package org.h2.test.plugin;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.sql.BatchUpdateException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.Arrays;
 
+import org.h2.api.BoundParameterBatchView;
 import org.h2.api.BoundParameterView;
 import org.h2.api.DmlExecutionContext;
 import org.h2.api.DmlExecutionPlan;
@@ -98,6 +102,103 @@ public class DmlExecutionProviderTest {
     }
 
     /**
+     * T-DML-HOOK-BATCH-01.
+     */
+    @Test
+    public void executeBatchExposesBatchParameterView() throws Exception {
+        RecordingDmlProvider.reset();
+
+        try (Connection conn = DriverManager.getConnection("jdbc:h2:mem:dmlBatchHook;DB_CLOSE_DELAY=-1", "sa", "");
+                Statement stat = conn.createStatement()) {
+            stat.execute("create table test_target(id int, name varchar)");
+            RecordingDmlProvider.reset();
+
+            try (PreparedStatement prep = conn.prepareStatement(
+                    "insert into test_target(id, name) values (?, ?)")) {
+                prep.setInt(1, 1);
+                prep.setString(2, "one");
+                prep.addBatch();
+                prep.setInt(1, 2);
+                prep.setString(2, "two");
+                prep.addBatch();
+                assertEquals(1, RecordingDmlProvider.prepareCalls);
+                assertEquals("[1, 1]", RecordingDmlProvider.describe(prep.executeLargeBatch()));
+                assertEquals(1, RecordingDmlProvider.batchExecuteCalls);
+                assertEquals(2, RecordingDmlProvider.batchRowCount);
+            }
+
+            try (ResultSet rs = stat.executeQuery("select id, name from test_target order by id")) {
+                assertTrue(rs.next());
+                assertEquals(1, rs.getInt(1));
+                assertEquals("one", rs.getString(2));
+                assertTrue(rs.next());
+                assertEquals(2, rs.getInt(1));
+                assertEquals("two", rs.getString(2));
+                assertFalse(rs.next());
+            }
+        }
+    }
+
+    /**
+     * T-DML-HOOK-BATCH-01 clearBatch branch.
+     */
+    @Test
+    public void clearBatchKeepsEmptyBatchSemantics() throws Exception {
+        RecordingDmlProvider.reset();
+
+        try (Connection conn = DriverManager.getConnection("jdbc:h2:mem:dmlBatchClear;DB_CLOSE_DELAY=-1", "sa", "");
+                Statement stat = conn.createStatement()) {
+            stat.execute("create table test_target(id int, name varchar)");
+            RecordingDmlProvider.reset();
+
+            try (PreparedStatement prep = conn.prepareStatement(
+                    "insert into test_target(id, name) values (?, ?)")) {
+                prep.setInt(1, 1);
+                prep.setString(2, "one");
+                prep.addBatch();
+                prep.clearBatch();
+                assertEquals(0, prep.executeBatch().length);
+                assertEquals(0, RecordingDmlProvider.batchExecuteCalls);
+            }
+        }
+    }
+
+    /**
+     * T-DML-HOOK-BATCH-FAIL-01.
+     */
+    @Test
+    public void batchFailureFallsBackToNativePartialFailureSemantics() throws Exception {
+        RecordingDmlProvider.reset();
+
+        try (Connection conn = DriverManager.getConnection("jdbc:h2:mem:dmlBatchFail;DB_CLOSE_DELAY=-1", "sa", "");
+                Statement stat = conn.createStatement()) {
+            stat.execute("create table test_target(id int primary key, name varchar)");
+            RecordingDmlProvider.reset();
+
+            try (PreparedStatement prep = conn.prepareStatement(
+                    "insert into test_target(id, name) values (?, ?)")) {
+                prep.setInt(1, 1);
+                prep.setString(2, "one");
+                prep.addBatch();
+                prep.setInt(1, 1);
+                prep.setString(2, "duplicate");
+                prep.addBatch();
+                BatchUpdateException ex = assertThrows(BatchUpdateException.class, prep::executeBatch);
+                int[] counts = ex.getUpdateCounts();
+                assertEquals(2, counts.length);
+                assertEquals(1, counts[0]);
+                assertEquals(Statement.EXECUTE_FAILED, counts[1]);
+                assertEquals(0, RecordingDmlProvider.batchExecuteCalls);
+            }
+
+            try (ResultSet rs = stat.executeQuery("select count(*) from test_target")) {
+                assertTrue(rs.next());
+                assertEquals(1, rs.getInt(1));
+            }
+        }
+    }
+
+    /**
      * Service-loaded plugin for DML hook tests.
      */
     public static final class RecordingDmlPlugin implements H2Plugin {
@@ -134,6 +235,8 @@ public class DmlExecutionProviderTest {
         private static boolean generatedKeys;
         private static int executeCalls;
         private static int parameterCount;
+        private static int batchExecuteCalls;
+        private static int batchRowCount;
 
         static void reset() {
             prepareCalls = 0;
@@ -145,6 +248,16 @@ public class DmlExecutionProviderTest {
             generatedKeys = false;
             executeCalls = 0;
             parameterCount = 0;
+            batchExecuteCalls = 0;
+            batchRowCount = 0;
+        }
+
+        static String describe(long[] counts) {
+            ArrayList<String> values = new ArrayList<>();
+            for (long count : counts) {
+                values.add(Long.toString(count));
+            }
+            return values.toString();
         }
 
         @Override
@@ -160,7 +273,8 @@ public class DmlExecutionProviderTest {
         @Override
         public boolean supports(String capability) {
             return PluginCapability.DML_INSERT_VALUES_FAST_PATH.equals(capability)
-                    || PluginCapability.PARAMETERS_BOUND_VIEW.equals(capability);
+                    || PluginCapability.PARAMETERS_BOUND_VIEW.equals(capability)
+                    || PluginCapability.DML_INSERT_BATCH_FAST_PATH.equals(capability);
         }
 
         @Override
@@ -190,6 +304,24 @@ public class DmlExecutionProviderTest {
             RecordingDmlProvider.executeCalls++;
             BoundParameterView parameters = context.getParameters();
             RecordingDmlProvider.parameterCount = parameters.size();
+            insertRow(context, parameters);
+            return 1;
+        }
+
+        @Override
+        public long[] executeBatch(DmlExecutionContext context) {
+            RecordingDmlProvider.batchExecuteCalls++;
+            BoundParameterBatchView batch = context.getBatchParameters();
+            RecordingDmlProvider.batchRowCount = batch.size();
+            long[] counts = new long[batch.size()];
+            for (int i = 0; i < batch.size(); i++) {
+                insertRow(context, batch.get(i));
+                counts[i] = 1;
+            }
+            return counts;
+        }
+
+        private void insertRow(DmlExecutionContext context, BoundParameterView parameters) {
             SessionLocal session = (SessionLocal) context.getSession();
             Table table = (Table) context.getTable();
             Row row = table.getTemplateRow();
@@ -199,7 +331,6 @@ public class DmlExecutionProviderTest {
             }
             table.convertInsertRow(session, row, null);
             table.addRow(session, row);
-            return 1;
         }
     }
 }

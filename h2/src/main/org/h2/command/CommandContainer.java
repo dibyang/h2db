@@ -12,6 +12,7 @@ import java.util.Set;
 import org.h2.api.DatabaseEventListener;
 import org.h2.api.ErrorCode;
 import org.h2.command.dml.DataChangeStatement;
+import org.h2.command.dml.Insert;
 import org.h2.engine.Database;
 import org.h2.engine.DbObject;
 import org.h2.engine.DbSettings;
@@ -169,6 +170,30 @@ public class CommandContainer extends Command {
             result = ResultWithGeneratedKeys.of(prepared.update());
         }
         prepared.trace(database, startTimeNanos, result.getUpdateCount());
+        setProgress(database, DatabaseEventListener.STATE_STATEMENT_END);
+        return result;
+    }
+
+    @Override
+    public long[] executeBatchUpdate(ArrayList<Value[]> batchParameters, Object generatedKeysRequest) {
+        recompileIfRequired();
+        if (generatedKeysRequest != null && !Boolean.FALSE.equals(generatedKeysRequest)
+                || !(prepared instanceof Insert)) {
+            return null;
+        }
+        Insert insert = (Insert) prepared;
+        if (!insert.canExecuteBatchDmlFastPath(batchParameters)) {
+            return null;
+        }
+        Database database = getDatabase();
+        setProgress(database, DatabaseEventListener.STATE_STATEMENT_START);
+        start();
+        long[] result = insert.updateBatch(batchParameters);
+        long updateCount = 0L;
+        for (long count : result) {
+            updateCount += count;
+        }
+        prepared.trace(database, startTimeNanos, updateCount);
         setProgress(database, DatabaseEventListener.STATE_STATEMENT_END);
         return result;
     }

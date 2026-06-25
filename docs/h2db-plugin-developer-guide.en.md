@@ -15,6 +15,7 @@ H2 plugins expose their plugin descriptor through `org.h2.api.H2Plugin` and exte
 - `JdbcUrlPrefixProvider`: a Driver-level URL prefix extension point for mapping custom URLs such as `jdbc:vendor:*` to `jdbc:h2:*`.
 - `TransactionEventProvider`: a transaction lifecycle extension point for commit / rollback events.
 - `DatabaseLifecycleProvider`: a database lifecycle extension point for close events.
+- `DmlExecutionProvider`: an experimental DML execution fast path for matching and taking over simple `INSERT ... VALUES` and JDBC batch under guarded conditions.
 - Automatic discovery: H2 reads `META-INF/services/org.h2.api.H2Plugin` from the classpath.
 
 Plugin loading no longer depends on JDBC URL parameters. Once a plugin jar is on the application classpath and publishes the `ServiceLoader` file, it is discovered both by the Driver early path and by the database-open path.
@@ -29,6 +30,7 @@ The current plugin API has three layers:
 | --- | --- | --- |
 | Stable SPI | `H2Plugin`, `PluginProvider`, `TableEngineProvider`, `StorageEngineProvider`, `SystemCatalogProvider`, `JdbcUrlPrefixProvider`, `TransactionEventProvider`, `DatabaseLifecycleProvider`, `StorageMaintenance`, capability strings | Kept source-compatible as plugin entry points. New behavior should normally be added through default methods or new capabilities. |
 | Managed migration API | `TableEngineContext`, `StorageEngineContext`, `CreateTableData`, `Table` / `Index` related internal types | Usable during plugin migration periods, but contract tests must run before upgrading H2 minor versions. Long-term binary compatibility is not promised. |
+| Experimental SPI | `DmlExecutionProvider`, `DmlExecutionPlan`, `DmlPrepareContext`, `DmlExecutionContext`, `BoundParameterView`, `BoundParameterBatchView`, `BulkInsertTable` | Used to validate high-frequency DML plugin fast paths. Long-term binary compatibility is not promised; production adoption must pass the compatibility matrix and performance reports. |
 | Internal implementation | parser, optimizer, JDBC server, MVStore physical structures, deep `Database` lifecycle | Not exposed as plugin APIs. Plugins must not depend on call order or field layout here. |
 
 Non-MVStore storage engines can currently be registered, diagnosed, and managed through `StorageEngineProvider` capabilities, and `SystemCatalogProvider` is now part of the provider whitelist and diagnostics as the prerequisite SPI for system catalog ownership. Full replacement of the H2 main storage path still requires system catalog tables, LOBs, transaction logs, and temporary results to be separated from `Store`. Therefore the first stable commitment remains: production main-path storage engines must be MVStore-backed. A non-MVStore main path should enter implementation separately after system catalog table contracts are defined.
@@ -111,7 +113,7 @@ Plugin classes must provide a public no-argument constructor. Plugin id, version
 
 ## Provider Constraints
 
-External plugins can currently register only table, storage, system catalog, JDBC URL prefix, transaction event, and database lifecycle providers. SQL parser, function, auth, optimizer, wire protocol, and other core extension points are not in the current plan.
+External plugins can currently register only table, storage, system catalog, JDBC URL prefix, transaction event, database lifecycle providers, and the experimental DML execution provider. SQL parser, function, auth, optimizer, wire protocol, and other core extension points are not in the current plan.
 
 Provider ids must be unique within the same provider type. Built-in providers cannot be overridden by external plugins.
 
@@ -125,6 +127,10 @@ Use a reverse-DNS or clear product prefix for plugin ids, such as `com.acme.plug
 | `system.catalog` | Provider can own the system catalog |
 | `transaction.events` | Provider can observe transaction commit / rollback events |
 | `database.lifecycle` | Provider can observe database close lifecycle events |
+| `dml.insert.values.fastPath` | DML provider can match simple `INSERT ... VALUES` fast paths |
+| `parameters.bound.view` | DML provider can read execution-time read-only parameter views |
+| `dml.insert.batch.fastPath` | DML provider can receive JDBC batch parameter views |
+| `table.bulkInsert` | Table implementation supports table-side bulk insert |
 | `storage.persistent` | Storage supports persistent databases |
 | `storage.transactional` | Storage supports transactions |
 | `storage.mvcc` | Storage supports MVCC |
@@ -136,6 +142,44 @@ Use a reverse-DNS or clear product prefix for plugin ids, such as `com.acme.plug
 | `storage.truncate.safe` | Storage supports safe physical truncation |
 
 New capabilities should use stable strings and should normally stay under the `table.*` or `storage.*` namespaces.
+
+## Experimental DML Execution Fast Path
+
+`DmlExecutionProvider` lets a plugin match high-frequency DML plans during
+prepare and read H2-bound parameters through read-only views during execution.
+The current V1 scope covers only simple `INSERT ... VALUES` and
+`PreparedStatement` batch. Its main purpose is to validate plugin-table bulk
+insert paths without wrapping H2 `PreparedStatement` externally to capture
+setter calls.
+
+Minimum adoption requirements:
+
+- The plugin returns a `DmlExecutionProvider` from `H2Plugin#getProviders()`.
+- The provider declares `dml.insert.values.fastPath`; providers that read parameter views must also declare `parameters.bound.view`.
+- JDBC batch support requires `dml.insert.batch.fastPath` and `DmlExecutionPlan#executeBatch()` must return per-row update counts.
+- Plugin tables with table-side bulk writes implement `BulkInsertTable` and declare the `table.bulkInsert` capability.
+- Providers must not cache `DmlExecutionContext`, `BoundParameterView`, `BoundParameterBatchView`, `SessionLocal`, `Table`, or other execution-time objects for asynchronous use.
+
+V1 falls back to the native H2 path for:
+
+- `INSERT SELECT`, `MERGE`, `UPDATE`, and `DELETE`.
+- Generated-keys requests.
+- Row triggers, constraints, delta change collectors, `INSERT IGNORE`, and `ON DUPLICATE KEY UPDATE`.
+- Non-full-column parameterized single-row `VALUES`, mixed constants and parameters, and `DEFAULT` expressions.
+- Missing provider capabilities or tables without the required bulk hook.
+
+The current acceptance tests live in
+`h2/src/test-plugin/org/h2/test/plugin/DmlExecutionProviderTest.java` and cover
+prepare matching, fallback, single-row parameters, batch parameters, batch
+partial failure, table-side bulk hooks, rollback, autoCommit, duplicate keys,
+type conversion, and generated-keys fallback.
+
+Performance status is recorded in
+[P7 performance report](perf/dml-fast-path-p7-report.md) and
+[P8 3x push conclusion](perf/dml-fast-path-p8-conclusion.md). The h2db-side
+hook is covered by tests, but ADB/LDB has not completed a runnable new-hook
+long run in this repository, so the 1.5x and 3x performance targets are not
+claimed.
 
 ## Driver-Level Plugin Loading
 

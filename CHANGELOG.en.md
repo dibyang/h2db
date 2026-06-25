@@ -12,6 +12,7 @@ This file records public h2db release changes for external users. Keep one secti
 - Added plugin version coexistence and dependency resolution. Multiple versions of the same plugin id may coexist when provider ids do not conflict; dependency versions support exact versions, `*`, and interval ranges.
 - Added plugin diagnostic views: `INFORMATION_SCHEMA.PLUGINS`, `PLUGIN_PROVIDERS`, `PLUGIN_CAPABILITIES`, and `PLUGIN_DEPENDENCIES` expose descriptors, providers, capabilities, dependencies, sources, and multi-version attribution.
 - Added plugin release-readiness documentation with the release scope, non-goals, required gates, and rules for adding future provider types.
+- Added the experimental DML execution fast-path SPI: `DmlExecutionProvider`, read-only parameter views, JDBC batch parameter views, and `BulkInsertTable` for guarded plugin takeover of simple `INSERT ... VALUES` / batch writes.
 - Added open-source release materials, including README, contributing guide, security policy, support guide, GitHub Release guide, Maven Central release guide, third-party notices, and English companions.
 - Added documentation for the experimental MVStore space reclamation maintenance API, including controlled maintenance windows, diagnostics, leftover cleanup, and rollback strategy.
 - Added public status, entry-point introspection, and diagnostic event listener support for the MVStore space reclamation maintenance API.
@@ -40,6 +41,7 @@ This file records public h2db release changes for external users. Keep one secti
 ### Known Limitations
 
 - The current plugin model is static. Hot loading, unloading, online replacement, plugin manifest/signing, dedicated sandboxing, parser/function/auth/optimizer/wire protocol extension points, and non-MVStore production main paths are outside this release scope.
+- The DML execution fast path remains experimental SPI. V1 covers only simple `INSERT ... VALUES` / JDBC batch; generated keys, triggers, constraints, delta tables, `INSERT SELECT`, `MERGE`, `UPDATE`, and `DELETE` fall back to the native path. The ADB/LDB new-hook long run has not completed in this repository, so 1.5x or 3x performance targets are not claimed.
 - MVStore space reclamation is currently an experimental maintenance API. It does not expose SQL and does not schedule itself automatically.
 - If the source file changes after a prepared shadow is created, switching is rejected by default; explicit fallback performs a maintenance full-copy.
 - LongRun live write-order, torn-write, and FilePath-level chaos injection are not enabled yet. The current fault-injection profile damages database copies only, not the active database.

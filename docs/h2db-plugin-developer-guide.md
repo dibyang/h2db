@@ -13,6 +13,7 @@ H2 插件通过 `org.h2.api.H2Plugin` 暴露插件描述，通过 provider 扩�
 - `JdbcUrlPrefixProvider`：Driver 级 URL 前缀扩展点，用于把 `jdbc:vendor:*` 等自定义 URL 映射到 `jdbc:h2:*`。
 - `TransactionEventProvider`：事务生命周期扩展点，用于监听 commit / rollback 前后事件。
 - `DatabaseLifecycleProvider`：数据库生命周期扩展点，用于监听数据库关闭事件。
+- `DmlExecutionProvider`：实验性 DML 执行快路径，用于在受控条件下识别并接管简单 `INSERT ... VALUES` 和 JDBC batch。
 - 自动发现：H2 读取 classpath 上的 `META-INF/services/org.h2.api.H2Plugin`。
 
 插件加载不再依托 JDBC URL 参数；插件 jar 只要进入应用 classpath 并发布 `ServiceLoader` 文件，就会在 Driver 早期路径和数据库打开路径被发现。
@@ -27,6 +28,7 @@ H2 插件通过 `org.h2.api.H2Plugin` 暴露插件描述，通过 provider 扩�
 | --- | --- | --- |
 | 稳定 SPI | `H2Plugin`、`PluginProvider`、`TableEngineProvider`、`StorageEngineProvider`、`SystemCatalogProvider`、`JdbcUrlPrefixProvider`、`TransactionEventProvider`、`DatabaseLifecycleProvider`、`StorageMaintenance`、capability 字符串 | 作为插件入口保持源码兼容，新增能力优先通过默认方法或新 capability 扩展。 |
 | 受管迁移 API | `TableEngineContext`、`StorageEngineContext`、`CreateTableData`、`Table` / `Index` 相关内部类型 | 插件迁移期可用，但升级 H2 小版本前必须跑契约测试，不承诺长期二进制兼容。 |
+| 实验 SPI | `DmlExecutionProvider`、`DmlExecutionPlan`、`DmlPrepareContext`、`DmlExecutionContext`、`BoundParameterView`、`BoundParameterBatchView`、`BulkInsertTable` | 用于验证高频 DML 插件快路径，不承诺长期二进制兼容；生产接入前必须按兼容矩阵和性能报告验收。 |
 | 内部实现 | parser、optimizer、JDBC server、MVStore 物理结构、`Database` 深层生命周期 | 不作为插件 API 暴露，插件不得依赖其调用顺序或字段布局。 |
 
 非 MVStore storage engine 当前可以作为 `StorageEngineProvider` 被注册、诊断和纳入 capability 管理，`SystemCatalogProvider` 也已作为系统元数据目录前置 SPI 接入 provider 白名单和诊断表。但完整替代 H2 主存储路径还需要系统元数据表、LOB、事务日志和临时结果等核心对象脱离 `Store`。因此第一版稳定承诺仍是：生产可用的主路径 storage engine 必须是 MVStore-backed；非 MVStore 主路径将在补齐 system catalog provider 的系统表契约后单独进入实现阶段。
@@ -81,7 +83,7 @@ public final class AcmePlugin implements H2Plugin {
 
 ## Provider 约束
 
-外部插件当前只允许注册 table、storage、system catalog、JDBC URL prefix、transaction event 和 database lifecycle provider。SQL parser、function、auth、optimizer、wire protocol 等核心扩展点当前规划不纳入。
+外部插件当前只允许注册 table、storage、system catalog、JDBC URL prefix、transaction event、database lifecycle provider，以及实验性的 DML execution provider。SQL parser、function、auth、optimizer、wire protocol 等核心扩展点当前规划不纳入。
 
 provider id 在同一 provider type 下必须唯一。内置 provider 不允许被外部插件覆盖。
 
@@ -95,6 +97,10 @@ provider id 在同一 provider type 下必须唯一。内置 provider 不允许�
 | `system.catalog` | provider 可承接系统元数据目录 |
 | `transaction.events` | provider 可监听事务 commit / rollback 事件 |
 | `database.lifecycle` | provider 可监听数据库关闭生命周期事件 |
+| `dml.insert.values.fastPath` | DML provider 可识别简单 `INSERT ... VALUES` 快路径 |
+| `parameters.bound.view` | DML provider 可读取执行期只读参数视图 |
+| `dml.insert.batch.fastPath` | DML provider 可接收 JDBC batch 参数视图 |
+| `table.bulkInsert` | 表实现支持表级批量写入入口 |
 | `storage.persistent` | storage 支持持久化数据库 |
 | `storage.transactional` | storage 支持事务 |
 | `storage.mvcc` | storage 支持 MVCC |
@@ -106,6 +112,30 @@ provider id 在同一 provider type 下必须唯一。内置 provider 不允许�
 | `storage.truncate.safe` | storage 支持安全物理截断 |
 
 新增 capability 应使用稳定字符串，优先沿用 `table.*` 或 `storage.*` 命名空间。
+
+## DML 执行快路径实验 SPI
+
+`DmlExecutionProvider` 用于让插件在 prepare 阶段识别可接管的高频 DML 计划，并在执行阶段通过只读参数视图读取 H2 已绑定参数。当前 V1 仅覆盖简单 `INSERT ... VALUES` 和 `PreparedStatement` batch，主要用于验证插件表批量写入路径，避免插件在 H2 外层再包一层 `PreparedStatement` proxy 捕获 setter。
+
+最小接入要求：
+
+- 插件通过 `H2Plugin#getProviders()` 返回一个 `DmlExecutionProvider`。
+- provider 必须声明 `dml.insert.values.fastPath`；读取参数视图时还必须声明 `parameters.bound.view`。
+- 支持 JDBC batch 时必须声明 `dml.insert.batch.fastPath`，并在 `DmlExecutionPlan#executeBatch()` 中返回每行 update count。
+- 插件表支持表级批量写入时实现 `BulkInsertTable`，并声明 `table.bulkInsert` capability。
+- provider 不得缓存 `DmlExecutionContext`、`BoundParameterView`、`BoundParameterBatchView`、`SessionLocal`、`Table` 或其它执行期对象供异步线程使用。
+
+V1 默认回退到 H2 原生路径的场景：
+
+- `INSERT SELECT`、`MERGE`、`UPDATE`、`DELETE`。
+- generated keys 请求。
+- row trigger、约束、delta change collector、`INSERT IGNORE`、`ON DUPLICATE KEY UPDATE`。
+- 非全列参数化单行 `VALUES`、常量和参数混用、`DEFAULT` 表达式。
+- provider 未声明必要 capability，或 table 不支持对应 bulk hook。
+
+已知验收测试位于 `h2/src/test-plugin/org/h2/test/plugin/DmlExecutionProviderTest.java`，覆盖 prepare 识别、fallback、单行参数、batch 参数、batch partial failure、表级 bulk hook、rollback、autoCommit、重复键、类型转换和 generated keys fallback。
+
+性能状态见 [P7 performance report](perf/dml-fast-path-p7-report.md) 和 [P8 3x push conclusion](perf/dml-fast-path-p8-conclusion.md)。当前 h2db 侧 hook 已有测试覆盖，但 ADB/LDB 尚未在本仓库内完成新 hook 长测接入，因此不能宣称达到 1.5x 或 3x 性能目标。
 
 ## Driver 级插件加载
 

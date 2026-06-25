@@ -18,6 +18,7 @@ The current release is ready to publish the static plugin foundation:
 | JDBC URL prefixes | `JdbcUrlPrefixProvider` can map custom Driver-level prefixes such as `jdbc:vendor:*` to H2 URLs after automatic discovery. |
 | Transaction events | `TransactionEventProvider` can observe commit / rollback boundary events with failure diagnostics. |
 | Database lifecycle | `DatabaseLifecycleProvider` can observe database close events without URL listener injection. |
+| DML execution fast path | `DmlExecutionProvider`, parameter views, batch views, and `BulkInsertTable` are publishable as experimental SPI. The scope is limited to simple `INSERT ... VALUES` / JDBC batch with strict fallback. |
 | Observability | `INFORMATION_SCHEMA.PLUGINS`, `PLUGIN_PROVIDERS`, `PLUGIN_CAPABILITIES`, and `PLUGIN_DEPENDENCIES` expose release diagnostics. |
 
 ## Explicit Non-Goals
@@ -32,6 +33,7 @@ These are not release blockers because they are intentionally outside this versi
 | Parser, function, auth, optimizer, and wire protocol extension points | Not in the current plugin plan. |
 | Non-MVStore production main path | Deferred until system catalog tables, LOBs, transaction logs, and temporary results are separated from `Store`. |
 | Automated performance baselines and large-resource slow tests | Deferred to slow-test infrastructure. |
+| DML fast path 1.5x / 3x performance commitment | Not promised. The h2db-side hook has test coverage, but the ADB/LDB new-hook long run has not completed in this repository. See `docs/perf/dml-fast-path-p7-report.md` and `docs/perf/dml-fast-path-p8-conclusion.md`. |
 
 ## Required Gates
 
@@ -53,3 +55,4 @@ The pluginization baseline is release-ready when:
 - Working tree is clean after the release-readiness commit.
 - Deferred capabilities remain documented as non-goals.
 - No plugin provider type is added without updating the whitelist, diagnostics, tests, and both Chinese and English documentation.
+- DML fast path remains documented as experimental SPI; release notes must not claim 1.5x or 3x performance until an ADB/LDB new-hook performance report exists.

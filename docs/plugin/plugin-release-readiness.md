@@ -17,6 +17,7 @@
 | JDBC URL 前缀 | `JdbcUrlPrefixProvider` 可在自动发现后把 `jdbc:vendor:*` 等 Driver 级自定义前缀映射到 H2 URL。 |
 | 事务事件 | `TransactionEventProvider` 可监听 commit / rollback 边界事件并输出失败诊断。 |
 | 数据库生命周期 | `DatabaseLifecycleProvider` 可监听数据库关闭事件，不需要 URL listener 注入。 |
+| DML 执行快路径 | `DmlExecutionProvider`、参数视图、batch 视图和 `BulkInsertTable` 作为实验 SPI 发布；只覆盖简单 `INSERT ... VALUES` / JDBC batch，并保留严格 fallback。 |
 | 可观测性 | `INFORMATION_SCHEMA.PLUGINS`、`PLUGIN_PROVIDERS`、`PLUGIN_CAPABILITIES`、`PLUGIN_DEPENDENCIES` 暴露发布级诊断。 |
 
 ## 明确非目标
@@ -31,6 +32,7 @@
 | parser、function、auth、optimizer、wire protocol 扩展点 | 不在当前插件规划内。 |
 | 非 MVStore 生产主路径 | 延期到系统元数据表、LOB、事务日志和临时结果脱离 `Store` 之后。 |
 | 自动性能基线和大资源慢测 | 延期到慢测基础设施。 |
+| DML fast path 1.5x / 3x 性能承诺 | 未承诺。h2db 侧 hook 已完成测试覆盖，但 ADB/LDB 新 hook 长测尚未在本仓库内跑通，见 `docs/perf/dml-fast-path-p7-report.md` 和 `docs/perf/dml-fast-path-p8-conclusion.md`。 |
 
 ## 必跑门禁
 
@@ -52,3 +54,4 @@ cd D:\work\java\h2db\h2
 - 发布就绪提交后工作区干净。
 - 延期能力仍作为非目标写入文档。
 - 任何新增 provider type 都必须同步更新白名单、诊断、测试和中英文文档。
+- DML fast path 仍按实验 SPI 对外说明；未补齐 ADB/LDB 新 hook 性能报告前，不得在发布说明中宣称达到 1.5x 或 3x。

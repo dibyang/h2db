@@ -15,6 +15,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -26,6 +27,7 @@ import org.h2.api.DmlExecutionContext;
 import org.h2.api.DmlExecutionPlan;
 import org.h2.api.DmlExecutionProvider;
 import org.h2.api.DmlPrepareContext;
+import org.h2.api.ErrorCode;
 import org.h2.api.H2Plugin;
 import org.h2.api.PluginCapability;
 import org.h2.api.PluginProvider;
@@ -238,6 +240,133 @@ public class DmlExecutionProviderTest {
             assertEquals(1, BulkRecordingTable.addRowsCalls);
             assertEquals(2, BulkRecordingTable.rowCount);
             assertEquals("[10:ten, 20:twenty]", BulkRecordingTable.rows.toString());
+        }
+    }
+
+    /**
+     * T-DML-HOOK-TXN-ROLLBACK-01.
+     */
+    @Test
+    public void fastPathInsertParticipatesInRollback() throws Exception {
+        RecordingDmlProvider.reset();
+
+        try (Connection conn = DriverManager.getConnection("jdbc:h2:mem:dmlTxnRollback;DB_CLOSE_DELAY=-1", "sa", "");
+                Statement stat = conn.createStatement()) {
+            stat.execute("create table test_target(id int, name varchar)");
+            conn.setAutoCommit(false);
+            RecordingDmlProvider.reset();
+
+            try (PreparedStatement prep = conn.prepareStatement(
+                    "insert into test_target(id, name) values (?, ?)")) {
+                prep.setInt(1, 1);
+                prep.setString(2, "one");
+                assertEquals(1, prep.executeUpdate());
+                assertEquals(1, RecordingDmlProvider.executeCalls);
+            }
+            conn.rollback();
+
+            try (ResultSet rs = stat.executeQuery("select count(*) from test_target")) {
+                assertTrue(rs.next());
+                assertEquals(0, rs.getInt(1));
+            }
+        }
+    }
+
+    /**
+     * T-DML-HOOK-AUTOCOMMIT-01.
+     */
+    @Test
+    public void fastPathInsertKeepsAutoCommitSemantics() throws Exception {
+        RecordingDmlProvider.reset();
+
+        try (Connection conn = DriverManager.getConnection("jdbc:h2:mem:dmlAutoCommit;DB_CLOSE_DELAY=-1", "sa", "");
+                Statement stat = conn.createStatement()) {
+            stat.execute("create table test_target(id int, name varchar)");
+            RecordingDmlProvider.reset();
+
+            try (PreparedStatement prep = conn.prepareStatement(
+                    "insert into test_target(id, name) values (?, ?)")) {
+                prep.setInt(1, 1);
+                prep.setString(2, "one");
+                assertEquals(1, prep.executeUpdate());
+                assertEquals(1, RecordingDmlProvider.executeCalls);
+            }
+
+            try (ResultSet rs = stat.executeQuery("select count(*) from test_target")) {
+                assertTrue(rs.next());
+                assertEquals(1, rs.getInt(1));
+            }
+        }
+    }
+
+    /**
+     * T-DML-HOOK-DUPKEY-01.
+     */
+    @Test
+    public void duplicateKeyPathFallsBackToNativeErrorSemantics() throws Exception {
+        RecordingDmlProvider.reset();
+
+        try (Connection conn = DriverManager.getConnection("jdbc:h2:mem:dmlDupKey;DB_CLOSE_DELAY=-1", "sa", "");
+                Statement stat = conn.createStatement()) {
+            stat.execute("create table test_target(id int primary key, name varchar)");
+            stat.execute("insert into test_target values(1, 'one')");
+            RecordingDmlProvider.reset();
+
+            try (PreparedStatement prep = conn.prepareStatement(
+                    "insert into test_target(id, name) values (?, ?)")) {
+                prep.setInt(1, 1);
+                prep.setString(2, "duplicate");
+                SQLException ex = assertThrows(SQLException.class, prep::executeUpdate);
+                assertEquals(ErrorCode.DUPLICATE_KEY_1, ex.getErrorCode());
+                assertEquals(0, RecordingDmlProvider.executeCalls);
+            }
+        }
+    }
+
+    /**
+     * T-DML-HOOK-PARAM-01 type conversion branch.
+     */
+    @Test
+    public void fastPathUsesNativeTypeConversionErrors() throws Exception {
+        RecordingDmlProvider.reset();
+
+        try (Connection conn = DriverManager.getConnection("jdbc:h2:mem:dmlTypeConversion;DB_CLOSE_DELAY=-1",
+                "sa", "");
+                Statement stat = conn.createStatement()) {
+            stat.execute("create table test_target(id int, name varchar)");
+            RecordingDmlProvider.reset();
+
+            try (PreparedStatement prep = conn.prepareStatement(
+                    "insert into test_target(id, name) values (?, ?)")) {
+                prep.setString(1, "not-an-int");
+                prep.setString(2, "bad");
+                SQLException ex = assertThrows(SQLException.class, prep::executeUpdate);
+                assertEquals(ErrorCode.DATA_CONVERSION_ERROR_1, ex.getErrorCode());
+                assertEquals(1, RecordingDmlProvider.executeCalls);
+            }
+        }
+    }
+
+    /**
+     * T-DML-HOOK-GENERATED-KEYS-01.
+     */
+    @Test
+    public void generatedKeysRequestFallsBackToNativePath() throws Exception {
+        RecordingDmlProvider.reset();
+
+        try (Connection conn = DriverManager.getConnection("jdbc:h2:mem:dmlGeneratedKeys;DB_CLOSE_DELAY=-1",
+                "sa", "");
+                Statement stat = conn.createStatement()) {
+            stat.execute("create table test_target(id int, name varchar)");
+            RecordingDmlProvider.reset();
+
+            try (PreparedStatement prep = conn.prepareStatement(
+                    "insert into test_target(id, name) values (?, ?)", Statement.RETURN_GENERATED_KEYS)) {
+                prep.setInt(1, 1);
+                prep.setString(2, "one");
+                assertEquals(1, prep.executeUpdate());
+                assertEquals(0, RecordingDmlProvider.executeCalls);
+            }
         }
     }
 

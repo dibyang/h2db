@@ -79,6 +79,7 @@ public final class Insert extends CommandWithValues implements ResultTarget {
 
     private DmlExecutionPlan dmlExecutionPlan = DmlExecutionPlan.NONE;
     private DmlExecutionProvider dmlExecutionProvider;
+    private boolean generatedKeysRequested;
 
     public Insert(SessionLocal session) {
         super(session);
@@ -370,6 +371,17 @@ public final class Insert extends CommandWithValues implements ResultTarget {
     }
 
     /**
+     * Mark whether the current execution was entered from JDBC generated-keys
+     * handling. V1 fast path falls back whenever generated keys were requested,
+     * even when H2 later discovers that there are no key columns to collect.
+     *
+     * @param generatedKeysRequested true when generated keys were requested
+     */
+    public void setGeneratedKeysRequested(boolean generatedKeysRequested) {
+        this.generatedKeysRequested = generatedKeysRequested;
+    }
+
+    /**
      * Check whether the current INSERT can execute a JDBC batch through the
      * provider. This guard is intentionally side-effect free because JDBC needs
      * to fall back to the legacy per-row batch loop when any condition is not
@@ -462,7 +474,7 @@ public final class Insert extends CommandWithValues implements ResultTarget {
                 || !dmlExecutionProvider.supports(PluginCapability.PARAMETERS_BOUND_VIEW)) {
             return false;
         }
-        if (valuesExpressionList.size() != 1 || query != null || insertFromSelect || ignore
+        if (valuesExpressionList.size() != 1 || query != null || insertFromSelect || ignore || generatedKeysRequested
                 || duplicateKeyAssignmentMap != null || deltaChangeCollector != null || overridingSystem != null
                 || table.fireRow()) {
             return false;

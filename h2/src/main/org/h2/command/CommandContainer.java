@@ -200,71 +200,81 @@ public class CommandContainer extends Command {
 
     private ResultWithGeneratedKeys executeUpdateWithGeneratedKeys(DataChangeStatement statement,
             Object generatedKeysRequest) {
-        Database db = getDatabase();
-        Table table = statement.getTable();
-        ArrayList<ExpressionColumn> expressionColumns;
-        if (Boolean.TRUE.equals(generatedKeysRequest)) {
-            expressionColumns = Utils.newSmallArrayList();
-            Column[] columns = table.getColumns();
-            Index primaryKey = table.findPrimaryKey();
-            for (Column column : columns) {
-                Expression e;
-                if (column.isIdentity()
-                        || ((e = column.getEffectiveDefaultExpression()) != null && !e.isConstant())
-                        || (primaryKey != null && primaryKey.getColumnIndex(column) >= 0)) {
+        Insert generatedKeysInsert = statement instanceof Insert ? (Insert) statement : null;
+        if (generatedKeysInsert != null) {
+            generatedKeysInsert.setGeneratedKeysRequested(true);
+        }
+        try {
+            Database db = getDatabase();
+            Table table = statement.getTable();
+            ArrayList<ExpressionColumn> expressionColumns;
+            if (Boolean.TRUE.equals(generatedKeysRequest)) {
+                expressionColumns = Utils.newSmallArrayList();
+                Column[] columns = table.getColumns();
+                Index primaryKey = table.findPrimaryKey();
+                for (Column column : columns) {
+                    Expression e;
+                    if (column.isIdentity()
+                            || ((e = column.getEffectiveDefaultExpression()) != null && !e.isConstant())
+                            || (primaryKey != null && primaryKey.getColumnIndex(column) >= 0)) {
+                        expressionColumns.add(new ExpressionColumn(db, column));
+                    }
+                }
+            } else if (generatedKeysRequest instanceof int[]) {
+                int[] indexes = (int[]) generatedKeysRequest;
+                Column[] columns = table.getColumns();
+                int cnt = columns.length;
+                expressionColumns = new ArrayList<>(indexes.length);
+                for (int idx : indexes) {
+                    if (idx < 1 || idx > cnt) {
+                        throw DbException.get(ErrorCode.COLUMN_NOT_FOUND_1, "Index: " + idx);
+                    }
+                    expressionColumns.add(new ExpressionColumn(db, columns[idx - 1]));
+                }
+            } else if (generatedKeysRequest instanceof String[]) {
+                String[] names = (String[]) generatedKeysRequest;
+                expressionColumns = new ArrayList<>(names.length);
+                for (String name : names) {
+                    Column column = table.findColumn(name);
+                    if (column == null) {
+                        DbSettings settings = db.getSettings();
+                        if (settings.databaseToUpper) {
+                            column = table.findColumn(StringUtils.toUpperEnglish(name));
+                        } else if (settings.databaseToLower) {
+                            column = table.findColumn(StringUtils.toLowerEnglish(name));
+                        }
+                        search: if (column == null) {
+                            for (Column c : table.getColumns()) {
+                                if (c.getName().equalsIgnoreCase(name)) {
+                                    column = c;
+                                    break search;
+                                }
+                            }
+                            throw DbException.get(ErrorCode.COLUMN_NOT_FOUND_1, name);
+                        }
+                    }
                     expressionColumns.add(new ExpressionColumn(db, column));
                 }
+            } else {
+                throw DbException.getInternalError();
             }
-        } else if (generatedKeysRequest instanceof int[]) {
-            int[] indexes = (int[]) generatedKeysRequest;
-            Column[] columns = table.getColumns();
-            int cnt = columns.length;
-            expressionColumns = new ArrayList<>(indexes.length);
-            for (int idx : indexes) {
-                if (idx < 1 || idx > cnt) {
-                    throw DbException.get(ErrorCode.COLUMN_NOT_FOUND_1, "Index: " + idx);
-                }
-                expressionColumns.add(new ExpressionColumn(db, columns[idx - 1]));
+            int columnCount = expressionColumns.size();
+            if (columnCount == 0) {
+                return new ResultWithGeneratedKeys.WithKeys(statement.update(), new LocalResult());
             }
-        } else if (generatedKeysRequest instanceof String[]) {
-            String[] names = (String[]) generatedKeysRequest;
-            expressionColumns = new ArrayList<>(names.length);
-            for (String name : names) {
-                Column column = table.findColumn(name);
-                if (column == null) {
-                    DbSettings settings = db.getSettings();
-                    if (settings.databaseToUpper) {
-                        column = table.findColumn(StringUtils.toUpperEnglish(name));
-                    } else if (settings.databaseToLower) {
-                        column = table.findColumn(StringUtils.toLowerEnglish(name));
-                    }
-                    search: if (column == null) {
-                        for (Column c : table.getColumns()) {
-                            if (c.getName().equalsIgnoreCase(name)) {
-                                column = c;
-                                break search;
-                            }
-                        }
-                        throw DbException.get(ErrorCode.COLUMN_NOT_FOUND_1, name);
-                    }
-                }
-                expressionColumns.add(new ExpressionColumn(db, column));
+            int[] indexes = new int[columnCount];
+            ExpressionColumn[] expressions = expressionColumns.toArray(new ExpressionColumn[0]);
+            for (int i = 0; i < columnCount; i++) {
+                indexes[i] = expressions[i].getColumn().getColumnId();
             }
-        } else {
-            throw DbException.getInternalError();
+            LocalResult result = new LocalResult(session, expressions, columnCount, columnCount);
+            return new ResultWithGeneratedKeys.WithKeys(
+                    statement.update(new GeneratedKeysCollector(indexes, result), ResultOption.FINAL), result);
+        } finally {
+            if (generatedKeysInsert != null) {
+                generatedKeysInsert.setGeneratedKeysRequested(false);
+            }
         }
-        int columnCount = expressionColumns.size();
-        if (columnCount == 0) {
-            return new ResultWithGeneratedKeys.WithKeys(statement.update(), new LocalResult());
-        }
-        int[] indexes = new int[columnCount];
-        ExpressionColumn[] expressions = expressionColumns.toArray(new ExpressionColumn[0]);
-        for (int i = 0; i < columnCount; i++) {
-            indexes[i] = expressions[i].getColumn().getColumnId();
-        }
-        LocalResult result = new LocalResult(session, expressions, columnCount, columnCount);
-        return new ResultWithGeneratedKeys.WithKeys(
-                statement.update(new GeneratedKeysCollector(indexes, result), ResultOption.FINAL), result);
     }
 
     @Override

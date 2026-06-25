@@ -23,6 +23,7 @@ Not included in this round:
 | --- | --- |
 | Hot loading, unloading, or online plugin replacement | Design after the plugin lifecycle is stable |
 | Plugin package manifest, signing, and permission sandbox | Design during external plugin distribution |
+| DML execution fast path plugin enhancement | See [plugin-dml-fast-path-plan.en.md](plugin-dml-fast-path-plan.en.md) |
 | New extension points beyond storage/table/system catalog/JDBC URL prefix/transaction event | Parser, function, auth, optimizer, wire protocol, and similar extension points are not in the current plan |
 | Automated performance baselines and large-resource slow tests | Add during the slow-test foundation phase |
 

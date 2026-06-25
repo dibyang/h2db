@@ -23,6 +23,7 @@
 | --- | --- |
 | 热加载、卸载、在线替换插件 | 插件生命周期稳定后单独设计 |
 | 插件包 manifest、签名、权限沙箱 | 外部插件分发阶段设计 |
+| DML 执行入口插件增强 | 见 [plugin-dml-fast-path-plan.md](plugin-dml-fast-path-plan.md) |
 | 非 storage/table/system catalog/JDBC URL prefix/transaction event 的新扩展点 | parser、function、auth、optimizer、wire protocol 等当前规划不纳入 |
 | 自动性能基线和大资源慢测 | 测试底座慢测阶段补齐 |
 

@@ -8,3 +8,4 @@ org.h2.test.plugin.SystemCatalogProviderTest$StorageOnlyPlugin
 org.h2.test.plugin.TransactionEventProviderTest$TransactionPlugin
 org.h2.test.plugin.DatabaseLifecycleProviderTest$LifecyclePlugin
 org.h2.test.plugin.DmlExecutionProviderTest$RecordingDmlPlugin
+org.h2.test.plugin.IdentityMetadataPrototypePlugin

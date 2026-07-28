@@ -9,13 +9,22 @@ import java.io.IOException;
 import java.net.Socket;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.UUID;
+
 import org.h2.api.DatabaseEventListener;
 import org.h2.api.ErrorCode;
 import org.h2.api.JavaObjectSerializer;
+import org.h2.api.OnlineBackupActivationReport;
+import org.h2.api.OnlineBackupDescriptor;
+import org.h2.api.OnlineBackupOptions;
+import org.h2.api.OnlineBackupPublishReport;
+import org.h2.api.OnlineBackupRestoreOptions;
+import org.h2.api.OnlineBackupRestoreReport;
 import org.h2.command.CommandInterface;
 import org.h2.command.CommandRemote;
 import org.h2.command.dml.SetTypes;
 import org.h2.engine.Mode.ModeEnum;
+import org.h2.engine.backup.OnlineBackupProtocolCodec;
 import org.h2.expression.ParameterInterface;
 import org.h2.jdbc.JdbcException;
 import org.h2.jdbc.meta.DatabaseMeta;
@@ -73,6 +82,16 @@ public final class SessionRemote extends Session implements DataHandler {
     public static final int LOB_READ = 17;
     public static final int SESSION_PREPARE_READ_PARAMS2 = 18;
     public static final int GET_JDBC_META = 19;
+    public static final int ONLINE_BACKUP_PREPARE = 20;
+    public static final int ONLINE_BACKUP_PUBLISH = 21;
+    public static final int ONLINE_BACKUP_ABORT = 22;
+    public static final int ONLINE_BACKUP_CLOSE = 23;
+    public static final int SHADOW_RESTORE_STAGE_VALIDATE = 24;
+    public static final int SHADOW_RESTORE_CLOSE = 25;
+    public static final int ACTIVATION_PREPARE = 26;
+    public static final int ACTIVATION_COMMIT = 27;
+    public static final int ACTIVATION_ABORT = 28;
+    public static final int ACTIVATION_CLOSE = 29;
 
     public static final int STATUS_ERROR = 0;
     public static final int STATUS_OK = 1;
@@ -91,6 +110,8 @@ public final class SessionRemote extends Session implements DataHandler {
     private final Object lobSyncObject = new Object();
     private String sessionId;
     private int clientVersion;
+    private int protocolVersionMax =
+            Constants.TCP_PROTOCOL_VERSION_MAX_SUPPORTED;
     private boolean autoReconnect;
     private int lastReconnect;
     private Session embedded;
@@ -98,6 +119,9 @@ public final class SessionRemote extends Session implements DataHandler {
     private LobStorageFrontend lobStorage;
     private boolean cluster;
     private TempFileDeleter tempFileDeleter;
+    private int activeManagementHandles;
+    private boolean managementOperationInProgress;
+    private String fencedGenerationId;
 
     private JavaObjectSerializer javaObjectSerializer;
 
@@ -133,7 +157,7 @@ public final class SessionRemote extends Session implements DataHandler {
         trans.setSSL(ci.isSSL());
         trans.init();
         trans.writeInt(Constants.TCP_PROTOCOL_VERSION_MIN_SUPPORTED);
-        trans.writeInt(Constants.TCP_PROTOCOL_VERSION_MAX_SUPPORTED);
+        trans.writeInt(protocolVersionMax);
         trans.writeString(db);
         trans.writeString(ci.getOriginalURL());
         trans.writeString(ci.getUserName());
@@ -237,6 +261,319 @@ public final class SessionRemote extends Session implements DataHandler {
      */
     public int getClientVersion() {
         return clientVersion;
+    }
+
+    /**
+     * 通过 TCP v21 准备在线备份。
+     *
+     * @param options prepare 选项
+     * @return 远程备份句柄
+     */
+    public synchronized RemoteBackup prepareOnlineBackup(
+            OnlineBackupOptions options) {
+        checkNotFenced();
+        Transfer transfer = beginManagement();
+        try {
+            transfer.writeInt(ONLINE_BACKUP_PREPARE);
+            OnlineBackupProtocolCodec.writeOptions(transfer, options);
+            done(transfer);
+            RemoteBackup backup = new RemoteBackup(transfer.readInt(),
+                    OnlineBackupProtocolCodec.readDescriptor(transfer));
+            activeManagementHandles++;
+            return backup;
+        } catch (IOException e) {
+            throw failManagement(e);
+        } finally {
+            managementOperationInProgress = false;
+        }
+    }
+
+    /**
+     * @param handleId 远程备份句柄 ID
+     * @param bundleName 服务端 backup root 下的 bundle 名称
+     * @return 发布报告
+     */
+    public synchronized OnlineBackupPublishReport publishOnlineBackup(
+            int handleId, String bundleName) {
+        checkNotFenced();
+        Transfer transfer = beginManagement();
+        try {
+            transfer.writeInt(ONLINE_BACKUP_PUBLISH).writeInt(handleId)
+                    .writeString(bundleName);
+            done(transfer);
+            return OnlineBackupProtocolCodec.readPublishReport(transfer);
+        } catch (IOException e) {
+            throw failManagement(e);
+        } finally {
+            managementOperationInProgress = false;
+        }
+    }
+
+    /**
+     * @param handleId 远程备份句柄 ID
+     */
+    public synchronized void abortOnlineBackup(int handleId) {
+        invokeHandleOperation(ONLINE_BACKUP_ABORT, handleId);
+    }
+
+    /**
+     * @param handleId 远程备份句柄 ID
+     */
+    public synchronized void closeOnlineBackup(int handleId) {
+        invokeHandleClose(ONLINE_BACKUP_CLOSE, handleId);
+    }
+
+    /**
+     * @param bundleName 服务端 backup root 下的 bundle 名称
+     * @param shadowName 服务端 shadow root 下的 shadow 名称
+     * @param options restore 选项
+     * @return 远程 restore 句柄
+     */
+    public synchronized RemoteRestore stageAndValidateShadow(
+            String bundleName, String shadowName,
+            OnlineBackupRestoreOptions options) {
+        checkNotFenced();
+        Transfer transfer = beginManagement();
+        try {
+            transfer.writeInt(SHADOW_RESTORE_STAGE_VALIDATE)
+                    .writeString(bundleName).writeString(shadowName);
+            OnlineBackupProtocolCodec.writeRestoreOptions(transfer, options);
+            done(transfer);
+            RemoteRestore restore = new RemoteRestore(transfer.readInt(),
+                    OnlineBackupProtocolCodec.readRestoreReport(transfer));
+            activeManagementHandles++;
+            return restore;
+        } catch (IOException e) {
+            throw failManagement(e);
+        } finally {
+            managementOperationInProgress = false;
+        }
+    }
+
+    /**
+     * @param handleId 远程 restore 句柄 ID
+     */
+    public synchronized void closeShadowRestore(int handleId) {
+        invokeHandleClose(SHADOW_RESTORE_CLOSE, handleId);
+    }
+
+    /**
+     * @param expectedOldGenerationId 预期旧 generation
+     * @param newGenerationId 新 generation
+     * @param timeoutMillis drain 超时
+     * @return 远程 activation 句柄
+     */
+    public synchronized RemoteActivation prepareActivation(
+            UUID expectedOldGenerationId, UUID newGenerationId,
+            long timeoutMillis) {
+        checkNotFenced();
+        Transfer transfer = beginManagement();
+        try {
+            transfer.writeInt(ACTIVATION_PREPARE);
+            OnlineBackupProtocolCodec.writeUuid(transfer,
+                    expectedOldGenerationId);
+            OnlineBackupProtocolCodec.writeUuid(transfer, newGenerationId);
+            transfer.writeLong(timeoutMillis);
+            done(transfer);
+            RemoteActivation activation = new RemoteActivation(
+                    transfer.readInt(),
+                    OnlineBackupProtocolCodec.readActivationReport(transfer));
+            activeManagementHandles++;
+            return activation;
+        } catch (IOException e) {
+            throw failManagement(e);
+        } finally {
+            managementOperationInProgress = false;
+        }
+    }
+
+    /**
+     * @param handleId 远程 activation 句柄 ID
+     * @return commit 报告
+     */
+    public synchronized OnlineBackupActivationReport commitActivation(
+            int handleId) {
+        OnlineBackupActivationReport report = invokeActivationOperation(
+                ACTIVATION_COMMIT, handleId);
+        fencedGenerationId = report.getOldGenerationId().toString();
+        return report;
+    }
+
+    /**
+     * @param handleId 远程 activation 句柄 ID
+     * @return abort 报告
+     */
+    public synchronized OnlineBackupActivationReport abortActivation(
+            int handleId) {
+        return invokeActivationOperation(ACTIVATION_ABORT, handleId);
+    }
+
+    /**
+     * @param handleId 远程 activation 句柄 ID
+     */
+    public synchronized void closeActivation(int handleId) {
+        invokeHandleClose(ACTIVATION_CLOSE, handleId);
+    }
+
+    /**
+     * 检查当前远程连接是否已被 generation fence。
+     */
+    public void checkNotFenced() {
+        String generationId = fencedGenerationId;
+        if (generationId != null) {
+            throw DbException.get(ErrorCode.GENERATION_FENCED_1,
+                    generationId);
+        }
+    }
+
+    /**
+     * @return 当前远程连接是否已被 generation fence
+     */
+    public boolean isGenerationFenced() {
+        return fencedGenerationId != null;
+    }
+
+    private Transfer beginManagement() {
+        checkClosed();
+        if (clientVersion < Constants.TCP_PROTOCOL_VERSION_21) {
+            throw DbException.get(ErrorCode.FEATURE_NOT_SUPPORTED_1,
+                    "online backup control requires TCP protocol v21");
+        }
+        if (transferList.size() != 1) {
+            throw DbException.get(ErrorCode.FEATURE_NOT_SUPPORTED_1,
+                    "online backup control is not supported in cluster mode");
+        }
+        managementOperationInProgress = true;
+        return transferList.get(0);
+    }
+
+    private void invokeHandleOperation(int operation, int handleId) {
+        Transfer transfer = beginManagement();
+        try {
+            transfer.writeInt(operation).writeInt(handleId);
+            done(transfer);
+        } catch (IOException e) {
+            throw failManagement(e);
+        } finally {
+            managementOperationInProgress = false;
+        }
+    }
+
+    private void invokeHandleClose(int operation, int handleId) {
+        invokeHandleOperation(operation, handleId);
+        if (activeManagementHandles > 0) {
+            activeManagementHandles--;
+        }
+    }
+
+    private OnlineBackupActivationReport invokeActivationOperation(
+            int operation, int handleId) {
+        Transfer transfer = beginManagement();
+        try {
+            transfer.writeInt(operation).writeInt(handleId);
+            done(transfer);
+            return OnlineBackupProtocolCodec.readActivationReport(transfer);
+        } catch (IOException e) {
+            throw failManagement(e);
+        } finally {
+            managementOperationInProgress = false;
+        }
+    }
+
+    private DbException failManagement(IOException e) {
+        if (transferList != null) {
+            for (Transfer transfer : transferList) {
+                transfer.close();
+            }
+            transferList = null;
+        }
+        return DbException.get(ErrorCode.CONNECTION_BROKEN_1, e,
+                "online backup management transport failed");
+    }
+
+    /**
+     * 远程 prepared backup 的创建结果。
+     */
+    public static final class RemoteBackup {
+
+        private final int handleId;
+        private final OnlineBackupDescriptor descriptor;
+
+        RemoteBackup(int handleId, OnlineBackupDescriptor descriptor) {
+            this.handleId = handleId;
+            this.descriptor = descriptor;
+        }
+
+        /**
+         * @return opaque handle ID
+         */
+        public int getHandleId() {
+            return handleId;
+        }
+
+        /**
+         * @return backup cut 描述
+         */
+        public OnlineBackupDescriptor getDescriptor() {
+            return descriptor;
+        }
+    }
+
+    /**
+     * 远程 shadow restore 的创建结果。
+     */
+    public static final class RemoteRestore {
+
+        private final int handleId;
+        private final OnlineBackupRestoreReport report;
+
+        RemoteRestore(int handleId, OnlineBackupRestoreReport report) {
+            this.handleId = handleId;
+            this.report = report;
+        }
+
+        /**
+         * @return opaque handle ID
+         */
+        public int getHandleId() {
+            return handleId;
+        }
+
+        /**
+         * @return restore 报告
+         */
+        public OnlineBackupRestoreReport getReport() {
+            return report;
+        }
+    }
+
+    /**
+     * 远程 activation prepare 的创建结果。
+     */
+    public static final class RemoteActivation {
+
+        private final int handleId;
+        private final OnlineBackupActivationReport report;
+
+        RemoteActivation(int handleId,
+                OnlineBackupActivationReport report) {
+            this.handleId = handleId;
+            this.report = report;
+        }
+
+        /**
+         * @return opaque handle ID
+         */
+        public int getHandleId() {
+            return handleId;
+        }
+
+        /**
+         * @return activation prepare 报告
+         */
+        public OnlineBackupActivationReport getReport() {
+            return report;
+        }
     }
 
     @Override
@@ -490,6 +827,10 @@ public final class SessionRemote extends Session implements DataHandler {
         if (!isClosed()) {
             return false;
         }
+        if (managementOperationInProgress || activeManagementHandles > 0
+                || fencedGenerationId != null) {
+            return false;
+        }
         if (!autoReconnect) {
             return false;
         }
@@ -565,6 +906,7 @@ public final class SessionRemote extends Session implements DataHandler {
             }
             transferList = null;
         }
+        activeManagementHandles = 0;
         traceSystem.close();
         if (embedded != null) {
             embedded.close();

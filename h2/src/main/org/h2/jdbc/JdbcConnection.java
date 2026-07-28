@@ -7,6 +7,7 @@ package org.h2.jdbc;
 
 import java.io.InputStream;
 import java.io.Reader;
+import java.nio.file.Paths;
 import java.sql.Array;
 import java.sql.Blob;
 import java.sql.CallableStatement;
@@ -29,11 +30,23 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
+import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executor;
 import java.util.regex.Pattern;
 
 import org.h2.api.ErrorCode;
 import org.h2.api.JavaObjectSerializer;
+import org.h2.api.OnlineBackupActivationHandle;
+import org.h2.api.OnlineBackupActivationReport;
+import org.h2.api.OnlineBackupControl;
+import org.h2.api.OnlineBackupDescriptor;
+import org.h2.api.OnlineBackupHandle;
+import org.h2.api.OnlineBackupOptions;
+import org.h2.api.OnlineBackupPublishReport;
+import org.h2.api.OnlineBackupRestoreHandle;
+import org.h2.api.OnlineBackupRestoreOptions;
+import org.h2.api.OnlineBackupRestoreReport;
 import org.h2.command.CommandInterface;
 import org.h2.engine.CastDataProvider;
 import org.h2.engine.ConnectionInfo;
@@ -45,7 +58,13 @@ import org.h2.engine.SessionLocal;
 import org.h2.engine.Session.StaticSettings;
 import org.h2.engine.SessionRemote;
 import org.h2.engine.SysProperties;
+import org.h2.engine.backup.ActivationCoordinator;
+import org.h2.engine.backup.ActivationToken;
 import org.h2.engine.backup.DatabaseOperationGate;
+import org.h2.engine.backup.OnlineBackupApiMapper;
+import org.h2.engine.backup.OnlineBackupSession;
+import org.h2.engine.restore.ShadowRestoreCoordinator;
+import org.h2.engine.restore.ShadowRestoreResult;
 import org.h2.message.DbException;
 import org.h2.message.TraceObject;
 import org.h2.result.ResultInterface;
@@ -71,7 +90,7 @@ import org.h2.value.ValueVarchar;
  * </p>
  */
 public class JdbcConnection extends TraceObject implements Connection, JdbcConnectionBackwardsCompat,
-        CastDataProvider {
+        CastDataProvider, OnlineBackupControl {
 
     private static final String NUM_SERVERS = "numServers";
     private static final String PREFIX_SERVER = "server";
@@ -96,6 +115,8 @@ public class JdbcConnection extends TraceObject implements Connection, JdbcConne
     private int queryTimeoutCache = -1;
 
     private Map<String, String> clientInfo;
+    private final CopyOnWriteArrayList<AutoCloseable> onlineBackupHandles =
+            new CopyOnWriteArrayList<>();
 
     /**
      * INTERNAL
@@ -333,42 +354,74 @@ public class JdbcConnection extends TraceObject implements Connection, JdbcConne
             if (session == null) {
                 return;
             }
-            CloseWatcher.unregister(watcher);
-            session.cancel();
-            synchronized (session) {
-                if (executingStatement != null) {
-                    try {
-                        executingStatement.cancel();
-                    } catch (NullPointerException | SQLException e) {
-                        // ignore
-                    }
-                }
-                try {
-                    if (!session.isClosed()) {
+            Throwable managementFailure = closeOnlineBackupHandles();
+            if (watcher != null) {
+                CloseWatcher.unregister(watcher);
+            }
+            try {
+                session.cancel();
+                synchronized (session) {
+                    if (executingStatement != null) {
                         try {
-                            if (session.hasPendingTransaction()) {
-                                try {
-                                    rollbackInternal();
-                                } catch (DbException e) {
-                                    // ignore if the connection is broken or database shut down
-                                    if (e.getErrorCode() != ErrorCode.CONNECTION_BROKEN_1 &&
-                                            e.getErrorCode() != ErrorCode.DATABASE_IS_CLOSED) {
-                                        throw e;
-                                    }
-                                }
-                            }
-                            closePreparedCommands();
-                        } finally {
-                            session.close();
+                            executingStatement.cancel();
+                        } catch (NullPointerException | SQLException e) {
+                            // ignore
                         }
                     }
-                } finally {
-                    session = null;
+                    try {
+                        if (!session.isClosed()) {
+                            try {
+                                if (session.hasPendingTransaction()) {
+                                    try {
+                                        rollbackInternal();
+                                    } catch (DbException e) {
+                                        // ignore if the connection is broken or database shut down
+                                        if (e.getErrorCode() != ErrorCode.CONNECTION_BROKEN_1 &&
+                                                e.getErrorCode() != ErrorCode.DATABASE_IS_CLOSED) {
+                                            throw e;
+                                        }
+                                    }
+                                }
+                                closePreparedCommands();
+                            } finally {
+                                session.close();
+                            }
+                        }
+                    } finally {
+                        session = null;
+                    }
                 }
+            } catch (Throwable e) {
+                if (managementFailure != null) {
+                    e.addSuppressed(managementFailure);
+                }
+                throw e;
+            }
+            if (managementFailure != null) {
+                throw managementFailure;
             }
         } catch (Throwable e) {
             throw logAndConvert(e);
         }
+    }
+
+    private Throwable closeOnlineBackupHandles() {
+        Throwable failure = null;
+        AutoCloseable[] handles = onlineBackupHandles.toArray(
+                new AutoCloseable[0]);
+        for (int i = handles.length - 1; i >= 0; i--) {
+            try {
+                handles[i].close();
+            } catch (Throwable e) {
+                if (failure == null) {
+                    failure = e;
+                } else {
+                    failure.addSuppressed(e);
+                }
+            }
+        }
+        onlineBackupHandles.clear();
+        return failure;
     }
 
     private void closePreparedCommands() {
@@ -1366,6 +1419,137 @@ public class JdbcConnection extends TraceObject implements Connection, JdbcConne
     }
 
     /**
+     * 准备一个连接归属的在线备份 cut。
+     *
+     * @param options prepare 选项
+     * @return prepared backup handle
+     * @throws SQLException prepare 失败
+     */
+    @Override
+    public synchronized OnlineBackupHandle prepareOnlineBackup(
+            OnlineBackupOptions options) throws SQLException {
+        try {
+            checkOnlineBackupManagementAccess();
+            if (options == null) {
+                throw DbException.getInvalidValueException("options", null);
+            }
+            OnlineBackupHandle handle;
+            if (session instanceof SessionLocal) {
+                OnlineBackupSession backup = OnlineBackupSession.prepare(
+                        ((SessionLocal) session).getDatabase(), options);
+                handle = new LocalBackupHandle(backup);
+            } else {
+                SessionRemote.RemoteBackup backup =
+                        ((SessionRemote) session)
+                                .prepareOnlineBackup(options);
+                handle = new RemoteBackupHandle((SessionRemote) session,
+                        backup);
+            }
+            onlineBackupHandles.add(handle);
+            return handle;
+        } catch (Exception e) {
+            throw logAndConvert(e);
+        }
+    }
+
+    /**
+     * 恢复并校验一个 shadow generation。
+     *
+     * @param bundleName 本地 bundle 路径或远程受限名称
+     * @param shadowName 本地 shadow 路径或远程受限名称
+     * @param options restore/validation 选项
+     * @return restore handle
+     * @throws SQLException restore 或 validation 失败
+     */
+    @Override
+    public synchronized OnlineBackupRestoreHandle stageAndValidateShadow(
+            String bundleName, String shadowName,
+            OnlineBackupRestoreOptions options) throws SQLException {
+        try {
+            checkOnlineBackupManagementAccess();
+            if (bundleName == null || shadowName == null
+                    || options == null) {
+                throw DbException.getInvalidValueException(
+                        "shadow restore arguments", null);
+            }
+            OnlineBackupRestoreHandle handle;
+            if (session instanceof SessionLocal) {
+                ShadowRestoreResult result =
+                        ShadowRestoreCoordinator.stageAndValidate(
+                                ((SessionLocal) session).getDatabase(),
+                                Paths.get(bundleName), Paths.get(shadowName),
+                                OnlineBackupApiMapper.restoreOptions(options));
+                handle = new LocalRestoreHandle(
+                        OnlineBackupApiMapper.restoreReport(shadowName,
+                                result));
+            } else {
+                SessionRemote.RemoteRestore restore =
+                        ((SessionRemote) session).stageAndValidateShadow(
+                                bundleName, shadowName, options);
+                handle = new RemoteRestoreHandle((SessionRemote) session,
+                        restore);
+            }
+            onlineBackupHandles.add(handle);
+            return handle;
+        } catch (Exception e) {
+            throw logAndConvert(e);
+        }
+    }
+
+    /**
+     * 排空旧 generation 并准备 activation token。
+     *
+     * @param expectedOldGenerationId 预期旧 generation
+     * @param newGenerationId 新 generation
+     * @param timeoutMillis drain 超时毫秒数
+     * @return activation handle
+     * @throws SQLException prepare 失败
+     */
+    @Override
+    public synchronized OnlineBackupActivationHandle prepareActivation(
+            UUID expectedOldGenerationId, UUID newGenerationId,
+            long timeoutMillis) throws SQLException {
+        try {
+            checkOnlineBackupManagementAccess();
+            OnlineBackupActivationHandle handle;
+            if (session instanceof SessionLocal) {
+                ActivationToken token = ActivationCoordinator.prepare(
+                        ((SessionLocal) session).getDatabase(),
+                        expectedOldGenerationId, newGenerationId,
+                        timeoutMillis);
+                handle = new LocalActivationHandle(token);
+            } else {
+                SessionRemote.RemoteActivation activation =
+                        ((SessionRemote) session).prepareActivation(
+                                expectedOldGenerationId, newGenerationId,
+                                timeoutMillis);
+                handle = new RemoteActivationHandle(
+                        (SessionRemote) session, activation);
+            }
+            onlineBackupHandles.add(handle);
+            return handle;
+        } catch (Exception e) {
+            throw logAndConvert(e);
+        }
+    }
+
+    private void checkOnlineBackupManagementAccess() {
+        checkClosed();
+        if (session instanceof SessionLocal) {
+            ((SessionLocal) session).getUser().checkAdmin();
+        }
+        if (session.hasPendingTransaction()) {
+            throw DbException.get(ErrorCode.UNSUPPORTED_SETTING_COMBINATION,
+                    "online backup management requires no pending "
+                            + "transaction");
+        }
+    }
+
+    private void unregisterOnlineBackupHandle(AutoCloseable handle) {
+        onlineBackupHandles.remove(handle);
+    }
+
+    /**
      * INTERNAL. Check if this connection is closed.
      *
      * @throws DbException if the connection or session is closed
@@ -1383,6 +1567,8 @@ public class JdbcConnection extends TraceObject implements Connection, JdbcConne
             if (gate != null) {
                 gate.checkNotFenced();
             }
+        } else if (session instanceof SessionRemote) {
+            ((SessionRemote) session).checkNotFenced();
         }
     }
 
@@ -1391,6 +1577,9 @@ public class JdbcConnection extends TraceObject implements Connection, JdbcConne
             DatabaseOperationGate gate = ((SessionLocal) session)
                     .getDatabase().getOperationGate();
             return gate != null && gate.isFenced();
+        }
+        if (session instanceof SessionRemote) {
+            return ((SessionRemote) session).isGenerationFenced();
         }
         return false;
     }
@@ -1858,6 +2047,313 @@ public class JdbcConnection extends TraceObject implements Connection, JdbcConne
     public StaticSettings getStaticSettings() {
         checkClosed();
         return session.getStaticSettings();
+    }
+
+    private final class LocalBackupHandle implements OnlineBackupHandle {
+
+        private final OnlineBackupSession backup;
+        private final OnlineBackupDescriptor descriptor;
+        private boolean closed;
+
+        LocalBackupHandle(OnlineBackupSession backup) {
+            this.backup = backup;
+            descriptor = OnlineBackupApiMapper.descriptor(backup);
+        }
+
+        @Override
+        public OnlineBackupDescriptor getDescriptor() {
+            return descriptor;
+        }
+
+        @Override
+        public synchronized OnlineBackupPublishReport publish(
+                String bundleName) throws SQLException {
+            try {
+                checkHandleOpen();
+                JdbcConnection.this.checkClosed();
+                return OnlineBackupApiMapper.publishReport(bundleName,
+                        backup.publish(Paths.get(bundleName)));
+            } catch (Exception e) {
+                throw logAndConvert(e);
+            }
+        }
+
+        @Override
+        public synchronized void abort() throws SQLException {
+            try {
+                checkHandleOpen();
+                backup.abort();
+            } catch (Exception e) {
+                throw logAndConvert(e);
+            }
+        }
+
+        @Override
+        public synchronized void close() throws SQLException {
+            if (!closed) {
+                try {
+                    backup.close();
+                    closed = true;
+                    unregisterOnlineBackupHandle(this);
+                } catch (Exception e) {
+                    throw logAndConvert(e);
+                }
+            }
+        }
+
+        private void checkHandleOpen() {
+            if (closed) {
+                throw DbException.get(ErrorCode.OBJECT_CLOSED);
+            }
+        }
+    }
+
+    private final class RemoteBackupHandle implements OnlineBackupHandle {
+
+        private final SessionRemote remote;
+        private final int handleId;
+        private final OnlineBackupDescriptor descriptor;
+        private boolean closed;
+
+        RemoteBackupHandle(SessionRemote remote,
+                SessionRemote.RemoteBackup backup) {
+            this.remote = remote;
+            handleId = backup.getHandleId();
+            descriptor = backup.getDescriptor();
+        }
+
+        @Override
+        public OnlineBackupDescriptor getDescriptor() {
+            return descriptor;
+        }
+
+        @Override
+        public synchronized OnlineBackupPublishReport publish(
+                String bundleName) throws SQLException {
+            try {
+                checkHandleOpen();
+                return remote.publishOnlineBackup(handleId, bundleName);
+            } catch (Exception e) {
+                throw logAndConvert(e);
+            }
+        }
+
+        @Override
+        public synchronized void abort() throws SQLException {
+            try {
+                checkHandleOpen();
+                remote.abortOnlineBackup(handleId);
+            } catch (Exception e) {
+                throw logAndConvert(e);
+            }
+        }
+
+        @Override
+        public synchronized void close() throws SQLException {
+            if (!closed) {
+                try {
+                    remote.closeOnlineBackup(handleId);
+                    closed = true;
+                    unregisterOnlineBackupHandle(this);
+                } catch (Exception e) {
+                    throw logAndConvert(e);
+                }
+            }
+        }
+
+        private void checkHandleOpen() {
+            if (closed) {
+                throw DbException.get(ErrorCode.OBJECT_CLOSED);
+            }
+        }
+    }
+
+    private final class LocalRestoreHandle
+            implements OnlineBackupRestoreHandle {
+
+        private final OnlineBackupRestoreReport report;
+        private boolean closed;
+
+        LocalRestoreHandle(OnlineBackupRestoreReport report) {
+            this.report = report;
+        }
+
+        @Override
+        public OnlineBackupRestoreReport getReport() {
+            return report;
+        }
+
+        @Override
+        public synchronized void close() {
+            if (!closed) {
+                closed = true;
+                unregisterOnlineBackupHandle(this);
+            }
+        }
+    }
+
+    private final class RemoteRestoreHandle
+            implements OnlineBackupRestoreHandle {
+
+        private final SessionRemote remote;
+        private final int handleId;
+        private final OnlineBackupRestoreReport report;
+        private boolean closed;
+
+        RemoteRestoreHandle(SessionRemote remote,
+                SessionRemote.RemoteRestore restore) {
+            this.remote = remote;
+            handleId = restore.getHandleId();
+            report = restore.getReport();
+        }
+
+        @Override
+        public OnlineBackupRestoreReport getReport() {
+            return report;
+        }
+
+        @Override
+        public synchronized void close() throws SQLException {
+            if (!closed) {
+                try {
+                    remote.closeShadowRestore(handleId);
+                    closed = true;
+                    unregisterOnlineBackupHandle(this);
+                } catch (Exception e) {
+                    throw logAndConvert(e);
+                }
+            }
+        }
+    }
+
+    private final class LocalActivationHandle
+            implements OnlineBackupActivationHandle {
+
+        private final ActivationToken token;
+        private OnlineBackupActivationReport report;
+        private boolean closed;
+
+        LocalActivationHandle(ActivationToken token) {
+            this.token = token;
+            report = OnlineBackupApiMapper.activationReport(
+                    token.getReport());
+        }
+
+        @Override
+        public synchronized OnlineBackupActivationReport getReport() {
+            return report;
+        }
+
+        @Override
+        public synchronized OnlineBackupActivationReport commitActivation()
+                throws SQLException {
+            try {
+                checkHandleOpen();
+                report = OnlineBackupApiMapper.activationReport(
+                        token.commitActivation());
+                return report;
+            } catch (Exception e) {
+                throw logAndConvert(e);
+            }
+        }
+
+        @Override
+        public synchronized OnlineBackupActivationReport abortActivation()
+                throws SQLException {
+            try {
+                checkHandleOpen();
+                report = OnlineBackupApiMapper.activationReport(
+                        token.abortActivation());
+                return report;
+            } catch (Exception e) {
+                throw logAndConvert(e);
+            }
+        }
+
+        @Override
+        public synchronized void close() throws SQLException {
+            if (!closed) {
+                try {
+                    token.close();
+                    report = OnlineBackupApiMapper.activationReport(
+                            token.getReport());
+                    closed = true;
+                    unregisterOnlineBackupHandle(this);
+                } catch (Exception e) {
+                    throw logAndConvert(e);
+                }
+            }
+        }
+
+        private void checkHandleOpen() {
+            if (closed) {
+                throw DbException.get(ErrorCode.OBJECT_CLOSED);
+            }
+        }
+    }
+
+    private final class RemoteActivationHandle
+            implements OnlineBackupActivationHandle {
+
+        private final SessionRemote remote;
+        private final int handleId;
+        private OnlineBackupActivationReport report;
+        private boolean closed;
+
+        RemoteActivationHandle(SessionRemote remote,
+                SessionRemote.RemoteActivation activation) {
+            this.remote = remote;
+            handleId = activation.getHandleId();
+            report = activation.getReport();
+        }
+
+        @Override
+        public synchronized OnlineBackupActivationReport getReport() {
+            return report;
+        }
+
+        @Override
+        public synchronized OnlineBackupActivationReport commitActivation()
+                throws SQLException {
+            try {
+                checkHandleOpen();
+                report = remote.commitActivation(handleId);
+                return report;
+            } catch (Exception e) {
+                throw logAndConvert(e);
+            }
+        }
+
+        @Override
+        public synchronized OnlineBackupActivationReport abortActivation()
+                throws SQLException {
+            try {
+                checkHandleOpen();
+                report = remote.abortActivation(handleId);
+                return report;
+            } catch (Exception e) {
+                throw logAndConvert(e);
+            }
+        }
+
+        @Override
+        public synchronized void close() throws SQLException {
+            if (!closed) {
+                try {
+                    remote.closeActivation(handleId);
+                    closed = true;
+                    unregisterOnlineBackupHandle(this);
+                } catch (Exception e) {
+                    throw logAndConvert(e);
+                }
+            }
+        }
+
+        private void checkHandleOpen() {
+            if (closed) {
+                throw DbException.get(ErrorCode.OBJECT_CLOSED);
+            }
+        }
     }
 
     @Override

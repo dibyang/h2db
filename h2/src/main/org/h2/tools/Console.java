@@ -146,6 +146,10 @@ public class Console extends Tool implements ShutdownHandler {
                     i++;
                 } else if ("-tcpPassword".equals(arg)) {
                     tcpPassword = args[++i];
+                } else if ("-tcpOnlineBackupRoot".equals(arg)
+                        || "-tcpShadowRoot".equals(arg)
+                        || "-tcpOnlineBackupParticipants".equals(arg)) {
+                    i++;
                 } else if ("-tcpShutdown".equals(arg)) {
                     startDefaultServers = false;
                     tcpShutdown = true;

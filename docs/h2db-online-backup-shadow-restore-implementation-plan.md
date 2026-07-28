@@ -1,6 +1,6 @@
 # H2DB 组合在线备份与影子恢复实施计划
 
-状态：实施中（P0-P7 已完成，P8 待开始）
+状态：实施中（P0-P8 已完成，P9 待开始）
 规划日期：2026-07-28  
 目标仓库：`D:\work\java\h2db`  
 需求来源：`D:\work\java2\vexra-adb\docs\requirements\h2db-online-backup-restore-requirements.md`  
@@ -564,7 +564,7 @@ ACTIVATION_ABORT
 | P5 Bundle Publish | materialize、checksum、manifest 和原子发布 | P4 | [x] |
 | P6 Shadow Restore | 安全 staging、验证和只读试打开 | P2/P5 | [x] |
 | P7 Activation | 有界排空、token、fence 和取消 | P1/P6 | [x] |
-| P8 TCP v21 远程适配 | 统一 unwrap API 的 SessionRemote/TcpServerThread 实现 | P4-P7 | [ ] |
+| P8 TCP v21 远程适配 | 统一 unwrap API 的 SessionRemote/TcpServerThread 实现 | P4-P7 | [x] |
 | P9 联调与灰度 | ADB/LDB 联调、性能门禁、故障矩阵和发布准备 | P3-P8 | [ ] |
 
 ## 执行门禁
@@ -1189,38 +1189,82 @@ java -cp "build/classes/java/legacyTest;build/classes/java/main;build/resources/
 
 ### P8 TCP v21 远程适配
 
-- [ ] 让 `JdbcConnection`实现统一 `OnlineBackupControl`，本地和远程连接使用同一公开 API。
-- [ ] 将 H2 TCP 最大协议版本从 20 提升到 21，并保持最低兼容版本不变。
-- [ ] 在 `SessionRemote`增加在线备份、shadow restore 和 activation 管理操作。
-- [ ] 在 `TcpServerThread`增加对应分发，只调用服务端 core coordinator，不复制业务实现。
-- [ ] 为 prepared backup、restore 和 activation token 建立 TCP session 级不透明 handle registry。
-- [ ] 校验 handle 所属 session、databaseId、管理员身份和操作状态，禁止跨连接复用。
-- [ ] 在正常关闭、网络断开、server stop 和异常路径中逆序 abort/close 全部 handle。
-- [ ] 存在活动 handle 时禁止自动重连继承状态；重连后要求重新 prepare。
-- [ ] 增加服务端 `backupRoot`、`shadowRoot`和 participant allowlist 配置。
-- [ ] 远程请求只接受受限相对名称，路径解析后必须仍位于配置根目录内。
-- [ ] 新客户端在协商版本低于 21 时本地返回 feature-not-supported，不发送新操作码。
-- [ ] 验证旧客户端连接 v21 server 时普通 JDBC、`BACKUP TO`和连接状态行为不变。
-- [ ] 验证 embedded 与 TCP v21 对 quiesce、fence 和 activation timeout 保持 vendor code、SQLState、JDBC 异常类型和连接生命周期一致。
+- [x] 让 `JdbcConnection`实现统一 `OnlineBackupControl`，本地和远程连接使用同一公开 API。
+- [x] 将 H2 TCP 最大协议版本从 20 提升到 21，并保持最低兼容版本不变。
+- [x] 在 `SessionRemote`增加在线备份、shadow restore 和 activation 管理操作。
+- [x] 在 `TcpServerThread`增加对应分发，只调用服务端 core coordinator，不复制业务实现。
+- [x] 为 prepared backup、restore 和 activation token 建立 TCP session 级不透明 handle registry。
+- [x] 校验 handle 所属 session、databaseId、管理员身份和操作状态，禁止跨连接复用。
+- [x] 在正常关闭、网络断开、server stop 和异常路径中逆序 abort/close 全部 handle。
+- [x] 存在活动 handle 时禁止自动重连继承状态；重连后要求重新 prepare。
+- [x] 增加服务端 `backupRoot`、`shadowRoot`和 participant allowlist 配置。
+- [x] 远程请求只接受受限相对名称，路径解析后必须仍位于配置根目录内。
+- [x] 新客户端在协商版本低于 21 时本地返回 feature-not-supported，不发送新操作码。
+- [x] 验证旧客户端连接 v21 server 时普通 JDBC、`BACKUP TO`和连接状态行为不变。
+- [x] 验证 embedded 与 TCP v21 对 quiesce、fence 和 activation timeout 保持 vendor code、SQLState、JDBC 异常类型和连接生命周期一致。
 
 验收：
 
-- [ ] `T-H2BR-REMOTE-UNWRAP-01`
-- [ ] `T-H2BR-REMOTE-PREPARE-MATERIALIZE-01`
-- [ ] `T-H2BR-REMOTE-RESTORE-ACTIVATION-01`
-- [ ] `T-H2BR-REMOTE-DISCONNECT-CLEANUP-01`
-- [ ] `T-H2BR-REMOTE-HANDLE-OWNERSHIP-01`
-- [ ] `T-H2BR-REMOTE-PATH-ROOT-01`
-- [ ] `T-H2BR-REMOTE-NEW-CLIENT-OLD-SERVER-01`
-- [ ] `T-H2BR-REMOTE-OLD-CLIENT-NEW-SERVER-01`
-- [ ] `T-H2BR-REMOTE-AUTORECONNECT-01`
-- [ ] `T-H2BR-REMOTE-ACTIVATION-ERROR-PARITY-01`
+- [x] `T-H2BR-REMOTE-UNWRAP-01`
+- [x] `T-H2BR-REMOTE-PREPARE-MATERIALIZE-01`
+- [x] `T-H2BR-REMOTE-RESTORE-ACTIVATION-01`
+- [x] `T-H2BR-REMOTE-DISCONNECT-CLEANUP-01`
+- [x] `T-H2BR-REMOTE-HANDLE-OWNERSHIP-01`
+- [x] `T-H2BR-REMOTE-PATH-ROOT-01`
+- [x] `T-H2BR-REMOTE-NEW-CLIENT-OLD-SERVER-01`
+- [x] `T-H2BR-REMOTE-OLD-CLIENT-NEW-SERVER-01`
+- [x] `T-H2BR-REMOTE-AUTORECONNECT-01`
+- [x] `T-H2BR-REMOTE-ACTIVATION-ERROR-PARITY-01`
 
 暂停条件：
 
 - 网络断开后无法有界释放 prepared snapshot pin 或 activation quiesce。
 - 远程 handle 必须脱离 TCP session 才能满足基本流程，且没有可靠的持久化所有权协议。
 - 服务端路径和 participant 选择无法通过固定 root/allowlist 建立明确权限边界。
+
+实现说明：
+
+- 新增公开 `OnlineBackupControl`及 backup、restore、activation 三类连接归属 handle 和不可变 report/descriptor DTO；`JdbcConnection.unwrap()`在 embedded 与 TCP 连接上返回同一入口。
+- embedded adapter 直接调用既有 `OnlineBackupSession`、`ShadowRestoreCoordinator`和`ActivationCoordinator`；TCP adapter 只编解码 v21 DTO 与 opaque handle ID，服务端分发继续调用同一 core coordinator。
+- TCP v21 新增 prepare/publish/abort/close、shadow stage/validate/close 和 activation prepare/commit/abort/close 操作；v17-v20 协商范围保持不变。
+- 服务端 registry 按 TCP session 隔离并绑定 `databaseId`；正常 close、异常断链和 server stop 均按创建逆序关闭，未消费 activation token 自动 abort，prepared snapshot 复用 P3 的幂等 cleanup。
+- `SessionRemote`在管理请求执行中、存在 active handle 或已收到 generation fence 后禁止透明 auto-reconnect；连接断开后必须重新建立 session 并重新 prepare。
+- 服务端新增 `-tcpOnlineBackupRoot`、`-tcpShadowRoot`和`-tcpOnlineBackupParticipants`；root 必须启动时已存在且不是 symlink/junction，远程只接受单段受限名称并解析为 root 的直接子项。
+- 管理操作要求 ADMIN；participant 选择必须是服务端 allowlist 子集；第一阶段 TCP adapter 不接受额外 validation provider。携带 shadow 密码的远程 validation 必须使用 `-tcpSSL`。
+- 管理错误响应会脱敏 backup、shadow 和 database root；不会把服务端绝对目录返回客户端。
+- 新客户端协商到 v20 时在发送新 opcode 前返回 feature-not-supported；最高只协商到 v20 的客户端行为测试确认 v21 server 上普通 JDBC 和传统 `BACKUP TO`不变。真实 2.3.0 二进制 client/server 全矩阵仍归 P9。
+
+验证命令：
+
+```powershell
+.\gradlew.bat runOnlineBackupCheck --tests org.h2.test.backup.OnlineBackupJdbcControlTest --tests org.h2.test.backup.OnlineBackupTcpV21Test --rerun-tasks
+.\gradlew.bat runOnlineBackupCheck --rerun-tasks
+.\gradlew.bat runPluginArchitectureCheck --rerun-tasks
+.\gradlew.bat javadoc
+.\gradlew.bat legacyTestClasses
+java -cp "build/classes/java/legacyTest;build/classes/java/main;build/resources/legacyTest;build/resources/main" `
+  org.h2.test.LegacyTestGroupRunner `
+  org.h2.test.db.TestBackup `
+  org.h2.test.db.TestOpenClose `
+  org.h2.test.store.TestMVStoreConcurrent
+```
+
+验证结果：
+
+| 范围 | 结果 |
+| --- | --- |
+| P8 专项 | `OnlineBackupJdbcControlTest`和`OnlineBackupTcpV21Test`共 10 项通过，0 failure、0 error、0 skipped。 |
+| P1-P8 专项 | `runOnlineBackupCheck` 68 项通过，0 failure、0 error、0 skipped。 |
+| JDK 8 / Javadoc | `compileJava`、`compileOnlineBackupTestJava`和`javadoc`通过。 |
+| plugin 回归 | 140 项通过，0 failure、0 error、0 skipped。 |
+| 传统备份与默认 MVStore | `TestBackup`、`TestOpenClose`和`TestMVStoreConcurrent`通过。 |
+
+阶段约束：
+
+- TCP handle 只在所属连接进程内有效，不做跨 session、跨进程续传或自动继承。
+- 非 TLS TCP 不传输 shadow 明文密码；加密数据库的远程 shadow validation 必须启用 `-tcpSSL`。
+- remote additional validation provider 在 P8 fail-closed；P9 建立真实 provider 认证清单和独立服务端 provider allowlist 后才能开放。
+- P8 的旧客户端测试通过最高协议版本钳制到 v20 验证 wire 行为；真实 2.3.0 jar 与 2.4.x 的双向二进制组合留在 P9 兼容矩阵执行。
 
 ### P9 ADB/LDB 联调、性能与灰度
 

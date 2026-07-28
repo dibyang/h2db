@@ -95,6 +95,12 @@ public class Server extends Tool implements Runnable, ShutdownHandler {
      * <td>Use encrypted (SSL) connections</td></tr>
      * <tr><td>[-tcpPassword &lt;pwd&gt;]</td>
      * <td>The password for shutting down a TCP server</td></tr>
+     * <tr><td>[-tcpOnlineBackupRoot &lt;dir&gt;]</td>
+     * <td>Restrict remote online backup bundles to this directory</td></tr>
+     * <tr><td>[-tcpShadowRoot &lt;dir&gt;]</td>
+     * <td>Restrict remote shadow generations to this directory</td></tr>
+     * <tr><td>[-tcpOnlineBackupParticipants &lt;ids&gt;]</td>
+     * <td>Comma-separated remote participant allowlist</td></tr>
      * <tr><td>[-tcpShutdown "&lt;url&gt;"]</td>
      * <td>Stop the TCP server; example: tcp://localhost</td></tr>
      * <tr><td>[-tcpShutdownForce]</td>
@@ -174,6 +180,10 @@ public class Server extends Tool implements Runnable, ShutdownHandler {
                 } else if ("-tcpPort".equals(arg)) {
                     i++;
                 } else if ("-tcpPassword".equals(arg)) {
+                    i++;
+                } else if ("-tcpOnlineBackupRoot".equals(arg)
+                        || "-tcpShadowRoot".equals(arg)
+                        || "-tcpOnlineBackupParticipants".equals(arg)) {
                     i++;
                 } else if ("-tcpShutdown".equals(arg)) {
                     i++;
@@ -283,6 +293,10 @@ public class Server extends Tool implements Runnable, ShutdownHandler {
                     i++;
                 } else if ("-tcpPassword".equals(arg)) {
                     tcpPassword = args[++i];
+                } else if ("-tcpOnlineBackupRoot".equals(arg)
+                        || "-tcpShadowRoot".equals(arg)
+                        || "-tcpOnlineBackupParticipants".equals(arg)) {
+                    i++;
                 } else if ("-tcpShutdown".equals(arg)) {
                     startDefaultServers = false;
                     tcpShutdown = true;
@@ -481,7 +495,9 @@ public class Server extends Tool implements Runnable, ShutdownHandler {
      * </pre>
      * Supported options are:
      * -tcpPort, -tcpSSL, -tcpPassword, -tcpAllowOthers, -tcpDaemon,
-     * -trace, -ifExists, -ifNotExists, -baseDir, -key.
+     * -tcpOnlineBackupRoot, -tcpShadowRoot,
+     * -tcpOnlineBackupParticipants, -trace, -ifExists, -ifNotExists,
+     * -baseDir, -key.
      * See the main method for details.
      * <p>
      * If no port is specified, the default port is used if possible,

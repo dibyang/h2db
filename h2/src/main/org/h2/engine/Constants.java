@@ -61,6 +61,11 @@ public class Constants {
     public static final int TCP_PROTOCOL_VERSION_20 = 20;
 
     /**
+     * 在线备份、shadow restore 和 activation handle 使用的 TCP 协议版本。
+     */
+    public static final int TCP_PROTOCOL_VERSION_21 = 21;
+
+    /**
      * Minimum supported version of TCP protocol.
      */
     public static final int TCP_PROTOCOL_VERSION_MIN_SUPPORTED = TCP_PROTOCOL_VERSION_17;
@@ -68,7 +73,8 @@ public class Constants {
     /**
      * Maximum supported version of TCP protocol.
      */
-    public static final int TCP_PROTOCOL_VERSION_MAX_SUPPORTED = TCP_PROTOCOL_VERSION_20;
+    public static final int TCP_PROTOCOL_VERSION_MAX_SUPPORTED =
+            TCP_PROTOCOL_VERSION_21;
 
     /**
      * The major version of this database.

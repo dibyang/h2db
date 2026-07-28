@@ -12,11 +12,21 @@ import java.io.InputStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.net.Socket;
+import java.nio.file.Path;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 
 import org.h2.api.ErrorCode;
+import org.h2.api.OnlineBackupActivationReport;
+import org.h2.api.OnlineBackupDescriptor;
+import org.h2.api.OnlineBackupOptions;
+import org.h2.api.OnlineBackupPublishReport;
+import org.h2.api.OnlineBackupRestoreOptions;
+import org.h2.api.OnlineBackupRestoreReport;
 import org.h2.command.Command;
 import org.h2.engine.ConnectionInfo;
 import org.h2.engine.Constants;
@@ -26,6 +36,14 @@ import org.h2.engine.Session;
 import org.h2.engine.SessionLocal;
 import org.h2.engine.SessionRemote;
 import org.h2.engine.SysProperties;
+import org.h2.engine.backup.ActivationCoordinator;
+import org.h2.engine.backup.ActivationToken;
+import org.h2.engine.backup.OnlineBackupApiMapper;
+import org.h2.engine.backup.OnlineBackupProtocolCodec;
+import org.h2.engine.backup.OnlineBackupPublishResult;
+import org.h2.engine.backup.OnlineBackupSession;
+import org.h2.engine.restore.ShadowRestoreCoordinator;
+import org.h2.engine.restore.ShadowRestoreResult;
 import org.h2.expression.Parameter;
 import org.h2.expression.ParameterInterface;
 import org.h2.expression.ParameterRemote;
@@ -67,6 +85,10 @@ public class TcpServerThread implements Runnable {
     private int clientVersion;
     private String sessionId;
     private long lastRemoteSettingsId;
+    private final LinkedHashMap<Integer, ManagementHandle>
+            managementHandles = new LinkedHashMap<>();
+    private int nextManagementHandleId = 1;
+    private boolean managementOperation;
 
     TcpServerThread(Socket socket, TcpServer server, int id) {
         this.server = server;
@@ -103,12 +125,13 @@ public class TcpServerThread implements Runnable {
                 if (maxClientVersion < Constants.TCP_PROTOCOL_VERSION_MIN_SUPPORTED) {
                     throw DbException.get(ErrorCode.DRIVER_VERSION_ERROR_2,
                             Integer.toString(maxClientVersion), "" + Constants.TCP_PROTOCOL_VERSION_MIN_SUPPORTED);
-                } else if (minClientVersion > Constants.TCP_PROTOCOL_VERSION_MAX_SUPPORTED) {
+                } else if (minClientVersion > server.getMaxProtocolVersion()) {
                     throw DbException.get(ErrorCode.DRIVER_VERSION_ERROR_2,
-                            Integer.toString(minClientVersion), "" + Constants.TCP_PROTOCOL_VERSION_MAX_SUPPORTED);
+                            Integer.toString(minClientVersion), ""
+                                    + server.getMaxProtocolVersion());
                 }
-                if (maxClientVersion >= Constants.TCP_PROTOCOL_VERSION_MAX_SUPPORTED) {
-                    clientVersion = Constants.TCP_PROTOCOL_VERSION_MAX_SUPPORTED;
+                if (maxClientVersion >= server.getMaxProtocolVersion()) {
+                    clientVersion = server.getMaxProtocolVersion();
                 } else {
                     clientVersion = maxClientVersion;
                 }
@@ -190,7 +213,7 @@ public class TcpServerThread implements Runnable {
                 try {
                     process();
                 } catch (Throwable e) {
-                    sendError(e, true);
+                    sendError(e, true, managementOperation);
                 }
             }
             trace("Disconnect");
@@ -205,8 +228,19 @@ public class TcpServerThread implements Runnable {
         if (session != null) {
             RuntimeException closeError = null;
             try {
-                session.close();
-                server.removeConnection(threadId);
+                Throwable managementFailure = closeManagementHandles();
+                try {
+                    session.close();
+                    server.removeConnection(threadId);
+                } catch (Throwable e) {
+                    if (managementFailure != null) {
+                        e.addSuppressed(managementFailure);
+                    }
+                    throw DbException.convert(e);
+                }
+                if (managementFailure != null) {
+                    throw DbException.convert(managementFailure);
+                }
             } catch (RuntimeException e) {
                 closeError = e;
                 server.traceError(e);
@@ -238,6 +272,11 @@ public class TcpServerThread implements Runnable {
     }
 
     private void sendError(Throwable t, boolean withStatus) {
+        sendError(t, withStatus, false);
+    }
+
+    private void sendError(Throwable t, boolean withStatus,
+            boolean redactManagementPaths) {
         try {
             SQLException e = DbException.convert(t).getSQLException();
             StringWriter writer = new StringWriter();
@@ -252,6 +291,11 @@ public class TcpServerThread implements Runnable {
             } else {
                 message = e.getMessage();
                 sql = null;
+            }
+            if (redactManagementPaths) {
+                message = server.redactOnlineBackupPaths(message);
+                sql = server.redactOnlineBackupPaths(sql);
+                trace = server.redactOnlineBackupPaths(trace);
             }
             if (withStatus) {
                 transfer.writeInt(SessionRemote.STATUS_ERROR);
@@ -277,8 +321,12 @@ public class TcpServerThread implements Runnable {
         }
     }
 
-    private void process() throws IOException {
+    private void process() throws Exception {
+        managementOperation = false;
         int operation = transfer.readInt();
+        managementOperation =
+                operation >= SessionRemote.ONLINE_BACKUP_PREPARE
+                        && operation <= SessionRemote.ACTIVATION_CLOSE;
         switch (operation) {
         case SessionRemote.SESSION_PREPARE:
         case SessionRemote.SESSION_PREPARE_READ_PARAMS2: {
@@ -548,9 +596,271 @@ public class TcpServerThread implements Runnable {
             transfer.flush();
             break;
         }
+        case SessionRemote.ONLINE_BACKUP_PREPARE: {
+            OnlineBackupOptions options =
+                    OnlineBackupProtocolCodec.readOptions(transfer);
+            checkManagementAccess(true);
+            server.checkOnlineBackupParticipants(
+                    options.getParticipantIds());
+            OnlineBackupSession backup = OnlineBackupSession.prepare(
+                    session.getDatabase(), options);
+            int handleId = registerManagementHandle(
+                    new BackupHandle(currentDatabaseId(), backup));
+            OnlineBackupDescriptor descriptor =
+                    OnlineBackupApiMapper.descriptor(backup);
+            transfer.writeInt(SessionRemote.STATUS_OK).writeInt(handleId);
+            OnlineBackupProtocolCodec.writeDescriptor(transfer, descriptor);
+            transfer.flush();
+            break;
+        }
+        case SessionRemote.ONLINE_BACKUP_PUBLISH: {
+            int handleId = transfer.readInt();
+            String bundleName = transfer.readString();
+            checkManagementAccess(true);
+            BackupHandle handle = managementHandle(handleId,
+                    BackupHandle.class);
+            Path target = server.resolveOnlineBackupBundle(bundleName);
+            OnlineBackupPublishResult result =
+                    handle.backup.publish(target);
+            OnlineBackupPublishReport report =
+                    OnlineBackupApiMapper.publishReport(bundleName, result);
+            transfer.writeInt(SessionRemote.STATUS_OK);
+            OnlineBackupProtocolCodec.writePublishReport(transfer, report);
+            transfer.flush();
+            break;
+        }
+        case SessionRemote.ONLINE_BACKUP_ABORT: {
+            int handleId = transfer.readInt();
+            checkManagementAccess(false);
+            BackupHandle handle = managementHandle(handleId,
+                    BackupHandle.class);
+            handle.backup.abort();
+            transfer.writeInt(SessionRemote.STATUS_OK).flush();
+            break;
+        }
+        case SessionRemote.ONLINE_BACKUP_CLOSE: {
+            int handleId = transfer.readInt();
+            checkManagementAccess(false);
+            closeManagementHandle(handleId, BackupHandle.class);
+            transfer.writeInt(SessionRemote.STATUS_OK).flush();
+            break;
+        }
+        case SessionRemote.SHADOW_RESTORE_STAGE_VALIDATE: {
+            String bundleName = transfer.readString();
+            String shadowName = transfer.readString();
+            OnlineBackupRestoreOptions options =
+                    OnlineBackupProtocolCodec.readRestoreOptions(transfer);
+            checkManagementAccess(true);
+            server.checkOnlineBackupParticipants(
+                    options.getParticipantAllowlist());
+            if (!options.getAdditionalRequiredProviders().isEmpty()) {
+                throw DbException.get(ErrorCode.FEATURE_NOT_SUPPORTED_1,
+                        "additional validation providers are not enabled "
+                                + "for remote online backup control");
+            }
+            if (!server.getSSL() && options.getPassword().length != 0) {
+                throw DbException.get(ErrorCode.FEATURE_NOT_SUPPORTED_1,
+                        "remote shadow validation with a password requires "
+                                + "-tcpSSL");
+            }
+            Path bundle = server.resolveOnlineBackupBundle(bundleName);
+            Path shadow = server.resolveShadow(shadowName);
+            ShadowRestoreResult result =
+                    ShadowRestoreCoordinator.stageAndValidate(
+                            session.getDatabase(), bundle, shadow,
+                            OnlineBackupApiMapper.restoreOptions(options));
+            OnlineBackupRestoreReport report =
+                    OnlineBackupApiMapper.restoreReport(shadowName, result);
+            int handleId = registerManagementHandle(
+                    new RestoreHandle(currentDatabaseId()));
+            transfer.writeInt(SessionRemote.STATUS_OK).writeInt(handleId);
+            OnlineBackupProtocolCodec.writeRestoreReport(transfer, report);
+            transfer.flush();
+            break;
+        }
+        case SessionRemote.SHADOW_RESTORE_CLOSE: {
+            int handleId = transfer.readInt();
+            checkManagementAccess(false);
+            closeManagementHandle(handleId, RestoreHandle.class);
+            transfer.writeInt(SessionRemote.STATUS_OK).flush();
+            break;
+        }
+        case SessionRemote.ACTIVATION_PREPARE: {
+            UUID expectedOldGenerationId =
+                    OnlineBackupProtocolCodec.readUuid(transfer);
+            UUID newGenerationId =
+                    OnlineBackupProtocolCodec.readUuid(transfer);
+            long timeoutMillis = transfer.readLong();
+            checkManagementAccess(true);
+            if (expectedOldGenerationId == null || newGenerationId == null) {
+                throw DbException.getInvalidValueException(
+                        "activation generation ID", null);
+            }
+            ActivationToken token = ActivationCoordinator.prepare(
+                    session.getDatabase(), expectedOldGenerationId,
+                    newGenerationId, timeoutMillis);
+            int handleId = registerManagementHandle(
+                    new ActivationHandle(currentDatabaseId(), token));
+            OnlineBackupActivationReport report =
+                    OnlineBackupApiMapper.activationReport(token.getReport());
+            transfer.writeInt(SessionRemote.STATUS_OK).writeInt(handleId);
+            OnlineBackupProtocolCodec.writeActivationReport(transfer, report);
+            transfer.flush();
+            break;
+        }
+        case SessionRemote.ACTIVATION_COMMIT: {
+            int handleId = transfer.readInt();
+            checkManagementAccess(false);
+            ActivationHandle handle = managementHandle(handleId,
+                    ActivationHandle.class);
+            OnlineBackupActivationReport report =
+                    OnlineBackupApiMapper.activationReport(
+                            handle.token.commitActivation());
+            transfer.writeInt(SessionRemote.STATUS_OK);
+            OnlineBackupProtocolCodec.writeActivationReport(transfer, report);
+            transfer.flush();
+            break;
+        }
+        case SessionRemote.ACTIVATION_ABORT: {
+            int handleId = transfer.readInt();
+            checkManagementAccess(false);
+            ActivationHandle handle = managementHandle(handleId,
+                    ActivationHandle.class);
+            OnlineBackupActivationReport report =
+                    OnlineBackupApiMapper.activationReport(
+                            handle.token.abortActivation());
+            transfer.writeInt(SessionRemote.STATUS_OK);
+            OnlineBackupProtocolCodec.writeActivationReport(transfer, report);
+            transfer.flush();
+            break;
+        }
+        case SessionRemote.ACTIVATION_CLOSE: {
+            int handleId = transfer.readInt();
+            checkManagementAccess(false);
+            closeManagementHandle(handleId, ActivationHandle.class);
+            transfer.writeInt(SessionRemote.STATUS_OK).flush();
+            break;
+        }
         default:
             trace("Unknown operation: " + operation);
             close();
+        }
+    }
+
+    private void checkManagementAccess(boolean requireNoTransaction) {
+        if (clientVersion < Constants.TCP_PROTOCOL_VERSION_21) {
+            throw DbException.get(ErrorCode.FEATURE_NOT_SUPPORTED_1,
+                    "online backup control requires TCP protocol v21");
+        }
+        session.getUser().checkAdmin();
+        if (requireNoTransaction && session.hasPendingTransaction()) {
+            throw DbException.get(ErrorCode.UNSUPPORTED_SETTING_COMBINATION,
+                    "online backup management requires no pending "
+                            + "transaction");
+        }
+    }
+
+    private UUID currentDatabaseId() {
+        if (session.getDatabase().getOnlineBackupMetadata() == null) {
+            throw DbException.get(ErrorCode.UNSUPPORTED_SETTING_COMBINATION,
+                    "ONLINE_BACKUP_COORDINATION is disabled");
+        }
+        return session.getDatabase().getOnlineBackupMetadata()
+                .requireSnapshot().getDatabaseId();
+    }
+
+    private int registerManagementHandle(ManagementHandle handle) {
+        int id = nextManagementHandleId++;
+        managementHandles.put(id, handle);
+        return id;
+    }
+
+    private <T extends ManagementHandle> T managementHandle(int id,
+            Class<T> type) {
+        ManagementHandle handle = managementHandles.get(id);
+        if (!type.isInstance(handle)
+                || !currentDatabaseId().equals(handle.databaseId)) {
+            throw DbException.getInvalidValueException(
+                    "online backup management handle", id);
+        }
+        return type.cast(handle);
+    }
+
+    private <T extends ManagementHandle> void closeManagementHandle(int id,
+            Class<T> type) throws Exception {
+        T handle = managementHandle(id, type);
+        handle.close();
+        managementHandles.remove(id);
+    }
+
+    private Throwable closeManagementHandles() {
+        Throwable failure = null;
+        ArrayList<Map.Entry<Integer, ManagementHandle>> entries =
+                new ArrayList<>(managementHandles.entrySet());
+        for (int i = entries.size() - 1; i >= 0; i--) {
+            try {
+                entries.get(i).getValue().close();
+            } catch (Throwable e) {
+                if (failure == null) {
+                    failure = e;
+                } else {
+                    failure.addSuppressed(e);
+                }
+            }
+        }
+        managementHandles.clear();
+        return failure;
+    }
+
+    private abstract static class ManagementHandle
+            implements AutoCloseable {
+
+        final UUID databaseId;
+
+        ManagementHandle(UUID databaseId) {
+            this.databaseId = databaseId;
+        }
+    }
+
+    private static final class BackupHandle extends ManagementHandle {
+
+        final OnlineBackupSession backup;
+
+        BackupHandle(UUID databaseId, OnlineBackupSession backup) {
+            super(databaseId);
+            this.backup = backup;
+        }
+
+        @Override
+        public void close() throws Exception {
+            backup.close();
+        }
+    }
+
+    private static final class RestoreHandle extends ManagementHandle {
+
+        RestoreHandle(UUID databaseId) {
+            super(databaseId);
+        }
+
+        @Override
+        public void close() {
+            // Restore 已完成原子发布，不持有额外 core 资源。
+        }
+    }
+
+    private static final class ActivationHandle extends ManagementHandle {
+
+        final ActivationToken token;
+
+        ActivationHandle(UUID databaseId, ActivationToken token) {
+            super(databaseId);
+            this.token = token;
+        }
+
+        @Override
+        public void close() {
+            token.close();
         }
     }
 

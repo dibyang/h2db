@@ -9,14 +9,21 @@ import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.UnknownHostException;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
 
 import org.h2.api.ErrorCode;
 import org.h2.engine.Constants;
@@ -40,6 +47,9 @@ public class TcpServer implements Service {
 
     private static final int SHUTDOWN_NORMAL = 0;
     private static final int SHUTDOWN_FORCE = 1;
+
+    private static final Pattern ONLINE_BACKUP_NAME = Pattern.compile(
+            "[A-Za-z0-9][A-Za-z0-9._-]{0,127}");
 
     /**
      * The name of the in-memory management database used by the TCP server
@@ -69,6 +79,10 @@ public class TcpServer implements Service {
     private Thread listenerThread;
     private int nextThreadId;
     private String key, keyDatabase;
+    private Path onlineBackupRoot;
+    private Path shadowRoot;
+    private Set<String> onlineBackupParticipantAllowlist =
+            Collections.emptySet();
 
     /**
      * Get the database name of the management database.
@@ -186,8 +200,51 @@ public class TcpServer implements Service {
                 ifExists = true;
             } else if (Tool.isOption(a, "-ifNotExists")) {
                 ifExists = false;
+            } else if (Tool.isOption(a, "-tcpOnlineBackupRoot")) {
+                onlineBackupRoot = requireManagementRoot(a, args[++i]);
+            } else if (Tool.isOption(a, "-tcpShadowRoot")) {
+                shadowRoot = requireManagementRoot(a, args[++i]);
+            } else if (Tool.isOption(a,
+                    "-tcpOnlineBackupParticipants")) {
+                onlineBackupParticipantAllowlist =
+                        parseParticipantAllowlist(args[++i]);
             }
         }
+    }
+
+    private static Path requireManagementRoot(String option, String value) {
+        try {
+            Path configured = Paths.get(value).toAbsolutePath().normalize();
+            if (!Files.isDirectory(configured, LinkOption.NOFOLLOW_LINKS)
+                    || Files.isSymbolicLink(configured)) {
+                throw DbException.getInvalidValueException(option, value);
+            }
+            Path noFollow = configured.toRealPath(LinkOption.NOFOLLOW_LINKS);
+            Path real = configured.toRealPath();
+            if (!noFollow.equals(real)) {
+                throw DbException.getInvalidValueException(option,
+                        "root must not be a link or junction");
+            }
+            return real;
+        } catch (IOException e) {
+            throw DbException.convertIOException(e, option);
+        }
+    }
+
+    private static Set<String> parseParticipantAllowlist(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return Collections.emptySet();
+        }
+        HashSet<String> result = new HashSet<>();
+        for (String participant : Arrays.asList(value.split(","))) {
+            String id = participant.trim();
+            if (id.isEmpty()) {
+                throw DbException.getInvalidValueException(
+                        "-tcpOnlineBackupParticipants", value);
+            }
+            result.add(id);
+        }
+        return Collections.unmodifiableSet(result);
     }
 
     @Override
@@ -385,6 +442,96 @@ public class TcpServer implements Service {
     }
 
     /**
+     * 将远程 bundle 名称解析为受控 backup root 的直接子目录。
+     *
+     * @param name 简单 bundle 名称
+     * @return 服务端绝对路径
+     */
+    Path resolveOnlineBackupBundle(String name) {
+        return resolveManagementName(onlineBackupRoot, name,
+                "-tcpOnlineBackupRoot");
+    }
+
+    /**
+     * 将远程 shadow 名称解析为受控 shadow root 的直接子目录。
+     *
+     * @param name 简单 shadow 名称
+     * @return 服务端绝对路径
+     */
+    Path resolveShadow(String name) {
+        return resolveManagementName(shadowRoot, name, "-tcpShadowRoot");
+    }
+
+    /**
+     * 检查远程显式 participant 是否为服务端 allowlist 的子集。
+     *
+     * @param participantIds participant ID
+     */
+    void checkOnlineBackupParticipants(List<String> participantIds) {
+        for (String participantId : participantIds) {
+            if (!onlineBackupParticipantAllowlist.contains(participantId)) {
+                throw DbException.get(ErrorCode.FEATURE_NOT_SUPPORTED_1,
+                        "online backup participant is not allowed: "
+                                + participantId);
+            }
+        }
+    }
+
+    /**
+     * 从远程管理错误中移除服务端绝对目录。
+     *
+     * @param value 原始文本
+     * @return 脱敏文本
+     */
+    String redactOnlineBackupPaths(String value) {
+        if (value == null) {
+            return null;
+        }
+        String redacted = redactPath(value, onlineBackupRoot,
+                "<online-backup-root>");
+        redacted = redactPath(redacted, shadowRoot, "<shadow-root>");
+        if (baseDir != null) {
+            redacted = redactPath(redacted,
+                    Paths.get(baseDir).toAbsolutePath().normalize(),
+                    "<database-root>");
+        }
+        return redacted;
+    }
+
+    private static String redactPath(String value, Path path,
+            String replacement) {
+        if (path == null) {
+            return value;
+        }
+        String nativePath = path.toString();
+        String redacted = value.replace(nativePath, replacement);
+        String slashPath = nativePath.replace('\\', '/');
+        if (!slashPath.equals(nativePath)) {
+            redacted = redacted.replace(slashPath, replacement);
+        }
+        return redacted;
+    }
+
+    private static Path resolveManagementName(Path root, String name,
+            String option) {
+        if (root == null) {
+            throw DbException.get(ErrorCode.FEATURE_NOT_SUPPORTED_1,
+                    option + " is not configured");
+        }
+        if (name == null || !ONLINE_BACKUP_NAME.matcher(name).matches()
+                || ".".equals(name) || "..".equals(name)) {
+            throw DbException.getInvalidValueException(
+                    "online backup management name", name);
+        }
+        Path target = root.resolve(name).normalize();
+        if (!root.equals(target.getParent()) || !target.startsWith(root)) {
+            throw DbException.getInvalidValueException(
+                    "online backup management name", name);
+        }
+        return target;
+    }
+
+    /**
      * Print a message if the trace flag is enabled.
      *
      * @param s the message
@@ -422,6 +569,16 @@ public class TcpServer implements Service {
 
     boolean getIfExists() {
         return ifExists;
+    }
+
+    /**
+     * 返回该服务端实例可协商的最高 TCP 协议版本。
+     * 子类可降低此值用于兼容代理或协议验证。
+     *
+     * @return 最高 TCP 协议版本
+     */
+    protected int getMaxProtocolVersion() {
+        return Constants.TCP_PROTOCOL_VERSION_MAX_SUPPORTED;
     }
 
     /**

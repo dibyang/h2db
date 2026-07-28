@@ -1051,15 +1051,12 @@ public class MVStore implements AutoCloseable {
                             "Snapshot source is shorter than its header");
                 }
                 long snapshotVersion = currentVersion;
-                long initialPhysicalLength =
-                        source.getSnapshotPhysicalLength();
                 String fingerprint = snapshotFingerprint(headerBlocks,
                         copyLength, snapshotVersion);
                 MVStorePreparedSnapshot snapshot =
                         new MVStorePreparedSnapshot(this, source,
-                        headerBlocks, copyLength, initialPhysicalLength,
-                        snapshotVersion, fingerprint, leaseMillis,
-                        previousReuseSpace);
+                        headerBlocks, copyLength, snapshotVersion, fingerprint,
+                        leaseMillis, previousReuseSpace);
                 preparedSnapshot = snapshot;
                 snapshot.startLease();
                 return snapshot;

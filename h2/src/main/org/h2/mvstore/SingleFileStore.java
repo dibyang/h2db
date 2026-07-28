@@ -282,16 +282,6 @@ public class SingleFileStore extends RandomAccessStore {
         }
     }
 
-    long getSnapshotPhysicalLength() {
-        try {
-            return snapshotFileChannel().size();
-        } catch (IOException e) {
-            throw DataUtils.newMVStoreException(DataUtils.ERROR_READING_FAILED,
-                    "Could not determine physical length of {0}",
-                    getFileName(), e);
-        }
-    }
-
     private int getSnapshotHeaderLength() {
         long encryptionHeaderLength;
         try {

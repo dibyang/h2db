@@ -99,6 +99,12 @@ public final class PluginCapability {
      */
     public static final String STORAGE_TRUNCATE_SAFE = "storage.truncate.safe";
 
+    /**
+     * Supports coordinated online backup prepare and materialization.
+     */
+    public static final String ONLINE_BACKUP_PREPARE =
+            "onlineBackup.prepare";
+
     private static final List<String> ALL = Collections.unmodifiableList(Arrays.asList(
             TABLE_CREATE,
             SYSTEM_CATALOG,
@@ -116,7 +122,8 @@ public final class PluginCapability {
             STORAGE_COMPACT_ONLINE_MAINTENANCE,
             STORAGE_VACUUM_ONLINE,
             STORAGE_PUBLISH_CRASH_SAFE,
-            STORAGE_TRUNCATE_SAFE));
+            STORAGE_TRUNCATE_SAFE,
+            ONLINE_BACKUP_PREPARE));
 
     /**
      * 获取当前版本已知的 capability 名称。

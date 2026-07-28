@@ -1,6 +1,6 @@
 # H2DB 组合在线备份与影子恢复实施计划
 
-状态：实施中（P0-P3 已完成，P4 待开始）
+状态：实施中（P0-P4 已完成，P5 待开始）
 规划日期：2026-07-28  
 目标仓库：`D:\work\java\h2db`  
 需求来源：`D:\work\java2\vexra-adb\docs\requirements\h2db-online-backup-restore-requirements.md`  
@@ -560,7 +560,7 @@ ACTIVATION_ABORT
 | P1 Operation Gate | 建立 commit、DDL、transaction 准入和指标接缝 | P0/P0.5 | [x] |
 | P2 Identity/Epoch | 持久化 databaseId、schemaEpoch，并接收 ADB 提供的运行时 generationId | P0/P1 | [x] |
 | P3 MVStore Snapshot | 实现固定切点的 prepared snapshot | P0.6/P1 | [x] |
-| P4 Session 与 SPI | 实现组合 session 和 participant prepare/abort | P2/P3 | [ ] |
+| P4 Session 与 SPI | 实现组合 session 和 participant prepare/abort | P2/P3 | [x] |
 | P5 Bundle Publish | materialize、checksum、manifest 和原子发布 | P4 | [ ] |
 | P6 Shadow Restore | 安全 staging、验证和只读试打开 | P2/P5 | [ ] |
 | P7 Activation | 有界排空、token、fence 和取消 | P1/P6 | [ ] |
@@ -948,26 +948,56 @@ java -cp "build/classes/java/legacyTest;build/classes/java/main;build/resources/
 
 ### P4 OnlineBackupSession 与 Participant SPI
 
-- [ ] 冻结 context、options、prepared metadata 和 materialized artifact 数据模型。
-- [ ] 所有 participant API、session 状态和 manifest 使用集合模型，不引入单 participant 特例。
-- [ ] 在 `PluginSecurity`中增加受控 participant provider 类型。
-- [ ] 只调用 options 显式选择的 provider。
-- [ ] 在进入 barrier 前完成 provider 存在性、重复 ID 和 capability 检查。
-- [ ] 在 barrier 内按 participant ID 的稳定顺序依次调用 prepare，所有调用共享同一个总 deadline。
-- [ ] 失败时逆序 abort，并将清理异常作为 suppressed exception 保留。
-- [ ] 定义 session 状态机和 `abort()/close()`幂等语义。
-- [ ] 限制同一数据库并发 prepared session 数量。
+- [x] 冻结 context、options、prepared metadata、artifact target 和 materialized artifact 集合模型。
+- [x] 所有 participant API 和 session 状态使用集合模型，不引入单 participant 特例；P5 manifest 直接消费同一有序集合。
+- [x] 在 `PluginSecurity`中增加受控 `online_backup_participant` provider 类型和 `onlineBackup.prepare` capability。
+- [x] 只调用 `OnlineBackupOptions`显式选择的 provider；空列表表示 H2-only，不自动扫描或调用其他 provider。
+- [x] 在进入 barrier 前完成 provider 存在性、重复 ID、接口类型和 capability 检查。
+- [x] 在 barrier 内按 participant ID 的稳定顺序依次调用 prepare，H2 snapshot 和所有 participant 共享同一个绝对总 deadline。
+- [x] 失败时按实际完成顺序逆序 abort，并将全部清理异常按发生顺序作为 suppressed exception 保留。
+- [x] 定义 `PREPARING/PREPARED/ABORTING/ABORTED/CLOSED`状态机和 `abort()/close()`幂等语义。
+- [x] Database 生命周期持有且限制每库一个 prepared session；显式关闭、prepare 失败、Database shutdown 和 power-off 使用同一清理路径。
 
 验收：
 
-- [ ] `T-H2BR-PARTICIPANT-ORDER-01`
-- [ ] `T-H2BR-PARTICIPANT-FAILURE-CLEANUP-01`
-- [ ] `T-H2BR-PARTICIPANT-DUPLICATE-ID-01`
-- [ ] `T-H2BR-PARTICIPANT-EXPLICIT-SELECTION-01`
-- [ ] `T-H2BR-PARTICIPANT-MULTI-ORDER-01`
-- [ ] `T-H2BR-PARTICIPANT-SHARED-DEADLINE-01`
-- [ ] `T-H2BR-PARTICIPANT-MULTI-REVERSE-ABORT-01`
-- [ ] `T-H2BR-SESSION-STATE-01`
+- [x] `T-H2BR-PARTICIPANT-ORDER-01`
+- [x] `T-H2BR-PARTICIPANT-FAILURE-CLEANUP-01`
+- [x] `T-H2BR-PARTICIPANT-DUPLICATE-ID-01`
+- [x] `T-H2BR-PARTICIPANT-EXPLICIT-SELECTION-01`
+- [x] `T-H2BR-PARTICIPANT-MULTI-ORDER-01`
+- [x] `T-H2BR-PARTICIPANT-SHARED-DEADLINE-01`
+- [x] `T-H2BR-PARTICIPANT-MULTI-REVERSE-ABORT-01`
+- [x] `T-H2BR-SESSION-STATE-01`
+
+实现结果：
+
+- 新增 `OnlineBackupParticipantProvider`、`PreparedBackupParticipant`、`OnlineBackupContext`、`OnlineBackupOptions`、prepared metadata 和 materialized artifact API；participant provenance 同时保留 plugin ID/version。
+- 解析阶段只读取显式 ID，拒绝空值、重复、缺失、错误接口和未声明 capability 的 provider；完成全部校验后才 claim 每库唯一 session 并进入 barrier。
+- context 固定 `backupId/cutId/databaseId/generationId/schemaEpoch/deadlineNanos`，所有 provider 接收同一实例；后调用者看到的是同一 deadline 的剩余预算。
+- provider prepare、metadata 校验或 deadline 检查任一失败时，已完成 participant 逆序 abort，最后关闭 H2 snapshot。清理失败不覆盖主异常。
+- session monitor 覆盖完整 prepare 状态转换；Database shutdown 与 prepare 并发时会等待当前回调结束后清理，不会在 close 后追加资源。
+
+验证命令：
+
+```powershell
+.\gradlew.bat runOnlineBackupCheck --rerun-tasks
+.\gradlew.bat javadoc
+.\gradlew.bat runPluginArchitectureCheck --rerun-tasks
+java -cp "build/classes/java/legacyTest;build/classes/java/main;build/resources/legacyTest;build/resources/main" `
+  org.h2.test.LegacyTestGroupRunner `
+  org.h2.test.db.TestBackup `
+  org.h2.test.db.TestOpenClose `
+  org.h2.test.store.TestMVStoreConcurrent
+```
+
+验证结果：
+
+| 范围 | 结果 |
+| --- | --- |
+| P1-P4 专项 | `runOnlineBackupCheck` 32 项通过，0 failure、0 error、0 skipped；P4 新增 6 项。 |
+| JDK 8 / Javadoc | `compileJava`、`compileOnlineBackupTestJava`和`javadoc`通过。 |
+| plugin 回归 | 140 项通过，0 failure、0 error、0 skipped；新增 participant provider 安全边界测试。 |
+| 传统备份与默认 MVStore | `TestBackup`、`TestOpenClose`和`TestMVStoreConcurrent`通过。 |
 
 ### P5 Bundle、Manifest 与原子发布
 
@@ -1183,9 +1213,9 @@ P99 由 ADB 或专项性能工具对逐操作 report 聚合，不在 H2 core 内
 | --- | --- | --- | --- | --- |
 | MVStore header 在 barrier 外变化导致切点漂移 | P0 | header race 和恢复 cut 测试 | barrier 内捕获 header，固定 copyLength | [ ] |
 | 关闭空间复用期间文件快速增长 | P1 | file growth 指标和容量测试 | 单 snapshot、TTL、容量门禁、及时 abort | [ ] |
-| materializer 卡死导致 snapshot pin 长期占用和文件增长 | P0 | lease age、active reader、file growth 和 maintenance-blocked 指标 | 保持 pin保证安全，熔断新 snapshot/maintenance，严重告警并受控停止或重启；禁止强制 unpin | [ ] |
+| materializer 卡死导致 snapshot pin 长期占用和文件增长 | P0 | lease age、active reader、file growth 和 maintenance-blocked 指标 | 保持 pin保证安全，熔断新 snapshot/maintenance，暴露受控重启诊断；禁止强制 unpin | [x] |
 | participant 在 barrier 内阻塞 | P1 | watchdog 和 phase timing | 受信 provider、deadline 契约、预检、灰度认证 | [ ] |
-| 多 participant 逐个消耗完整 timeout，导致总 barrier 时间随数量失控 | P0 | 多 fake participant deadline 测试 | 使用单一绝对 deadline，每次 prepare 只获得剩余预算；首次灰度限制一个真实 participant | [ ] |
+| 多 participant 逐个消耗完整 timeout，导致总 barrier 时间随数量失控 | P0 | 多 fake participant deadline 测试 | 使用单一绝对 deadline，每次 prepare 只获得剩余预算；首次灰度限制一个真实 participant | [x] |
 | flush 无法在 1 秒内安全中断 | P1 | 高脏页性能测试 | barrier 外预 flush、deadline overrun、重新定义硬上限口径 | [ ] |
 | DDL 只在 commit 处阻塞导致 catalog 已变更 | P0 | DDL race 测试 | DDL 执行前进入 gate | [ ] |
 | quiesce 与 transaction begin 竞态产生漏计事务 | P0 | begin/drain race 测试 | begin/end 与状态检查在同一 gate 协议内 | [ ] |

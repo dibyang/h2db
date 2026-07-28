@@ -21,6 +21,7 @@ import org.h2.api.DatabaseLifecycleProvider;
 import org.h2.api.DmlExecutionProvider;
 import org.h2.api.H2Plugin;
 import org.h2.api.JdbcUrlPrefixProvider;
+import org.h2.api.OnlineBackupParticipantProvider;
 import org.h2.api.PluginProvider;
 import org.h2.api.StorageEngineProvider;
 import org.h2.api.SystemCatalogProvider;
@@ -40,7 +41,8 @@ public final class PluginSecurity {
             StorageEngineProvider.TYPE,
             TransactionEventProvider.TYPE,
             DatabaseLifecycleProvider.TYPE,
-            DmlExecutionProvider.TYPE));
+            DmlExecutionProvider.TYPE,
+            OnlineBackupParticipantProvider.TYPE));
 
     private PluginSecurity() {
     }

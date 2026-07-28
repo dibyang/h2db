@@ -5,6 +5,7 @@
  */
 package org.h2.test.plugin;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -12,7 +13,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.File;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.util.Collections;
 
+import org.h2.api.H2Plugin;
+import org.h2.api.OnlineBackupContext;
+import org.h2.api.OnlineBackupParticipantProvider;
+import org.h2.api.PluginCapability;
+import org.h2.api.PluginProvider;
+import org.h2.api.PreparedBackupParticipant;
 import org.h2.engine.PluginSecurity;
 import org.junit.jupiter.api.Test;
 
@@ -63,5 +71,65 @@ public class PluginSecurityTest {
     public void emptyPluginPathsReuseCurrentClasspath() {
         assertFalse(PluginSecurity.closeClassLoader(PluginSecurity.createPluginClassLoader(null)));
         assertFalse(PluginSecurity.closeClassLoader(PluginSecurity.createPluginClassLoader("")));
+    }
+
+    /**
+     * T-H2BR-PARTICIPANT-PROVIDER-SECURITY-01.
+     */
+    @Test
+    public void allowsOnlineBackupParticipantProviderType() {
+        OnlineBackupParticipantProvider provider =
+                new OnlineBackupParticipantProvider() {
+                    @Override
+                    public String getType() {
+                        return TYPE;
+                    }
+
+                    @Override
+                    public String getId() {
+                        return "backup";
+                    }
+
+                    @Override
+                    public boolean supports(String capability) {
+                        return PluginCapability.ONLINE_BACKUP_PREPARE
+                                .equals(capability);
+                    }
+
+                    @Override
+                    public PreparedBackupParticipant prepare(
+                            OnlineBackupContext context) {
+                        throw new UnsupportedOperationException();
+                    }
+                };
+        H2Plugin plugin = new H2Plugin() {
+            @Override
+            public String getId() {
+                return "backup.plugin";
+            }
+
+            @Override
+            public String getVersion() {
+                return "1";
+            }
+
+            @Override
+            public String getDisplayName() {
+                return "Backup Plugin";
+            }
+
+            @Override
+            public Iterable<String> getAllowedProviderTypes() {
+                return Collections.singletonList(
+                        OnlineBackupParticipantProvider.TYPE);
+            }
+
+            @Override
+            public Iterable<? extends PluginProvider> getProviders() {
+                return Collections.singletonList(provider);
+            }
+        };
+        assertDoesNotThrow(
+                () -> PluginSecurity.validateProviderTypes(plugin));
     }
 }

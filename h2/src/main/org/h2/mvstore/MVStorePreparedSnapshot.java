@@ -58,7 +58,6 @@ public final class MVStorePreparedSnapshot implements AutoCloseable {
     private final SingleFileStore source;
     private final byte[] headerBlocks;
     private final long copyLength;
-    private final long initialPhysicalLength;
     private final long snapshotVersion;
     private final String sourceFingerprint;
     private final long deadlineNanos;
@@ -74,14 +73,13 @@ public final class MVStorePreparedSnapshot implements AutoCloseable {
     private final HashMap<Long, String> readerOwners = new HashMap<>();
 
     MVStorePreparedSnapshot(MVStore store, SingleFileStore source,
-            byte[] headerBlocks, long copyLength, long initialPhysicalLength,
-            long snapshotVersion, String sourceFingerprint,
-            long leaseMillis, boolean previousReuseSpace) {
+            byte[] headerBlocks, long copyLength, long snapshotVersion,
+            String sourceFingerprint, long leaseMillis,
+            boolean previousReuseSpace) {
         this.store = store;
         this.source = source;
         this.headerBlocks = headerBlocks;
         this.copyLength = copyLength;
-        this.initialPhysicalLength = initialPhysicalLength;
         this.snapshotVersion = snapshotVersion;
         this.sourceFingerprint = sourceFingerprint;
         this.previousReuseSpace = previousReuseSpace;
@@ -231,8 +229,7 @@ public final class MVStorePreparedSnapshot implements AutoCloseable {
      * @return non-negative source growth in bytes
      */
     public long getSourceGrowthBytes() {
-        return Math.max(0L, source.getSnapshotPhysicalLength()
-                - initialPhysicalLength);
+        return Math.max(0L, source.getSnapshotLength() - copyLength);
     }
 
     /**

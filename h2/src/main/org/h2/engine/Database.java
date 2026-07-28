@@ -39,6 +39,7 @@ import org.h2.constraint.Constraint.Type;
 import org.h2.engine.Mode.ModeEnum;
 import org.h2.engine.backup.DatabaseIdentityMetadata;
 import org.h2.engine.backup.DatabaseOperationGate;
+import org.h2.engine.backup.OnlineBackupSession;
 import org.h2.index.Cursor;
 import org.h2.index.Index;
 import org.h2.index.IndexType;
@@ -216,6 +217,7 @@ public final class Database implements DataHandler, CastDataProvider {
     private final DbSettings dbSettings;
     private final DatabaseOperationGate operationGate;
     private final DatabaseIdentityMetadata onlineBackupMetadata;
+    private OnlineBackupSession activeOnlineBackupSession;
     private final PluginRegistry pluginRegistry = new PluginRegistry();
     private final String storageEngineId;
     private final StorageEngine storageEngine;
@@ -577,6 +579,7 @@ public final class Database implements DataHandler, CastDataProvider {
         if (powerOffCount != -1) {
             try {
                 powerOffCount = -1;
+                closeOnlineBackupSession();
                 store.closeImmediately();
                 if (lock != null) {
                     stopServer();
@@ -1297,6 +1300,7 @@ public final class Database implements DataHandler, CastDataProvider {
             }
         }
         DatabaseLifecycleEventContext lifecycleContext = new DatabaseLifecycleEventContext(fromShutdownHook);
+        closeOnlineBackupSession();
         lifecycleException = fireDatabaseLifecycleEvent(lifecycleContext, DatabaseLifecycleEvent.BEFORE_CLOSE,
                 lifecycleException);
         try {
@@ -2512,6 +2516,46 @@ public final class Database implements DataHandler, CastDataProvider {
                 operationGate.beginBackupBarrier(barrierTimeoutMillis)) {
             store.flush();
             return store.getMvStore().prepareSnapshot(leaseMillis);
+        }
+    }
+
+    /**
+     * Claim the single coordinated backup-session slot.
+     *
+     * @param session session
+     */
+    public synchronized void claimOnlineBackupSession(
+            OnlineBackupSession session) {
+        if (activeOnlineBackupSession != null) {
+            throw new IllegalStateException(
+                    "Another online backup session is active");
+        }
+        activeOnlineBackupSession = session;
+    }
+
+    /**
+     * Release the coordinated backup-session slot.
+     *
+     * @param session session
+     */
+    public synchronized void releaseOnlineBackupSession(
+            OnlineBackupSession session) {
+        if (activeOnlineBackupSession == session) {
+            activeOnlineBackupSession = null;
+        }
+    }
+
+    private void closeOnlineBackupSession() {
+        OnlineBackupSession session;
+        synchronized (this) {
+            session = activeOnlineBackupSession;
+        }
+        if (session != null) {
+            try {
+                session.close();
+            } catch (Throwable e) {
+                trace.error(e, "online backup session close");
+            }
         }
     }
 

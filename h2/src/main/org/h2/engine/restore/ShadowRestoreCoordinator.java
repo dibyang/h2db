@@ -19,17 +19,67 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Instant;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import org.h2.engine.Database;
 import org.h2.engine.backup.OnlineBackupManifest;
+import org.h2.engine.backup.OnlineBackupManifestCodec;
+import org.h2.util.json.JSONBoolean;
 import org.h2.util.json.JSONByteArrayTarget;
+import org.h2.util.json.JSONBytesSource;
+import org.h2.util.json.JSONNumber;
+import org.h2.util.json.JSONObject;
+import org.h2.util.json.JSONString;
+import org.h2.util.json.JSONValue;
+import org.h2.util.json.JSONValueTarget;
 
 /**
  * 将已发布 bundle 恢复到全新 staging，完成 fail-closed validation 后再
  * 原子发布 shadow generation。
  */
 public final class ShadowRestoreCoordinator {
+
+    private static final long MAX_REPORT_BYTES = 4L * 1024L * 1024L;
+    private static final RestoreFaultInjector NO_FAULTS =
+            new RestoreFaultInjector() {
+                @Override
+                public void before(RestoreStep step, Path path)
+                        throws IOException {
+                    // Production restore does not inject failures.
+                }
+            };
+
+    /**
+     * 包内测试使用的 shadow 发布故障点，不属于公开 API。
+     */
+    enum RestoreStep {
+        ARTIFACT_COPY,
+        ARTIFACT_FSYNC,
+        BACKUP_MANIFEST_FSYNC,
+        VALIDATION_REPORT_FSYNC,
+        STAGING_DIRECTORY_FSYNC,
+        ATOMIC_MOVE,
+        PARENT_DIRECTORY_FSYNC
+    }
+
+    /**
+     * 包内测试使用的确定性故障接缝。
+     */
+    interface RestoreFaultInjector {
+
+        /**
+         * 在指定恢复步骤执行前注入失败。
+         *
+         * @param step 恢复步骤
+         * @param path 当前步骤操作的路径
+         * @throws IOException 注入的 I/O 失败
+         */
+        void before(RestoreStep step, Path path) throws IOException;
+    }
 
     private ShadowRestoreCoordinator() {
     }
@@ -47,8 +97,17 @@ public final class ShadowRestoreCoordinator {
     public static ShadowRestoreResult stageAndValidate(
             Database activeDatabase, Path backupBundle, Path shadowDirectory,
             ShadowRestoreOptions options) throws Exception {
+        return stageAndValidate(activeDatabase, backupBundle, shadowDirectory,
+                options, NO_FAULTS);
+    }
+
+    static ShadowRestoreResult stageAndValidate(
+            Database activeDatabase, Path backupBundle, Path shadowDirectory,
+            ShadowRestoreOptions options, RestoreFaultInjector faultInjector)
+            throws Exception {
         if (activeDatabase == null || backupBundle == null
-                || shadowDirectory == null || options == null) {
+                || shadowDirectory == null || options == null
+                || faultInjector == null) {
             throw new IllegalArgumentException(
                     "Shadow restore arguments must not be null");
         }
@@ -64,9 +123,6 @@ public final class ShadowRestoreCoordinator {
                 || Files.isSymbolicLink(parent)) {
             throw new IOException(
                     "Shadow parent is not a regular directory");
-        }
-        if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) {
-            throw new IOException("Shadow target already exists");
         }
         Path staging = target.resolveSibling(
                 "." + target.getFileName() + ".validation-"
@@ -93,6 +149,10 @@ public final class ShadowRestoreCoordinator {
             throw new IOException(
                     "Backup and shadow paths must not overlap");
         }
+        if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) {
+            return reusePublished(activeDatabase, realBundle, target, parent,
+                    audit, options, faultInjector);
+        }
 
         long startedNanos = System.nanoTime();
         long deadlineNanos = ShadowValidationOpener.deadline(
@@ -103,7 +163,8 @@ public final class ShadowRestoreCoordinator {
         Throwable failure = null;
         try {
             BackupBundleVerifier.VerifiedBundle verified =
-                    BackupBundleVerifier.verifyAndCopy(realBundle, staging);
+                    BackupBundleVerifier.verifyAndCopy(realBundle, staging,
+                            faultInjector);
             manifest = verified.manifest;
             ShadowValidationOpener.ValidationSummary summary =
                     ShadowValidationOpener.validate(activeDatabase, staging,
@@ -112,16 +173,20 @@ public final class ShadowRestoreCoordinator {
             Path report = staging.resolve("validation-report.json");
             BackupBundleVerifier.writeForced(report,
                     validationReport(manifest, options, "VALIDATED",
-                            validationMillis, summary, null));
-            forceDirectory(staging);
+                            validationMillis, summary, null),
+                    faultInjector, RestoreStep.VALIDATION_REPORT_FSYNC);
+            forceDirectory(staging, faultInjector,
+                    RestoreStep.STAGING_DIRECTORY_FSYNC);
             try {
+                faultInjector.before(RestoreStep.ATOMIC_MOVE, target);
                 Files.move(staging, target, StandardCopyOption.ATOMIC_MOVE);
             } catch (AtomicMoveNotSupportedException e) {
                 throw new IOException(
                         "Atomic shadow publish is not supported", e);
             }
             published = true;
-            String parentFsync = forceDirectory(parent);
+            String parentFsync = forceDirectory(parent, faultInjector,
+                    RestoreStep.PARENT_DIRECTORY_FSYNC);
             try {
                 writeAudit(audit, manifest, options, "VALIDATED",
                         parentFsync);
@@ -143,15 +208,13 @@ public final class ShadowRestoreCoordinator {
                     try {
                         Path report = staging.resolve(
                                 "validation-report.json");
-                        if (!Files.exists(report,
-                                LinkOption.NOFOLLOW_LINKS)) {
-                            BackupBundleVerifier.writeForced(report,
-                                    validationReport(manifest, options,
-                                            "FAILED",
-                                            elapsedMillis(startedNanos),
-                                            null,
-                                            failure.getClass().getName()));
-                        }
+                        Files.deleteIfExists(report);
+                        BackupBundleVerifier.writeForced(report,
+                                validationReport(manifest, options,
+                                        "FAILED",
+                                        elapsedMillis(startedNanos),
+                                        null,
+                                        failure.getClass().getName()));
                     } catch (Throwable reportFailure) {
                         failure.addSuppressed(reportFailure);
                     }
@@ -170,6 +233,159 @@ public final class ShadowRestoreCoordinator {
                     failure.addSuppressed(auditFailure);
                 }
             }
+        }
+    }
+
+    private static ShadowRestoreResult reusePublished(Database activeDatabase,
+            Path bundle, Path target, Path parent, Path audit,
+            ShadowRestoreOptions options, RestoreFaultInjector faultInjector)
+            throws Exception {
+        Path noFollowTarget = target.toRealPath(LinkOption.NOFOLLOW_LINKS);
+        Path realTarget = target.toRealPath();
+        if (!noFollowTarget.equals(realTarget)
+                || !Files.isDirectory(noFollowTarget,
+                        LinkOption.NOFOLLOW_LINKS)) {
+            throw new IOException(
+                    "Existing shadow target is not a regular directory");
+        }
+        byte[] bundleManifest = readRegularFile(bundle.resolve(
+                "manifest.json"), "Backup manifest");
+        byte[] shadowManifest = readRegularFile(target.resolve(
+                "backup-manifest.json"), "Published shadow manifest");
+        if (!Arrays.equals(bundleManifest, shadowManifest)) {
+            throw new IOException(
+                    "Existing shadow target belongs to a different backup");
+        }
+        OnlineBackupManifest manifest;
+        try {
+            manifest = OnlineBackupManifestCodec.decode(bundleManifest);
+        } catch (RuntimeException e) {
+            throw new IOException("Backup manifest is invalid", e);
+        }
+        long previousValidationMillis = requireValidatedReport(
+                target.resolve("validation-report.json"), manifest, options);
+        long deadlineNanos = ShadowValidationOpener.deadline(
+                options.getValidationTimeoutMillis());
+        ShadowValidationOpener.validate(activeDatabase, target, manifest,
+                options, deadlineNanos);
+        String parentFsync = forceDirectory(parent, faultInjector,
+                RestoreStep.PARENT_DIRECTORY_FSYNC);
+        try {
+            writeAudit(audit, manifest, options, "VALIDATED", parentFsync);
+        } catch (IOException ignored) {
+            // final 内报告和重验结果是恢复事实；旁路审计失败不回删 final。
+        }
+        return new ShadowRestoreResult(target,
+                target.resolve("validation-report.json"), manifest,
+                options.getShadowGenerationId(), previousValidationMillis);
+    }
+
+    private static byte[] readRegularFile(Path file, String description)
+            throws IOException {
+        if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)
+                || Files.isSymbolicLink(file)) {
+            throw new IOException(description + " is missing");
+        }
+        long size = Files.size(file);
+        if (size <= 0L || size > MAX_REPORT_BYTES) {
+            throw new IOException(description + " size is invalid");
+        }
+        return Files.readAllBytes(file);
+    }
+
+    private static long requireValidatedReport(Path report,
+            OnlineBackupManifest manifest, ShadowRestoreOptions options)
+            throws IOException {
+        JSONObject object;
+        try {
+            JSONValue value = JSONBytesSource.parse(
+                    readRegularFile(report, "Published validation report"),
+                    new JSONValueTarget());
+            object = requireObject(value, "validation report");
+            requireEquals("VALIDATED", requireString(object, "status"),
+                    "validation status");
+            requireEquals(manifest.getBackupId(),
+                    requireUuid(object, "backupId"), "backupId");
+            requireEquals(manifest.getCutId(), requireUuid(object, "cutId"),
+                    "cutId");
+            requireEquals(manifest.getDatabaseId(),
+                    requireUuid(object, "databaseId"), "databaseId");
+            requireEquals(options.getShadowGenerationId(),
+                    requireUuid(object, "shadowGenerationId"),
+                    "shadowGenerationId");
+            if (manifest.getSchemaEpoch()
+                    != requireLong(object, "schemaEpoch")) {
+                throw new IllegalArgumentException(
+                        "Validation report schemaEpoch mismatch");
+            }
+            JSONValue readOnlyOpen = requireMember(object, "readOnlyOpen");
+            if (!(readOnlyOpen instanceof JSONBoolean)
+                    || !((JSONBoolean) readOnlyOpen).getBoolean()) {
+                throw new IllegalArgumentException(
+                        "Validation report does not prove read-only open");
+            }
+            return requireLong(object, "validationMillis");
+        } catch (RuntimeException e) {
+            throw new IOException("Published validation report is invalid", e);
+        }
+    }
+
+    private static JSONObject requireObject(JSONValue value, String name) {
+        if (!(value instanceof JSONObject)) {
+            throw new IllegalArgumentException(name + " is not an object");
+        }
+        JSONObject object = (JSONObject) value;
+        HashSet<String> names = new HashSet<>();
+        for (Map.Entry<String, JSONValue> entry : object.getMembers()) {
+            if (!names.add(entry.getKey())) {
+                throw new IllegalArgumentException(
+                        "Duplicate " + name + " field: " + entry.getKey());
+            }
+        }
+        return object;
+    }
+
+    private static JSONValue requireMember(JSONObject object, String name) {
+        JSONValue value = object.getFirst(name);
+        if (value == null) {
+            throw new IllegalArgumentException(
+                    "Missing validation report field: " + name);
+        }
+        return value;
+    }
+
+    private static String requireString(JSONObject object, String name) {
+        JSONValue value = requireMember(object, name);
+        if (!(value instanceof JSONString)) {
+            throw new IllegalArgumentException(
+                    "Validation report field is not a string: " + name);
+        }
+        return ((JSONString) value).getString();
+    }
+
+    private static UUID requireUuid(JSONObject object, String name) {
+        try {
+            return UUID.fromString(requireString(object, name));
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException(
+                    "Validation report UUID is invalid: " + name, e);
+        }
+    }
+
+    private static long requireLong(JSONObject object, String name) {
+        JSONValue value = requireMember(object, name);
+        if (!(value instanceof JSONNumber)) {
+            throw new IllegalArgumentException(
+                    "Validation report field is not a number: " + name);
+        }
+        return ((JSONNumber) value).getBigDecimal().longValueExact();
+    }
+
+    private static void requireEquals(Object expected, Object actual,
+            String name) {
+        if (!expected.equals(actual)) {
+            throw new IllegalArgumentException(
+                    "Validation report " + name + " mismatch");
         }
     }
 
@@ -234,20 +450,20 @@ public final class ShadowRestoreCoordinator {
         }
     }
 
-    private static String forceDirectory(Path directory)
+    private static String forceDirectory(Path directory,
+            RestoreFaultInjector faultInjector, RestoreStep step)
             throws IOException {
-        try (FileChannel channel = FileChannel.open(directory,
-                StandardOpenOption.READ)) {
-            channel.force(true);
+        try {
+            faultInjector.before(step, directory);
+            try (FileChannel channel = FileChannel.open(directory,
+                    StandardOpenOption.READ)) {
+                channel.force(true);
+            }
             return "SUCCEEDED";
         } catch (AccessDeniedException e) {
             return "UNSUPPORTED";
         } catch (UnsupportedOperationException e) {
             return "UNSUPPORTED";
-        } catch (IOException e) {
-            // 目录 fsync 在部分文件系统上不可用或实现不完整；它是
-            // best-effort durability signal，不应推翻已完成的文件 fsync。
-            return "FAILED";
         }
     }
 

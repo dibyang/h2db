@@ -11,6 +11,11 @@
 | Process exit after participant materialization and before rename | `OnlineBackupBundleFaultMatrixTest#processExitBeforeAtomicRenameNeverPublishesStaging` | No final; complete staging is not published; source reopens and a new task can publish | Pass |
 | Restore checksum | `ShadowRestoreCoordinatorTest#checksumFailureLeavesActiveDatabaseUnchanged` | No shadow final; active database unchanged | Pass |
 | Shadow read-only open | `ShadowRestoreCoordinatorTest#validatesEncryptedShadowWithoutPersistingKey` | Failed open leaves no shadow final | Pass |
+| Shadow artifact copy/file fsync, manifest/report fsync, staging fsync, atomic rename | `ShadowRestoreFaultMatrixTest#prePublishFailuresLeaveNoFinalOrStaging` | No final before rename; remove staging owned by this generation by default; active database remains writable | Pass |
+| Retained shadow failure diagnostics | `ShadowRestoreFaultMatrixTest#retainedFailureReportNeverClaimsValidated` | A retained staging directory reports `FAILED`; an unforced report is never accepted as success evidence | Pass |
+| Shadow parent-directory fsync after rename | `ShadowRestoreFaultMatrixTest#parentFsyncFailureConvergesByIdempotentRetry` | Keep the published final; revalidate and converge on retry with the same bundle, cut, and generation | Pass |
+| Published-shadow retry identity conflict | `ShadowRestoreFaultMatrixTest#publishedRetryRejectsIdentityConflicts` | Fail closed on a bundle, cut, database, or generation mismatch without overwriting the final | Pass |
+| Windows directory `AccessDenied` | `ShadowRestoreFaultMatrixTest#directoryAccessDeniedIsRecordedAsUnsupported` | Record `UNSUPPORTED` and continue without claiming a successful fsync | Pass |
 | In-process route switch | `AdbGenerationActivationCoordinatorTest#convergesForwardWhenInMemoryRouteUpdateFailsAfterPointerCas` | A new pointer permits forward recovery only; finish routing and fencing | Pass |
 | Restart before/after pointer CAS | `AdbGenerationRegistryTest#recoversStrictlyFromPersistedPointerAtEachCrashPoint` | Recover strictly from the persisted pointer | Pass |
 | Rollback after first new write | `AdbGenerationRegistryTest#forbidsRollbackAfterFirstNewGenerationWrite` | Fail closed; never automatically route back to old | Pass |
@@ -20,5 +25,8 @@ Controlled failures before rename remove only staging owned by the current
 backup ID. A hard process exit may leave complete staging, but staging has no
 final-path semantics and must never be manually renamed into a final bundle.
 Failures after rename or pointer CAS follow the persisted final or pointer and
-converge forward. Registry reopen tests model loss of all process-local state.
-The H2 online-backup suite currently passes 77/77 with no skipped tests.
+converge forward. A published shadow is never deleted after a parent-fsync
+failure. Retry reuses it only after the bundle, cut, database, and generation
+identities are revalidated; identity conflicts fail closed. Registry reopen
+tests model loss of all process-local state.
+The H2 online-backup suite currently passes 82/82 with no skipped tests.

@@ -1095,6 +1095,17 @@ java -cp "build/classes/java/legacyTest;build/classes/java/main;build/resources/
 - 加密数据库由调用方提供 cipher/password 完成只读验证；manifest、validation report 和 audit 均不持久化密钥。
 - capability 是进入 validation 的安全认证信号，不是对恶意 provider 的 JVM 沙箱。P9 仍须建立真实 provider 认证清单并验证网络、线程、服务注册和外部副作用契约。
 
+P9.2 故障矩阵补强约束：
+
+- shadow restore 增加仅包内测试可见的确定性故障接缝，不扩大公开 API，也不改变正常路径。
+- artifact 写入/文件 fsync、backup manifest fsync、validation report fsync、staging
+  directory fsync 和 atomic move 任一步骤失败时，final 必须不可见；默认清理本次
+  generation 拥有的 staging，`keepFailedShadow=true` 时保留 `FAILED` 报告。
+- atomic move 后 parent directory fsync 失败时不得删除已经发布的 shadow；相同
+  bundle、cut 和 shadow generation 重试必须重新校验已发布目录并向前收敛。
+- Windows 等平台对目录句柄返回 `AccessDeniedException` 时记录 `UNSUPPORTED`并继续；
+  其他目录 I/O 失败不得伪装为已 fsync。
+
 验证命令：
 
 ```powershell
@@ -1297,11 +1308,31 @@ java -cp "build/classes/java/legacyTest;build/classes/java/main;build/resources/
 - ADB `b92b9c2`增加生产灰度策略，模式严格按 `DISABLED -> GENERATE_ONLY -> SHADOW_VALIDATE -> ACTIVATE`放开；首次生产入口只接受单个已认证 `adb_ldb`，该限制不进入 H2 SPI、bundle 格式或 H2 core。
 - 真实已发布 `h2db-2.3.0.jar`参与兼容测试：旧版本创建的数据文件和传统 zip 可由当前版本打开/恢复；2.3 client 对 2.4 server、2.4 client 对 2.3 server 的普通 JDBC/传统 `BACKUP TO`保持可用，v21 管理操作在协商到 v20 后由客户端本地拒绝；仅按 2.3 API 编译的插件可由当前插件加载器加载。
 - 修复 Windows 显式插件路径解析：只把反斜杠加逗号解释为逗号转义，普通 `C:\...`不再被通用字符串拆分器吞掉反斜杠。
-- 当前 `runOnlineBackupCheck`为 77/77，`runPluginArchitectureCheck`为 140/140；Gradle 制品、`Constants.VERSION/FULL_VERSION`和 bundle manifest 已统一为 `2.4.0-SNAPSHOT`语义。
+- 当前 `runOnlineBackupCheck`为 82/82，`runPluginArchitectureCheck`为 140/140；Gradle 制品、`Constants.VERSION/FULL_VERSION`和 bundle manifest 已统一为 `2.4.0-SNAPSHOT`语义。
 - `AdbOnlineBackupParticipantIntegrationTest#restoresSameMonotonicCutFromH2AndLdbArtifacts`在一个事务中向 MVStore 和 ADB/LDB 写入相同单调序号；恢复后的两边最大序号同为 40，切点后提交的 41 在两边都不存在。
 - `AdbOnlineBackupPerformanceGateTest`在最终全量验收轮次的持续 DML 下测得 30 次 prepare 的 P50/P95/P99/max 为 `0/1/2/2 ms`；500 ms 提交基线为 601，1,012 ms 内出现 809 提交的恢复窗口，达到“5 秒内恢复到基线 90%”门禁，LDB 净文件增长 0 byte。
 - `AdbOnlineBackupMixedLoadGateTest`在 1 MiB 预装 LDB 脏数据、持续 LDB DML、持续 MVStore DDL 和一个未提交 MVStore 长事务并存时，20 次 prepare 的 P50/P95/P99/max 为 `4/7/21/21 ms`，期间完成 48 次 DML 提交和 14 轮 DDL，长事务回滚后为 0 行。详见 `docs/online-backup/p9-performance-report.md`。
 - `OnlineBackupBundleFaultMatrixTest`增加 checksum、artifact/manifest/directory fsync、atomic rename 和 participant materialize 确定性故障；rename 前异常不留 final/staging，rename 后 parent fsync 失败保留 final 并由同一 cut 幂等重试收敛。独立子进程在 participant、manifest 和 staging fsync 全部完成后、atomic rename 前执行 `Runtime.halt`，验证 final 不可见、staging 不会被误发布、源库可重开且新任务可继续发布。结合既有 prepare、shadow open/checksum 和 ADB router/pointer 测试，完整证据见 `docs/online-backup/p9-fault-matrix.md`。
+
+### P9.2 Shadow 发布磁盘与权限故障矩阵
+
+- [x] 增加 shadow artifact 写入/文件 fsync、backup manifest fsync、validation report
+  fsync、staging directory fsync、atomic move 和 parent directory fsync 确定性故障。
+- [x] 验证 move 前失败不留 final/默认 staging，活动数据库继续可写。
+- [x] 验证 `keepFailedShadow=true`保留的 staging 始终写入 `FAILED`报告，不把未完成
+  fsync 的 `VALIDATED`报告作为成功证据。
+- [x] 验证 move 后 parent fsync 失败保留 final，相同 generation 重试重新校验并收敛。
+- [x] 验证目录 fsync 的 Windows `AccessDeniedException`降级为 `UNSUPPORTED`，普通
+  `IOException`仍作为硬失败传播。
+
+实现结果：
+
+- `ShadowRestoreCoordinator`增加包内故障接缝；公开四参数入口继续使用无故障实现。
+- 已发布 shadow 仅在 bundle manifest 字节一致、validation report 的 backup/cut/database/
+  generation/schema 身份一致且只读重验再次通过时复用；冲突目录保持原样并 fail-closed。
+- `ShadowRestoreFaultMatrixTest` 5/5、与既有 `ShadowRestoreCoordinatorTest`组合 18/18；
+  `runOnlineBackupCheck` 82/82、`runPluginArchitectureCheck` 140/140，均无 skipped，
+  Javadoc 和 `TestBackup`、`TestOpenClose`、`TestMVStoreConcurrent`通过。
 
 验收：
 
@@ -1505,7 +1536,7 @@ P99 由 ADB 或专项性能工具对逐操作 report 聚合，不在 H2 core 内
 
 最终命令与结果：
 
-- H2：`runOnlineBackupCheck --rerun-tasks` 77/77；`runPluginArchitectureCheck --rerun-tasks` 140/140；`javadoc`通过；`TestBackup`、`TestOpenClose`和`TestMVStoreConcurrent`通过。
+- H2：`runOnlineBackupCheck --rerun-tasks` 82/82；`runPluginArchitectureCheck --rerun-tasks` 140/140；`javadoc`通过；`TestBackup`、`TestOpenClose`和`TestMVStoreConcurrent`通过。
 - ADB：全量 `test`和`javadoc`通过；持续 DML 吞吐在 1,012 ms 内达到基线 90%以上；混合 DML/DDL/长事务/高脏页门禁通过。
 - LDB：全量 `:test --rerun-tasks`和`:javadoc`通过。
 

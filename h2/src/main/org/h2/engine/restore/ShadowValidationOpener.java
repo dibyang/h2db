@@ -78,7 +78,7 @@ final class ShadowValidationOpener {
         Selection selection = resolveProviders(activeDatabase, manifest,
                 options);
         requireRemaining(deadlineNanos, "H2 validation open");
-        writeStorageMetadata(staging, manifest.getStorageEngineId());
+        ensureStorageMetadata(staging, manifest.getStorageEngineId());
         validateH2Database(staging, manifest, options,
                 selection.coreRegistrations, deadlineNanos);
         validateParticipants(staging, manifest, options,
@@ -326,7 +326,7 @@ final class ShadowValidationOpener {
         }
     }
 
-    private static void writeStorageMetadata(Path staging,
+    private static void ensureStorageMetadata(Path staging,
             String storageEngineId) throws IOException {
         Path h2File = staging.resolve("h2/database.mv.db");
         String databaseName = h2File.toString();
@@ -334,8 +334,18 @@ final class ShadowValidationOpener {
                 databaseName.length() - ".mv.db".length());
         Path metadata = java.nio.file.Paths.get(
                 StorageEngineResolver.storageMetadataFileName(base));
-        BackupBundleVerifier.writeForced(metadata,
-                (storageEngineId + '\n').getBytes(StandardCharsets.UTF_8));
+        byte[] expected =
+                (storageEngineId + '\n').getBytes(StandardCharsets.UTF_8);
+        if (Files.exists(metadata, LinkOption.NOFOLLOW_LINKS)) {
+            if (!Files.isRegularFile(metadata, LinkOption.NOFOLLOW_LINKS)
+                    || Files.isSymbolicLink(metadata)
+                    || !Arrays.equals(expected, Files.readAllBytes(metadata))) {
+                throw new IOException(
+                        "Shadow storage metadata does not match manifest");
+            }
+            return;
+        }
+        BackupBundleVerifier.writeForced(metadata, expected);
     }
 
     private static RegisteredProvider requireRegistered(Database database,

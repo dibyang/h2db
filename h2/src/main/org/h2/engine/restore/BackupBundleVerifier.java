@@ -40,7 +40,8 @@ final class BackupBundleVerifier {
     private BackupBundleVerifier() {
     }
 
-    static VerifiedBundle verifyAndCopy(Path bundle, Path staging)
+    static VerifiedBundle verifyAndCopy(Path bundle, Path staging,
+            ShadowRestoreCoordinator.RestoreFaultInjector faultInjector)
             throws IOException {
         if (!Files.isDirectory(bundle, LinkOption.NOFOLLOW_LINKS)
                 || Files.isSymbolicLink(bundle)) {
@@ -66,9 +67,11 @@ final class BackupBundleVerifier {
         verifyBundleTree(bundle, artifacts.keySet());
         Files.createDirectory(staging);
         for (Artifact artifact : artifacts.values()) {
-            copyAndVerify(bundle, staging, artifact);
+            copyAndVerify(bundle, staging, artifact, faultInjector);
         }
-        writeForced(staging.resolve("backup-manifest.json"), manifestBytes);
+        writeForced(staging.resolve("backup-manifest.json"), manifestBytes,
+                faultInjector,
+                ShadowRestoreCoordinator.RestoreStep.BACKUP_MANIFEST_FSYNC);
         return new VerifiedBundle(manifest, artifacts.keySet());
     }
 
@@ -138,7 +141,9 @@ final class BackupBundleVerifier {
     }
 
     private static void copyAndVerify(Path bundle, Path staging,
-            Artifact artifact) throws IOException {
+            Artifact artifact,
+            ShadowRestoreCoordinator.RestoreFaultInjector faultInjector)
+            throws IOException {
         String relative = normalizeRelativePath(artifact.getPath());
         Path source = resolveInside(bundle, relative);
         Path target = resolveInside(staging, relative);
@@ -160,6 +165,9 @@ final class BackupBundleVerifier {
                 FileChannel output = FileChannel.open(target,
                         StandardOpenOption.CREATE_NEW,
                         StandardOpenOption.WRITE)) {
+            faultInjector.before(
+                    ShadowRestoreCoordinator.RestoreStep.ARTIFACT_COPY,
+                    target);
             int read;
             while ((read = input.read(buffer)) >= 0) {
                 if (read == 0) {
@@ -173,6 +181,9 @@ final class BackupBundleVerifier {
                 }
                 buffer.clear();
             }
+            faultInjector.before(
+                    ShadowRestoreCoordinator.RestoreStep.ARTIFACT_FSYNC,
+                    target);
             output.force(true);
         }
         if (copied != artifact.getLength()
@@ -226,6 +237,21 @@ final class BackupBundleVerifier {
             while (buffer.hasRemaining()) {
                 channel.write(buffer);
             }
+            channel.force(true);
+        }
+    }
+
+    static void writeForced(Path file, byte[] bytes,
+            ShadowRestoreCoordinator.RestoreFaultInjector faultInjector,
+            ShadowRestoreCoordinator.RestoreStep step) throws IOException {
+        Files.createDirectories(file.getParent());
+        try (FileChannel channel = FileChannel.open(file,
+                StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
+            ByteBuffer buffer = ByteBuffer.wrap(bytes);
+            while (buffer.hasRemaining()) {
+                channel.write(buffer);
+            }
+            faultInjector.before(step, file);
             channel.force(true);
         }
     }

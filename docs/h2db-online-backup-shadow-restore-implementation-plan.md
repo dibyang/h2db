@@ -1269,7 +1269,7 @@ java -cp "build/classes/java/legacyTest;build/classes/java/main;build/resources/
 ### P9 ADB/LDB 联调、性能与灰度
 
 - [x] 接入一个真实 ADB/LDB participant，同时保留 fake participant。
-- [ ] ADB 首次灰度配置和 provider allowlist 只允许一个已认证真实 participant；H2 core 不硬编码数量上限。
+- [x] ADB 首次灰度配置和 provider allowlist 只允许一个已认证真实 participant；H2 core 不硬编码数量上限。
 - [x] 使用多个 fake participant 完成顺序、部分 prepare 成功、逆序 abort、共享 deadline 和 manifest 多条目测试。
 - [ ] 放宽真实 participant 数量前，重新执行 barrier 性能、容量和全部故障注入门禁。
 - [ ] 建立 validation-safe provider 认证清单，记录 provider ID、类型、版本范围、必要性和被允许的 validation 行为。
@@ -1283,7 +1283,7 @@ java -cp "build/classes/java/legacyTest;build/classes/java/main;build/resources/
 - [ ] 注入 participant prepare、materialize、checksum、fsync、rename、shadow open 和 router switch 失败。
 - [ ] 在持续 DML、DDL、长事务和高脏页负载下测量 barrier。
 - [ ] 记录 prepare P50/P95/P99/max、吞吐下降、恢复时间和文件增长。
-- [ ] 先启用只生成、不恢复，再启用 shadow validate，最后灰度 activation。
+- [x] 先启用只生成、不恢复，再启用 shadow validate，最后灰度 activation。
 - [ ] 达到门禁前不替换 ADB 默认备份路径。
 - [ ] 编写只读旧库 clone onboarding 手册，明确新 identity、新备份链、原库不变以及后续 activation 步骤。
 - [ ] 更新用户文档、运维文档、兼容说明和回滚手册。
@@ -1293,6 +1293,7 @@ java -cp "build/classes/java/legacyTest;build/classes/java/main;build/resources/
 - LDB `ced22a5`增加 `CheckpointLease`和 `prepareCheckpoint(deadlineNanos)`。prepare 在 DB mutex 内固定 retained Version、各 CF current/immutable MemTable 引用和 `lastSequence`；锁外按 sequence 过滤生成独立 SST/MANIFEST，支持协作中断、失败 staging 清理和幂等 close。LDB 根模块 256 项单元测试、专项原型/生产 API 测试和 Javadoc 通过。
 - ADB `f555d1a`增加真实 `adb_ldb` participant。运行时绑定键为 `(databaseId,generationId)`；prepare 使用 LDB lease，materialize 通过受限 artifact target 输出，validation 只把 manifest 已声明文件复制到隔离临时目录并调用离线 `LDBFactory.check`，不启动业务 scheduler、服务注册或外部网络。ADB 全量测试与 Javadoc 通过。
 - ADB `071d107`增加持久化 generation registry、进程间文件锁、文件 fsync、同目录原子替换、`routeVersion` CAS、进程内 router 和 H2 activation token 协调。测试覆盖 pointer 更新前/后重启、进程内路由更新失败后的 forward recovery、token abort/commit、显式写前回拨以及首次新写后的永久禁止回拨。
+- ADB `b92b9c2`增加生产灰度策略，模式严格按 `DISABLED -> GENERATE_ONLY -> SHADOW_VALIDATE -> ACTIVATE`放开；首次生产入口只接受单个已认证 `adb_ldb`，该限制不进入 H2 SPI、bundle 格式或 H2 core。
 - 真实已发布 `h2db-2.3.0.jar`参与兼容测试：旧版本创建的数据文件和传统 zip 可由当前版本打开/恢复；2.3 client 对 2.4 server、2.4 client 对 2.3 server 的普通 JDBC/传统 `BACKUP TO`保持可用，v21 管理操作在协商到 v20 后由客户端本地拒绝；仅按 2.3 API 编译的插件可由当前插件加载器加载。
 - 修复 Windows 显式插件路径解析：只把反斜杠加逗号解释为逗号转义，普通 `C:\...`不再被通用字符串拆分器吞掉反斜杠。
 - 当前 `runOnlineBackupCheck`为 72/72，`runPluginArchitectureCheck`为 140/140；Gradle 制品、`Constants.VERSION/FULL_VERSION`和 bundle manifest 已统一为 `2.4.0-SNAPSHOT`语义。
@@ -1303,7 +1304,7 @@ java -cp "build/classes/java/legacyTest;build/classes/java/main;build/resources/
 - [ ] `T-H2BR-CRASH-MATRIX-01`
 - [x] `T-H2BR-GENERATION-POINTER-CRASH-01`
 - [x] `T-H2BR-GENERATION-POST-WRITE-NO-ROLLBACK-01`
-- [ ] `T-H2BR-PARTICIPANT-ROLLOUT-LIMIT-01`
+- [x] `T-H2BR-PARTICIPANT-ROLLOUT-LIMIT-01`
 - [x] `T-H2BR-23X-DATAFILE-UPGRADE-01`
 - [x] `T-H2BR-23X-TRADITIONAL-BACKUP-01`
 - [x] `T-H2BR-23X-PLUGIN-COMPAT-01`

@@ -128,7 +128,7 @@ public final class PluginSecurity {
         if (pluginPaths == null || pluginPaths.trim().isEmpty()) {
             return null;
         }
-        String[] paths = org.h2.util.StringUtils.arraySplit(pluginPaths, ',', true);
+        String[] paths = splitPluginPaths(pluginPaths);
         URL[] urls = new URL[paths.length];
         for (int i = 0; i < paths.length; i++) {
             try {
@@ -138,5 +138,25 @@ public final class PluginSecurity {
             }
         }
         return new URLClassLoader(urls, PluginSecurity.class.getClassLoader());
+    }
+
+    private static String[] splitPluginPaths(String pluginPaths) {
+        ArrayList<String> paths = new ArrayList<>();
+        StringBuilder path = new StringBuilder(pluginPaths.length());
+        for (int i = 0, length = pluginPaths.length(); i < length; i++) {
+            char character = pluginPaths.charAt(i);
+            if (character == ',') {
+                paths.add(path.toString().trim());
+                path.setLength(0);
+            } else if (character == '\\' && i + 1 < length
+                    && pluginPaths.charAt(i + 1) == ',') {
+                path.append(',');
+                i++;
+            } else {
+                path.append(character);
+            }
+        }
+        paths.add(path.toString().trim());
+        return paths.toArray(new String[0]);
     }
 }

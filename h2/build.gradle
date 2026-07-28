@@ -287,6 +287,21 @@ task runOnlineBackupCheck(type: Test) {
     exclude '**/*$*.class'
     useJUnitPlatform()
     dependsOn onlineBackupTestClasses
+    doFirst {
+        def candidates = [
+                new File(System.getProperty('user.home'),
+                        '.m2/repository/net/xdob/h2db/h2db/2.3.0/h2db-2.3.0.jar'),
+                file('build/libs/h2db-2.3.0.jar'),
+                file('build/test-m2-release-clean/net/xdob/h2db/h2db/2.3.0/h2db-2.3.0.jar')
+        ]
+        def compatibilityJar = candidates.find { it.isFile() }
+        if (compatibilityJar == null) {
+            throw new GradleException(
+                    'Missing published h2db 2.3.0 compatibility jar')
+        }
+        systemProperty 'h2db.compat23.jar',
+                compatibilityJar.absolutePath
+    }
 }
 
 task longRunTestJar(type: Jar) {

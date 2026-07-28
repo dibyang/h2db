@@ -45,7 +45,6 @@ import org.h2.engine.backup.DatabaseIdentityMetadata.Snapshot;
 import org.h2.jdbc.JdbcConnection;
 import org.h2.mvstore.MVStore;
 import org.h2.tools.Recover;
-import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -348,10 +347,12 @@ public class DatabaseIdentityMetadataTest {
      */
     @Test
     public void legacyVersionReadOnlyOpenPreservesMetadata() throws Exception {
-        Path legacyJar = Paths.get(System.getProperty("user.dir"), "build",
-                "libs", "h2db-2.3.0.jar");
-        Assumptions.assumeTrue(Files.isRegularFile(legacyJar),
-                "缺少 2.3.0 兼容验证 jar");
+        String configuredJar = System.getProperty("h2db.compat23.jar");
+        Path legacyJar = configuredJar != null ? Paths.get(configuredJar)
+                : Paths.get(System.getProperty("user.dir"), "build",
+                        "libs", "h2db-2.3.0.jar");
+        assertTrue(Files.isRegularFile(legacyJar),
+                "缺少 Gradle 解析的 2.3.0 兼容验证 jar: " + legacyJar);
 
         String name = "legacy-readonly";
         Snapshot expected;

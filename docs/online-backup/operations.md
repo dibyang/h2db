@@ -65,6 +65,8 @@ ADB 配置 `vexra.adb.onlineBackup.mode`：
 - pointer CAS 前失败：abort token，清理本次 staging，active 仍为 old。
 - pointer CAS 后失败：禁止自动选择 old；按 pointer 恢复 new 并继续 fence。
 - final bundle 不覆盖、不就地修改；失败只清理本次确定拥有的 staging。
+- 进程强退可能遗留 `.staging-<backupId>`；它不是已发布备份，禁止手工改名。
+  确认对应任务已终止且 final 不存在后，才可按完整 `backupId`精确清理。
 - activation token、snapshot lease 和 LDB checkpoint lease 必须关闭。
 - 清理 old generation 前确认：新实例健康、备份可恢复、审计完成、回滚窗口结束，
   且 registry 状态为 `FENCED`。
@@ -74,5 +76,6 @@ ADB 配置 `vexra.adb.onlineBackup.mode`：
 - H2 `runOnlineBackupCheck`和`runPluginArchitectureCheck`通过。
 - ADB、LDB 全量单元测试和 Javadoc 通过。
 - 2.3.0 数据文件、传统 zip、插件和 TCP 双向兼容矩阵通过。
-- 性能报告满足 prepare 1 秒 SLO，写吞吐恢复且文件增长在容量预算内。
+- 性能报告满足 prepare P99 500 ms、最大值 1 秒 SLO，写吞吐在 5 秒内恢复到
+  基线 90%以上，且文件增长在容量预算内。
 - provider 认证清单、故障矩阵和本手册与发布制品一起归档。

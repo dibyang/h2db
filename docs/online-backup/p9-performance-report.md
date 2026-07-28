@@ -8,7 +8,8 @@
 - 本机 JDK 8、Windows、本地文件系统。
 - ADB 写线程持续执行单行事务。
 - 连续执行 30 次 H2 + LDB prepare/abort。
-- prepare SLO：P99 和最大值不超过 1 秒；停止 barrier 操作后写吞吐应恢复。
+- prepare SLO：P99 不超过 500 ms、最大值不超过 1 秒；停止 barrier 操作后
+  写吞吐在 5 秒内恢复到基线 90%以上。
 
 ## 结果
 
@@ -16,10 +17,11 @@
 | --- | ---: |
 | prepare P50 | 0 ms |
 | prepare P95 | 1 ms |
-| prepare P99 | 3 ms |
-| prepare max | 3 ms |
-| barrier 前 500 ms 提交数 | 622 |
-| barrier 后 500 ms 提交数 | 529 |
+| prepare P99 | 2 ms |
+| prepare max | 2 ms |
+| barrier 前 500 ms 提交数 | 601 |
+| 首个达到 90% 的 500 ms 恢复窗口 | 809 |
+| 恢复到 90% 的时间 | 1,012 ms |
 | 测试期间 LDB 净文件增长 | 0 bytes |
 
 自动门禁为
@@ -31,15 +33,17 @@
 | 指标 | 实测 |
 | --- | ---: |
 | prepare P50 | 4 ms |
-| prepare P95 | 8 ms |
-| prepare P99 | 18 ms |
-| prepare max | 18 ms |
-| 并发 DML 提交 | 57 |
-| DDL create/drop 周期 | 17 |
+| prepare P95 | 7 ms |
+| prepare P99 | 21 ms |
+| prepare max | 21 ms |
+| 并发 DML 提交 | 48 |
+| DDL create/drop 周期 | 14 |
 | 预装脏数据 | 1,048,576 bytes |
 | 长事务结果 | 回滚后 0 行 |
 
 自动门禁为
 `AdbOnlineBackupMixedLoadGateTest#keepsBarrierBoundedUnderMixedLoad`。
-该结果证明当前机器和约定负载满足首期灰度 SLO，不代表对任意磁盘、脏页规模或
+两项门禁均显式断言 P99 不超过 500 ms、最大值不超过 1,000 ms；持续 DML
+门禁还断言吞吐在 5 秒内恢复到基线的 90%以上。该结果证明当前机器和约定负载
+满足首期灰度 SLO，不代表对任意磁盘、脏页规模或
 participant 数量的无条件承诺。放宽真实 participant 数量或改变存储介质前必须重测。

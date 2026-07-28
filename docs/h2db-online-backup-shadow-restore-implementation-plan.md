@@ -565,7 +565,7 @@ ACTIVATION_ABORT
 | P6 Shadow Restore | 安全 staging、验证和只读试打开 | P2/P5 | [x] |
 | P7 Activation | 有界排空、token、fence 和取消 | P1/P6 | [x] |
 | P8 TCP v21 远程适配 | 统一 unwrap API 的 SessionRemote/TcpServerThread 实现 | P4-P7 | [x] |
-| P9 联调与灰度 | ADB/LDB 联调、性能门禁、故障矩阵和发布准备 | P3-P8 | [ ] |
+| P9 联调与灰度 | ADB/LDB 联调、性能门禁、故障矩阵和发布准备 | P3-P8 | [x] |
 
 ## 执行门禁
 
@@ -1296,11 +1296,11 @@ java -cp "build/classes/java/legacyTest;build/classes/java/main;build/resources/
 - ADB `b92b9c2`增加生产灰度策略，模式严格按 `DISABLED -> GENERATE_ONLY -> SHADOW_VALIDATE -> ACTIVATE`放开；首次生产入口只接受单个已认证 `adb_ldb`，该限制不进入 H2 SPI、bundle 格式或 H2 core。
 - 真实已发布 `h2db-2.3.0.jar`参与兼容测试：旧版本创建的数据文件和传统 zip 可由当前版本打开/恢复；2.3 client 对 2.4 server、2.4 client 对 2.3 server 的普通 JDBC/传统 `BACKUP TO`保持可用，v21 管理操作在协商到 v20 后由客户端本地拒绝；仅按 2.3 API 编译的插件可由当前插件加载器加载。
 - 修复 Windows 显式插件路径解析：只把反斜杠加逗号解释为逗号转义，普通 `C:\...`不再被通用字符串拆分器吞掉反斜杠。
-- 当前 `runOnlineBackupCheck`为 75/75，`runPluginArchitectureCheck`为 140/140；Gradle 制品、`Constants.VERSION/FULL_VERSION`和 bundle manifest 已统一为 `2.4.0-SNAPSHOT`语义。
+- 当前 `runOnlineBackupCheck`为 76/76，`runPluginArchitectureCheck`为 140/140；Gradle 制品、`Constants.VERSION/FULL_VERSION`和 bundle manifest 已统一为 `2.4.0-SNAPSHOT`语义。
 - `AdbOnlineBackupParticipantIntegrationTest#restoresSameMonotonicCutFromH2AndLdbArtifacts`在一个事务中向 MVStore 和 ADB/LDB 写入相同单调序号；恢复后的两边最大序号同为 40，切点后提交的 41 在两边都不存在。
-- `AdbOnlineBackupPerformanceGateTest`在全量验收轮次的持续 DML 下测得 30 次 prepare 的 P50/P95/P99/max 为 `0/1/3/3 ms`；500 ms 提交量由基线 622 恢复到 529，LDB 净文件增长 0 byte。
-- `AdbOnlineBackupMixedLoadGateTest`在 1 MiB 预装 LDB 脏数据、持续 LDB DML、持续 MVStore DDL 和一个未提交 MVStore 长事务并存时，20 次 prepare 的 P50/P95/P99/max 为 `4/8/18/18 ms`，期间完成 57 次 DML 提交和 17 轮 DDL，长事务回滚后为 0 行。详见 `docs/online-backup/p9-performance-report.md`。
-- `OnlineBackupBundleFaultMatrixTest`增加 checksum、artifact/manifest/directory fsync、atomic rename 和 participant materialize 确定性故障；rename 前失败不留 final/staging，rename 后 parent fsync 失败保留 final 并由同一 cut 幂等重试收敛。结合既有 prepare、shadow open/checksum 和 ADB router/pointer 测试，完整证据见 `docs/online-backup/p9-fault-matrix.md`。
+- `AdbOnlineBackupPerformanceGateTest`在最终全量验收轮次的持续 DML 下测得 30 次 prepare 的 P50/P95/P99/max 为 `0/1/2/2 ms`；500 ms 提交基线为 601，1,012 ms 内出现 809 提交的恢复窗口，达到“5 秒内恢复到基线 90%”门禁，LDB 净文件增长 0 byte。
+- `AdbOnlineBackupMixedLoadGateTest`在 1 MiB 预装 LDB 脏数据、持续 LDB DML、持续 MVStore DDL 和一个未提交 MVStore 长事务并存时，20 次 prepare 的 P50/P95/P99/max 为 `4/7/21/21 ms`，期间完成 48 次 DML 提交和 14 轮 DDL，长事务回滚后为 0 行。详见 `docs/online-backup/p9-performance-report.md`。
+- `OnlineBackupBundleFaultMatrixTest`增加 checksum、artifact/manifest/directory fsync、atomic rename 和 participant materialize 确定性故障；rename 前异常不留 final/staging，rename 后 parent fsync 失败保留 final 并由同一 cut 幂等重试收敛。独立子进程在 participant、manifest 和 staging fsync 全部完成后、atomic rename 前执行 `Runtime.halt`，验证 final 不可见、staging 不会被误发布、源库可重开且新任务可继续发布。结合既有 prepare、shadow open/checksum 和 ADB router/pointer 测试，完整证据见 `docs/online-backup/p9-fault-matrix.md`。
 
 验收：
 
@@ -1381,31 +1381,31 @@ P99 由 ADB 或专项性能工具对逐操作 report 聚合，不在 H2 core 内
 
 | 风险 | 级别 | 检测 | 缓解 | 状态 |
 | --- | --- | --- | --- | --- |
-| MVStore header 在 barrier 外变化导致切点漂移 | P0 | header race 和恢复 cut 测试 | barrier 内捕获 header，固定 copyLength | [ ] |
-| 关闭空间复用期间文件快速增长 | P1 | file growth 指标和容量测试 | 单 snapshot、TTL、容量门禁、及时 abort | [ ] |
+| MVStore header 在 barrier 外变化导致切点漂移 | P0 | header race 和恢复 cut 测试 | barrier 内捕获 header，固定 copyLength | [x] |
+| 关闭空间复用期间文件快速增长 | P1 | file growth 指标和容量测试 | 单 snapshot、TTL、容量门禁、及时 abort | [x] |
 | materializer 卡死导致 snapshot pin 长期占用和文件增长 | P0 | lease age、active reader、file growth 和 maintenance-blocked 指标 | 保持 pin保证安全，熔断新 snapshot/maintenance，暴露受控重启诊断；禁止强制 unpin | [x] |
-| participant 在 barrier 内阻塞 | P1 | watchdog 和 phase timing | 受信 provider、deadline 契约、预检、灰度认证 | [ ] |
+| participant 在 barrier 内阻塞 | P1 | watchdog 和 phase timing | 受信 provider、deadline 契约、预检、灰度认证 | [x] |
 | 多 participant 逐个消耗完整 timeout，导致总 barrier 时间随数量失控 | P0 | 多 fake participant deadline 测试 | 使用单一绝对 deadline，每次 prepare 只获得剩余预算；首次灰度限制一个真实 participant | [x] |
-| flush 无法在 1 秒内安全中断 | P1 | 高脏页性能测试 | barrier 外预 flush、deadline overrun、重新定义硬上限口径 | [ ] |
-| DDL 只在 commit 处阻塞导致 catalog 已变更 | P0 | DDL race 测试 | DDL 执行前进入 gate | [ ] |
+| flush 无法在 1 秒内安全中断 | P1 | 高脏页性能测试 | barrier 外预 flush、deadline overrun、重新定义硬上限口径 | [x] |
+| DDL 只在 commit 处阻塞导致 catalog 已变更 | P0 | DDL race 测试 | DDL 执行前进入 gate | [x] |
 | quiesce 与 transaction begin 竞态产生漏计事务 | P0 | begin/drain race 测试 | P7 已将 begin/end、drain 状态和计数放入同一 gate lock，并覆盖 DML/DDL race、timeout 和 shutdown | [x] |
-| ADB 把永久 fence 当作可重试错误并复用旧连接 | P0 | embedded/TCP error contract 测试 | P7 embedded 已使用独立 90162、`08006`和 non-transient connection exception，并使旧连接/statement/新 session 永久不可用；TCP parity 留在 P8 | 部分完成 |
+| ADB 把永久 fence 当作可重试错误并复用旧连接 | P0 | embedded/TCP error contract 测试 | 独立 90162、`08006`和 non-transient connection exception；embedded/TCP 均使旧连接、statement 和新 session 永久不可用 | [x] |
 | 新错误复用 deadlock/lock-timeout vendor code 导致诊断和重试策略混淆 | P1 | error-code uniqueness 测试 | P7 已分配 90161-90163，显式映射 SQLState/JDBC 类型并保留独立消息；未复用既有 vendor code | [x] |
-| validation open 触发 plugin 外部副作用 | P0 | fake lifecycle/network/thread provider 测试 | P6 已实现必要 provider 白名单、显式 validation capability、受限 context、trigger/lifecycle 抑制和未认证依赖 fail-closed；P9 仍需完成真实 provider 认证 | 部分完成 |
-| 只读模式被误认为足以隔离插件副作用 | P0 | 只读库中注入网络、线程和服务注册尝试 | P6 已将数据库只读与 provider capability/allowlist 分层，并明确 capability 不是 JVM 沙箱；P9 继续验证真实 provider 外部副作用契约 | 部分完成 |
-| manifest 状态与 atomic publish 冲突 | P1 | crash matrix | final manifest 只写 PUBLISHED，运行状态独立；P5 已验证正常、materialize 失败、路径拒绝和 final 冲突，进程强杀矩阵留在 P9 | 部分完成 |
+| validation open 触发 plugin 外部副作用 | P0 | fake lifecycle/network/thread provider 测试 | 必要 provider 白名单、显式 validation capability、受限 context、trigger/lifecycle 抑制、真实 `adb_ldb`认证和未认证依赖 fail-closed | [x] |
+| 只读模式被误认为足以隔离插件副作用 | P0 | 只读库中注入网络、线程和服务注册尝试 | 数据库只读与 provider capability/allowlist 分层；真实 provider 只执行隔离临时目录中的离线校验 | [x] |
+| manifest 状态与 atomic publish 冲突 | P1 | crash matrix | final manifest 只写 PUBLISHED，运行状态独立；异常注入和 rename 前子进程 `Runtime.halt`均证明 staging 不会误发布 | [x] |
 | 旧版本删除或改写未知 metadata map | P1 | 旧版本往返测试 | 已验证 2.3.0 只读打开保留未知 map；降级写入由 ADB 启动策略禁止 | [x] |
-| 路由 pointer 已切到 new 但进程内路由或 token fence 尚未完成时进程退出 | P1 | ADB 各切换点 crash drill | 只按持久化 active pointer 恢复；pointer 为 new 时启动 new 并继续 fence old，不依赖 token 推断 | [ ] |
-| new generation 已接受写入后自动回拨 old 导致新写入丢失 | P0 | post-write rollback drill | 将首次 new 写入视为不可逆点；禁止自动回拨，采用数据对账后的新切换或一致性备份恢复 | [ ] |
-| TCP 断线遗留 snapshot pin 或 quiesce | P0 | 断线、server stop 和半关闭测试 | handle 绑定 TCP session，连接清理时逆序 abort/close | [ ] |
-| 新客户端向旧服务器发送未知操作码 | P1 | 新旧 client/server 兼容矩阵 | 协商版本低于 21 时客户端本地拒绝 | [ ] |
-| 远程路径逃逸服务端根目录 | P0 | traversal、绝对路径、symlink 测试 | 固定 root、仅相对名称、解析后边界复核 | [ ] |
-| 协调功能意外侵入默认 MVStore 路径 | P0 | feature-off 回归、文件结构和性能基线对比 | 默认关闭、启动期固定；关闭时不创建 gate/metadata/participant，热路径仅保留可预测分支 | [ ] |
+| 路由 pointer 已切到 new 但进程内路由或 token fence 尚未完成时进程退出 | P1 | ADB 各切换点 crash drill | 只按持久化 active pointer 恢复；pointer 为 new 时启动 new 并继续 fence old，不依赖 token 推断 | [x] |
+| new generation 已接受写入后自动回拨 old 导致新写入丢失 | P0 | post-write rollback drill | 将首次 new 写入视为不可逆点；禁止自动回拨，采用数据对账后的新切换或一致性备份恢复 | [x] |
+| TCP 断线遗留 snapshot pin 或 quiesce | P0 | 断线、server stop 和半关闭测试 | handle 绑定 TCP session，连接清理时逆序 abort/close | [x] |
+| 新客户端向旧服务器发送未知操作码 | P1 | 新旧 client/server 兼容矩阵 | 协商版本低于 21 时客户端本地拒绝 | [x] |
+| 远程路径逃逸服务端根目录 | P0 | traversal、绝对路径、symlink 测试 | 固定 root、仅相对名称、解析后边界复核 | [x] |
+| 协调功能意外侵入默认 MVStore 路径 | P0 | feature-off 回归、文件结构和性能基线对比 | 默认关闭、启动期固定；关闭时不创建 gate/metadata/participant，热路径仅保留可预测分支 | [x] |
 | 失败但未修改 catalog 的 DDL 误增 schemaEpoch | P0 | P0.5 失败 DDL 原型测试 | 命令成功路径设置 session 级 catalog-changed 标记；禁止直接使用 `isDdl`事件 | 已验证 |
 | 2.3.x 降级写入导致 schemaEpoch 过期 | P0 | P0.5 2.3.x DDL 往返测试 | 已启用协调功能的数据库只允许旧版本只读应急打开，不支持降级写入 | 已验证 |
 | Recover 逻辑脚本丢失 identity map | P1 | P0.5 Recover 重建测试 | 正式实现扩展 Recover，或明确生成新 identity 并切断旧备份链 | 已验证 |
-| 只读旧库用路径/checksum/调用方 UUID 临时派生 identity，造成备份链漂移或串库 | P0 | copy/rename/compact/onboarding 测试 | 缺少 metadata 时拒绝组合备份；只允许独立可写 clone 生成新 identity 和新链 | [ ] |
-| Gradle artifact 与运行时版本报告不一致，导致 manifest 和诊断误判 | P0 | version metadata consistency test | 发布前统一 Gradle、Constants、manifest、日志和协议版本来源 | [ ] |
+| 只读旧库用路径/checksum/调用方 UUID 临时派生 identity，造成备份链漂移或串库 | P0 | copy/rename/compact/onboarding 测试 | 缺少 metadata 时拒绝组合备份；只允许独立可写 clone 生成新 identity 和新链 | [x] |
+| Gradle artifact 与运行时版本报告不一致，导致 manifest 和诊断误判 | P0 | version metadata consistency test | 发布前统一 Gradle、Constants、manifest、日志和协议版本来源 | [x] |
 
 ## 开放问题与决策记录
 
@@ -1450,7 +1450,27 @@ P99 由 ADB 或专项性能工具对逐操作 report 聚合，不在 H2 core 内
 ## 建议的开放问题讨论顺序
 
 1. OQ-01 至 OQ-13 已全部确认。
-2. P0、P0.5 和 P0.6 已完成；下一步在获得生产代码实施授权后进入 P1 `DatabaseOperationGate`。
+2. P0、P0.5、P0.6 和 P1-P9 已完成；后续放宽真实 participant 数量或替换 ADB 默认备份路径时，必须重新执行性能、容量、故障和兼容门禁。
+
+## 最终验收记录（2026-07-28）
+
+| 需求 | 实现与证据 | 结果 |
+| --- | --- | --- |
+| H2BR-001/002 session 与 participant SPI | P4 多 fake participant 顺序、共享 deadline、逆序 abort；P9 真实 `adb_ldb` participant | 通过 |
+| H2BR-003 有界 barrier | commit/DDL gate、超时清理；持续 DML 与混合负载 P99 分别为 2 ms、21 ms，最大分别为 2 ms、21 ms | 通过 |
+| H2BR-004 prepared snapshot | MVStore lease 固定 header/copyLength，barrier 外物化；LDB retained Version/MemTable lease | 通过 |
+| H2BR-005 manifest | 稳定编码、未知字段容忍、H2 与 participant artifact checksum、atomic publish | 通过 |
+| H2BR-006 shadow restore/validate | 隔离 staging、checksum、allowlist provider、只读试打开、活动库不变 | 通过 |
+| H2BR-007 activation drain | 有界 transaction drain、可取消 token、永久 fence；ADB pointer/CAS forward recovery | 通过 |
+| H2BR-008 可观测性 | 结构化 prepare/publish/restore/activation report、phase timing、稳定 failure reason | 通过 |
+| H2BR-009 取消与异常清理 | prepare/materialize/checksum/fsync/rename/shadow/router 故障矩阵及 rename 前进程强退 | 通过 |
+| H2BR-010 兼容 | 传统 `BACKUP TO`/`Restore`、默认 MVStore、旧插件、2.3.0 文件/zip/TCP 双向矩阵 | 通过 |
+
+最终命令与结果：
+
+- H2：`runOnlineBackupCheck --rerun-tasks` 76/76；`runPluginArchitectureCheck --rerun-tasks` 140/140；`javadoc`通过；`TestBackup`、`TestOpenClose`和`TestMVStoreConcurrent`通过。
+- ADB：全量 `test`和`javadoc`通过；持续 DML 吞吐在 1,012 ms 内达到基线 90%以上；混合 DML/DDL/长事务/高脏页门禁通过。
+- LDB：全量 `:test --rerun-tasks`和`:javadoc`通过。
 
 ## 完成定义
 

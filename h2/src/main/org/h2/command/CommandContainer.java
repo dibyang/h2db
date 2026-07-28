@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Set;
 import org.h2.api.DatabaseEventListener;
 import org.h2.api.ErrorCode;
+import org.h2.command.ddl.DefineCommand;
 import org.h2.command.dml.DataChangeStatement;
 import org.h2.command.dml.Insert;
 import org.h2.engine.Database;
@@ -128,6 +129,11 @@ public class CommandContainer extends Command {
     @Override
     public boolean isTransactional() {
         return prepared.isTransactional();
+    }
+
+    @Override
+    protected boolean isDataDefinition() {
+        return prepared instanceof DefineCommand;
     }
 
     @Override

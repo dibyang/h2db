@@ -203,19 +203,24 @@ public class JdbcPreparedStatement extends JdbcStatement implements PreparedStat
 
     private long executeUpdateInternal() {
         closeOldResultSet();
-        synchronized (session) {
-            try {
-                setExecutingStatement(command);
-                ResultWithGeneratedKeys result = command.executeUpdate(generatedKeysRequest);
-                updateCount = result.getUpdateCount();
-                ResultInterface gk = result.getGeneratedKeys();
-                if (gk != null) {
-                    int id = getNextId(TraceObject.RESULT_SET);
-                    generatedKeys = new JdbcResultSet(conn, this, command, gk, id, true, false, false);
+        command.enterExecutionGate();
+        try {
+            synchronized (session) {
+                try {
+                    setExecutingStatement(command);
+                    ResultWithGeneratedKeys result = command.executeUpdate(generatedKeysRequest);
+                    updateCount = result.getUpdateCount();
+                    ResultInterface gk = result.getGeneratedKeys();
+                    if (gk != null) {
+                        int id = getNextId(TraceObject.RESULT_SET);
+                        generatedKeys = new JdbcResultSet(conn, this, command, gk, id, true, false, false);
+                    }
+                } finally {
+                    setExecutingStatement(null);
                 }
-            } finally {
-                setExecutingStatement(null);
             }
+        } finally {
+            command.exitExecutionGate();
         }
         return updateCount;
     }
@@ -236,33 +241,38 @@ public class JdbcPreparedStatement extends JdbcStatement implements PreparedStat
             debugCodeCall("execute");
             checkClosed();
             boolean returnsResultSet;
-            synchronized (session) {
-                closeOldResultSet();
-                boolean lazy = false;
-                try {
-                    setExecutingStatement(command);
-                    if (command.isQuery()) {
-                        returnsResultSet = true;
-                        boolean scrollable = resultSetType != ResultSet.TYPE_FORWARD_ONLY;
-                        boolean updatable = resultSetConcurrency == ResultSet.CONCUR_UPDATABLE;
-                        ResultInterface result = command.executeQuery(maxRows, scrollable);
-                        lazy = result.isLazy();
-                        resultSet = new JdbcResultSet(conn, this, command, result, id, scrollable, updatable,
-                                cachedColumnLabelMap);
-                    } else {
-                        returnsResultSet = false;
-                        ResultWithGeneratedKeys result = command.executeUpdate(generatedKeysRequest);
-                        updateCount = result.getUpdateCount();
-                        ResultInterface gk = result.getGeneratedKeys();
-                        if (gk != null) {
-                            generatedKeys = new JdbcResultSet(conn, this, command, gk, id, true, false, false);
+            command.enterExecutionGate();
+            try {
+                synchronized (session) {
+                    closeOldResultSet();
+                    boolean lazy = false;
+                    try {
+                        setExecutingStatement(command);
+                        if (command.isQuery()) {
+                            returnsResultSet = true;
+                            boolean scrollable = resultSetType != ResultSet.TYPE_FORWARD_ONLY;
+                            boolean updatable = resultSetConcurrency == ResultSet.CONCUR_UPDATABLE;
+                            ResultInterface result = command.executeQuery(maxRows, scrollable);
+                            lazy = result.isLazy();
+                            resultSet = new JdbcResultSet(conn, this, command, result, id, scrollable, updatable,
+                                    cachedColumnLabelMap);
+                        } else {
+                            returnsResultSet = false;
+                            ResultWithGeneratedKeys result = command.executeUpdate(generatedKeysRequest);
+                            updateCount = result.getUpdateCount();
+                            ResultInterface gk = result.getGeneratedKeys();
+                            if (gk != null) {
+                                generatedKeys = new JdbcResultSet(conn, this, command, gk, id, true, false, false);
+                            }
+                        }
+                    } finally {
+                        if (!lazy) {
+                            setExecutingStatement(null);
                         }
                     }
-                } finally {
-                    if (!lazy) {
-                        setExecutingStatement(null);
-                    }
                 }
+            } finally {
+                command.exitExecutionGate();
             }
             return returnsResultSet;
         } catch (Throwable e) {
@@ -1326,13 +1336,18 @@ public class JdbcPreparedStatement extends JdbcStatement implements PreparedStat
             return null;
         }
         closeOldResultSet();
-        synchronized (session) {
-            try {
-                setExecutingStatement(command);
-                return command.executeBatchUpdate(batchParameters, generatedKeysRequest);
-            } finally {
-                setExecutingStatement(null);
+        command.enterExecutionGate();
+        try {
+            synchronized (session) {
+                try {
+                    setExecutingStatement(command);
+                    return command.executeBatchUpdate(batchParameters, generatedKeysRequest);
+                } finally {
+                    setExecutingStatement(null);
+                }
             }
+        } finally {
+            command.exitExecutionGate();
         }
     }
 

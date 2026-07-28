@@ -15,6 +15,7 @@ import org.h2.engine.DbObject;
 import org.h2.engine.Mode.CharPadding;
 import org.h2.engine.Session;
 import org.h2.engine.SessionLocal;
+import org.h2.engine.backup.DatabaseOperationGate;
 import org.h2.expression.ParameterInterface;
 import org.h2.message.DbException;
 import org.h2.message.Trace;
@@ -27,6 +28,9 @@ import org.h2.util.Utils;
  * Represents a SQL statement. This object is only used on the server side.
  */
 public abstract class Command implements CommandInterface {
+
+    private static final int GATE_COMMIT = 1;
+    private static final int GATE_DDL = 2;
 
     /**
      * The session.
@@ -43,6 +47,10 @@ public abstract class Command implements CommandInterface {
      */
     private final Trace trace;
 
+    private final DatabaseOperationGate operationGate;
+
+    private final ThreadLocal<GateAdmission> gateAdmission;
+
     /**
      * If this query was canceled.
      */
@@ -55,7 +63,10 @@ public abstract class Command implements CommandInterface {
     Command(SessionLocal session, String sql) {
         this.session = session;
         this.sql = sql;
-        trace = getDatabase().getTrace(Trace.COMMAND);
+        Database database = getDatabase();
+        trace = database.getTrace(Trace.COMMAND);
+        operationGate = database.getOperationGate();
+        gateAdmission = operationGate != null ? new ThreadLocal<>() : null;
     }
 
     /**
@@ -237,70 +248,174 @@ public abstract class Command implements CommandInterface {
     public ResultWithGeneratedKeys executeUpdate(Object generatedKeysRequest) {
         long start = 0;
         boolean callStop = true;
-        synchronized (session) {
-            Database database = getDatabase();
-            session.waitIfExclusiveModeEnabled();
-            commitIfNonTransactional();
-            SessionLocal.Savepoint rollback = session.setSavepoint();
-            session.startStatementWithinTransaction(this);
-            DbException ex = null;
-            Session oldSession = session.setThreadLocalSession();
-            try {
-                while (true) {
-                    database.checkPowerOff();
-                    try {
-                        return update(generatedKeysRequest);
-                    } catch (DbException e) {
-                        // cannot retry some commands
-                        if (!isRetryable()) {
-                            throw e;
+        Database database = getDatabase();
+        enterExecutionGate();
+        try {
+            synchronized (session) {
+                session.waitIfExclusiveModeEnabled();
+                commitIfNonTransactional();
+                SessionLocal.Savepoint rollback = session.setSavepoint();
+                session.startStatementWithinTransaction(this);
+                DbException ex = null;
+                Session oldSession = session.setThreadLocalSession();
+                try {
+                    while (true) {
+                        database.checkPowerOff();
+                        try {
+                            return update(generatedKeysRequest);
+                        } catch (DbException e) {
+                            // cannot retry some commands
+                            if (!isRetryable()) {
+                                throw e;
+                            }
+                            start = filterConcurrentUpdate(e, start);
+                        } catch (OutOfMemoryError e) {
+                            callStop = false;
+                            database.shutdownImmediately();
+                            throw DbException.convert(e);
+                        } catch (Throwable e) {
+                            throw DbException.convert(e);
                         }
-                        start = filterConcurrentUpdate(e, start);
-                    } catch (OutOfMemoryError e) {
+                    }
+                } catch (DbException e) {
+                    e = e.addSQL(sql);
+                    SQLException s = e.getSQLException();
+                    database.exceptionThrown(s, sql);
+                    if (s.getErrorCode() == ErrorCode.OUT_OF_MEMORY) {
                         callStop = false;
                         database.shutdownImmediately();
-                        throw DbException.convert(e);
-                    } catch (Throwable e) {
-                        throw DbException.convert(e);
+                        throw e;
                     }
-                }
-            } catch (DbException e) {
-                e = e.addSQL(sql);
-                SQLException s = e.getSQLException();
-                database.exceptionThrown(s, sql);
-                if (s.getErrorCode() == ErrorCode.OUT_OF_MEMORY) {
-                    callStop = false;
-                    database.shutdownImmediately();
+                    try {
+                        database.checkPowerOff();
+                        if (s.getErrorCode() == ErrorCode.DEADLOCK_1) {
+                            session.rollback();
+                        } else {
+                            session.rollbackTo(rollback);
+                        }
+                    } catch (Throwable nested) {
+                        e.addSuppressed(nested);
+                    }
+                    ex = e;
                     throw e;
-                }
-                try {
-                    database.checkPowerOff();
-                    if (s.getErrorCode() == ErrorCode.DEADLOCK_1) {
-                        session.rollback();
-                    } else {
-                        session.rollbackTo(rollback);
-                    }
-                } catch (Throwable nested) {
-                    e.addSuppressed(nested);
-                }
-                ex = e;
-                throw e;
-            } finally {
-                session.resetThreadLocalSession(oldSession);
-                try {
-                    session.endStatement();
-                    if (callStop) {
-                        stop();
-                    }
-                } catch (Throwable nested) {
-                    if (ex == null) {
-                        throw nested;
-                    } else {
-                        ex.addSuppressed(nested);
+                } finally {
+                    session.resetThreadLocalSession(oldSession);
+                    try {
+                        session.endStatement();
+                        if (callStop) {
+                            stop();
+                        }
+                    } catch (Throwable nested) {
+                        if (ex == null) {
+                            throw nested;
+                        } else {
+                            ex.addSuppressed(nested);
+                        }
                     }
                 }
             }
+        } finally {
+            exitExecutionGate();
         }
+    }
+
+    @Override
+    public final void enterExecutionGate() {
+        if (gateAdmission == null) {
+            return;
+        }
+        GateAdmission admission = gateAdmission.get();
+        int type;
+        if (admission != null) {
+            type = admission.type;
+        } else if (isQuery()) {
+            return;
+        } else if (isDataDefinition()) {
+            type = GATE_DDL;
+        } else if (requiresCommitAdmission()) {
+            type = GATE_COMMIT;
+        } else {
+            return;
+        }
+        if (admission == null) {
+            admission = new GateAdmission(type);
+            gateAdmission.set(admission);
+            try {
+                enterOperationGate(type);
+            } catch (RuntimeException | Error e) {
+                gateAdmission.remove();
+                throw e;
+            }
+        } else {
+            enterOperationGate(type);
+            admission.depth++;
+        }
+    }
+
+    private void enterOperationGate(int type) {
+        if (type == GATE_DDL) {
+            operationGate.enterDdl();
+        } else {
+            operationGate.enterCommit();
+        }
+    }
+
+    @Override
+    public final void exitExecutionGate() {
+        if (gateAdmission != null) {
+            GateAdmission admission = gateAdmission.get();
+            if (admission == null) {
+                return;
+            }
+            try {
+                if (admission.type == GATE_DDL) {
+                    operationGate.exitDdl();
+                } else {
+                    operationGate.exitCommit();
+                }
+            } finally {
+                if (--admission.depth == 0) {
+                    gateAdmission.remove();
+                }
+            }
+        }
+    }
+
+    private static final class GateAdmission {
+
+        final int type;
+        int depth = 1;
+
+        GateAdmission(int type) {
+            this.type = type;
+        }
+    }
+
+    private boolean requiresCommitAdmission() {
+        int commandType = getCommandType();
+        switch (commandType) {
+        case CommandInterface.ROLLBACK:
+        case CommandInterface.ROLLBACK_TO_SAVEPOINT:
+        case CommandInterface.ROLLBACK_TRANSACTION:
+        case CommandInterface.SET_AUTOCOMMIT_FALSE:
+            return false;
+        case CommandInterface.COMMIT:
+        case CommandInterface.COMMIT_TRANSACTION:
+        case CommandInterface.PREPARE_COMMIT:
+        case CommandInterface.SET_AUTOCOMMIT_TRUE:
+            return true;
+        default:
+            return !isTransactional() || session.getAutoCommit();
+        }
+    }
+
+    /**
+     * Whether this command changes database definitions.
+     *
+     * @return whether this is a data definition command
+     */
+    protected boolean isDataDefinition() {
+        return false;
     }
 
     private void commitIfNonTransactional() {

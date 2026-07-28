@@ -404,8 +404,13 @@ public class TcpServerThread implements Runnable {
             }
             int old = session.getModificationId();
             ResultWithGeneratedKeys result;
-            synchronized (session) {
-                result = command.executeUpdate(generatedKeysRequest);
+            command.enterExecutionGate();
+            try {
+                synchronized (session) {
+                    result = command.executeUpdate(generatedKeysRequest);
+                }
+            } finally {
+                command.exitExecutionGate();
             }
             int status;
             if (session.isClosed()) {

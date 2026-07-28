@@ -119,6 +119,12 @@ public final class Engine {
         if (database.isClosing()) {
             return null;
         }
+        if (ci.getProperty("ONLINE_BACKUP_COORDINATION") != null
+                && ci.getDbSettings().onlineBackupCoordination
+                        != database.getSettings().onlineBackupCoordination) {
+            throw DbException.get(ErrorCode.UNSUPPORTED_SETTING_COMBINATION,
+                    "ONLINE_BACKUP_COORDINATION conflicts with the opened database");
+        }
         if (user == null) {
             if (database.validateFilePasswordHash(cipher, ci.getFilePasswordHash())) {
                 if (ci.getProperty("AUTHREALM")== null) {

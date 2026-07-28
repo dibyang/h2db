@@ -31,6 +31,7 @@ import org.h2.command.Prepared;
 import org.h2.command.ddl.Analyze;
 import org.h2.command.query.Query;
 import org.h2.constraint.Constraint;
+import org.h2.engine.backup.DatabaseOperationGate;
 import org.h2.index.Index;
 import org.h2.index.QueryExpressionIndex;
 import org.h2.jdbc.JdbcConnection;
@@ -218,6 +219,7 @@ public final class SessionLocal extends Session implements TransactionStore.Roll
     private ArrayList<ValueLob> temporaryLobs;
 
     private Transaction transaction;
+    private boolean operationGateTransaction;
     private final AtomicReference<State> state = new AtomicReference<>(State.INIT);
     private long startStatement = -1;
 
@@ -674,29 +676,43 @@ public final class SessionLocal extends Session implements TransactionStore.Roll
      * @param ddl if the statement was a data definition statement
      */
     public void commit(boolean ddl) {
-        beforeCommitOrRollback();
-        if (hasTransaction()) {
-            TransactionEventContext transactionContext = new TransactionEventContext(ddl, true);
-            fireTransactionEvent(transactionContext, TransactionEvent.BEFORE_COMMIT);
-            try {
-                markUsedTablesAsUpdated();
-                transaction.commit();
-                removeTemporaryLobs(true);
-                endTransaction();
-            } finally {
-                transaction = null;
-            }
-            fireTransactionEvent(transactionContext, TransactionEvent.AFTER_COMMIT);
-            if (!ddl) {
-                // do not clean the temp tables if the last command was a
-                // create/drop
-                cleanTempTables(false);
-                if (autoCommitAtTransactionEnd) {
-                    autoCommit = true;
-                    autoCommitAtTransactionEnd = false;
+        DatabaseOperationGate operationGate = getDatabase().getOperationGate();
+        boolean gateCommit = operationGate != null && hasTransaction() && transaction.hasChanges()
+                && !operationGate.isCommitEnteredByCurrentThread()
+                && !(ddl && operationGate.isDdlEnteredByCurrentThread());
+        if (gateCommit) {
+            operationGate.enterCommit();
+        }
+        try {
+            beforeCommitOrRollback();
+            if (hasTransaction()) {
+                TransactionEventContext transactionContext = new TransactionEventContext(ddl, true);
+                fireTransactionEvent(transactionContext, TransactionEvent.BEFORE_COMMIT);
+                try {
+                    markUsedTablesAsUpdated();
+                    transaction.commit();
+                    removeTemporaryLobs(true);
+                    endTransaction();
+                } finally {
+                    transaction = null;
+                    endOperationGateTransaction();
                 }
+                fireTransactionEvent(transactionContext, TransactionEvent.AFTER_COMMIT);
+                if (!ddl) {
+                    // do not clean the temp tables if the last command was a
+                    // create/drop
+                    cleanTempTables(false);
+                    if (autoCommitAtTransactionEnd) {
+                        autoCommit = true;
+                        autoCommitAtTransactionEnd = false;
+                    }
+                }
+                analyzeTables();
             }
-            analyzeTables();
+        } finally {
+            if (gateCommit) {
+                operationGate.exitCommit();
+            }
         }
     }
 
@@ -906,6 +922,7 @@ public final class SessionLocal extends Session implements TransactionStore.Roll
             if (savepoint == null) {
                 transaction.rollback();
                 transaction = null;
+                endOperationGateTransaction();
             } else {
                 transaction.rollbackToSavepoint(savepoint.transactionSavepoint);
             }
@@ -1695,10 +1712,34 @@ public final class SessionLocal extends Session implements TransactionStore.Roll
                 getDatabase().shutdownImmediately();
                 throw DbException.get(ErrorCode.DATABASE_IS_CLOSED, backgroundException);
             }
-            transaction = store.getTransactionStore().begin(this, this.lockTimeout, id, isolationLevel);
+            DatabaseOperationGate operationGate = getDatabase().getOperationGate();
+            boolean admitted = false;
+            if (operationGate != null) {
+                operationGate.enterTransaction();
+                admitted = true;
+            }
+            try {
+                transaction = store.getTransactionStore().begin(this, this.lockTimeout, id, isolationLevel);
+                operationGateTransaction = admitted;
+            } catch (RuntimeException | Error e) {
+                if (admitted) {
+                    operationGate.exitTransaction();
+                }
+                throw e;
+            }
             startStatement = -1;
         }
         return transaction;
+    }
+
+    private void endOperationGateTransaction() {
+        if (operationGateTransaction) {
+            operationGateTransaction = false;
+            DatabaseOperationGate operationGate = getDatabase().getOperationGate();
+            if (operationGate != null) {
+                operationGate.exitTransaction();
+            }
+        }
     }
 
     private long getStatementSavepoint() {

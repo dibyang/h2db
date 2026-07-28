@@ -184,19 +184,24 @@ public class JdbcStatement extends TraceObject implements Statement, JdbcStateme
         closeOldResultSet();
         sql = JdbcConnection.translateSQL(sql, escapeProcessing);
         CommandInterface command = conn.prepareCommand(sql, fetchSize);
-        synchronized (session) {
-            setExecutingStatement(command);
-            try {
-                ResultWithGeneratedKeys result = command.executeUpdate(generatedKeysRequest);
-                updateCount = result.getUpdateCount();
-                ResultInterface gk = result.getGeneratedKeys();
-                if (gk != null) {
-                    int id = getNextId(TraceObject.RESULT_SET);
-                    generatedKeys = new JdbcResultSet(conn, this, command, gk, id, true, false, false);
+        command.enterExecutionGate();
+        try {
+            synchronized (session) {
+                setExecutingStatement(command);
+                try {
+                    ResultWithGeneratedKeys result = command.executeUpdate(generatedKeysRequest);
+                    updateCount = result.getUpdateCount();
+                    ResultInterface gk = result.getGeneratedKeys();
+                    if (gk != null) {
+                        int id = getNextId(TraceObject.RESULT_SET);
+                        generatedKeys = new JdbcResultSet(conn, this, command, gk, id, true, false, false);
+                    }
+                } finally {
+                    setExecutingStatement(null);
                 }
-            } finally {
-                setExecutingStatement(null);
             }
+        } finally {
+            command.exitExecutionGate();
         }
         command.close();
         return updateCount;
@@ -237,30 +242,35 @@ public class JdbcStatement extends TraceObject implements Statement, JdbcStateme
         CommandInterface command = conn.prepareCommand(sql, fetchSize);
         boolean lazy = false;
         boolean returnsResultSet;
-        synchronized (session) {
-            setExecutingStatement(command);
-            try {
-                if (command.isQuery()) {
-                    returnsResultSet = true;
-                    boolean scrollable = resultSetType != ResultSet.TYPE_FORWARD_ONLY;
-                    boolean updatable = resultSetConcurrency == ResultSet.CONCUR_UPDATABLE;
-                    ResultInterface result = command.executeQuery(maxRows, scrollable);
-                    lazy = result.isLazy();
-                    resultSet = new JdbcResultSet(conn, this, command, result, id, scrollable, updatable, false);
-                } else {
-                    returnsResultSet = false;
-                    ResultWithGeneratedKeys result = command.executeUpdate(generatedKeysRequest);
-                    updateCount = result.getUpdateCount();
-                    ResultInterface gk = result.getGeneratedKeys();
-                    if (gk != null) {
-                        generatedKeys = new JdbcResultSet(conn, this, command, gk, id, true, false, false);
+        command.enterExecutionGate();
+        try {
+            synchronized (session) {
+                setExecutingStatement(command);
+                try {
+                    if (command.isQuery()) {
+                        returnsResultSet = true;
+                        boolean scrollable = resultSetType != ResultSet.TYPE_FORWARD_ONLY;
+                        boolean updatable = resultSetConcurrency == ResultSet.CONCUR_UPDATABLE;
+                        ResultInterface result = command.executeQuery(maxRows, scrollable);
+                        lazy = result.isLazy();
+                        resultSet = new JdbcResultSet(conn, this, command, result, id, scrollable, updatable, false);
+                    } else {
+                        returnsResultSet = false;
+                        ResultWithGeneratedKeys result = command.executeUpdate(generatedKeysRequest);
+                        updateCount = result.getUpdateCount();
+                        ResultInterface gk = result.getGeneratedKeys();
+                        if (gk != null) {
+                            generatedKeys = new JdbcResultSet(conn, this, command, gk, id, true, false, false);
+                        }
+                    }
+                } finally {
+                    if (!lazy) {
+                        setExecutingStatement(null);
                     }
                 }
-            } finally {
-                if (!lazy) {
-                    setExecutingStatement(null);
-                }
             }
+        } finally {
+            command.exitExecutionGate();
         }
         if (!lazy) {
             command.close();

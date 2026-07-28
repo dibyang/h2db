@@ -1,6 +1,6 @@
 # H2DB 组合在线备份与影子恢复实施计划
 
-状态：规划草案，开放问题讨论中  
+状态：实施中（P0-P1 已完成，P2 待开始）
 规划日期：2026-07-28  
 目标仓库：`D:\work\java\h2db`  
 需求来源：`D:\work\java2\vexra-adb\docs\requirements\h2db-online-backup-restore-requirements.md`  
@@ -557,7 +557,7 @@ ACTIVATION_ABORT
 | P0 决策与基线 | 关闭阻塞实现的开放问题，固定口径和兼容基线 | 无 | [x] |
 | P0.5 Identity Metadata Spike | 用最小原型验证内部事务型 MVStore map 的原子性、持久化和兼容性，再决定 OQ-05 | P0 | [x] |
 | P0.6 Snapshot Lease Spike | 验证 prepared snapshot 过期取消、reader 排空和安全解除 reuse-space pin，再决定 OQ-09 | P0 | [x] |
-| P1 Operation Gate | 建立 commit、DDL、transaction 准入和指标接缝 | P0/P0.5 | [ ] |
+| P1 Operation Gate | 建立 commit、DDL、transaction 准入和指标接缝 | P0/P0.5 | [x] |
 | P2 Identity/Epoch | 持久化 databaseId、schemaEpoch，并接收 ADB 提供的运行时 generationId | P0/P1 | [ ] |
 | P3 MVStore Snapshot | 实现固定切点的 prepared snapshot | P0.6/P1 | [ ] |
 | P4 Session 与 SPI | 实现组合 session 和 participant prepare/abort | P2/P3 | [ ] |
@@ -757,29 +757,62 @@ java -cp "build/classes/java/legacyTest;build/classes/java/main;build/resources/
 
 ### P1 DatabaseOperationGate
 
-- [ ] 在 Database 打开阶段解析并固定 `ONLINE_BACKUP_COORDINATION`，默认值为 `FALSE`，不提供运行期 `SET`或管理 API 热切换。
-- [ ] 后续连接配置与已打开 Database 冲突时明确失败，不改变现有实例模式。
-- [ ] 仅在功能启用时创建内部 gate 状态机、deadline 和 counter。
-- [ ] 功能关闭时，commit/DDL/transaction 路径至多执行一个可预测的空值或布尔分支，不增加锁、计数或资源生命周期。
-- [ ] 功能启用时，在 `SessionLocal.commit()`最外层包围 transaction provider 与 H2 commit。
-- [ ] 功能启用时，在非事务型 DDL 修改 catalog 前后进入和退出 DDL gate。
-- [ ] 功能启用时，在 transaction begin/end 路径增加 restore quiesce 所需计数。
-- [ ] 明确 system/lob session 的 bypass 规则和关闭流程。
-- [ ] 确保等待使用 `Condition`或等价机制，不轮询 `Thread.sleep()`。
-- [ ] 增加 prepare、drain、waiter、timeout 和失败原因的只读指标快照。
+- [x] 在 Database 打开阶段解析并固定 `ONLINE_BACKUP_COORDINATION`，默认值为 `FALSE`，不提供运行期 `SET`或管理 API 热切换。
+- [x] 后续连接配置与已打开 Database 冲突时明确失败，不改变现有实例模式。
+- [x] 仅在功能启用时创建内部 gate 状态机、deadline 和 counter。
+- [x] 功能关闭时，commit/DDL/transaction 路径至多执行一个可预测的空值或布尔分支，不增加锁、计数或资源生命周期。
+- [x] 功能启用时，在 `SessionLocal.commit()`最外层包围 transaction provider 与 H2 commit。
+- [x] 功能启用时，在非事务型 DDL 修改 catalog 前后进入和退出 DDL gate。
+- [x] 功能启用时，在 transaction begin/end 路径增加 restore quiesce 所需计数。
+- [x] 明确 system/lob session 的 bypass 规则和关闭流程。
+- [x] 确保等待使用 `Condition`或等价机制，不轮询 `Thread.sleep()`。
+- [x] 增加 prepare、drain、waiter、timeout 和失败原因的只读指标快照。
 
 验收：
 
-- [ ] `T-H2BR-GATE-COMMIT-01`
-- [ ] `T-H2BR-GATE-DDL-01`
-- [ ] `T-H2BR-GATE-TIMEOUT-01`
-- [ ] `T-H2BR-GATE-INTERRUPT-01`
-- [ ] `T-H2BR-GATE-DEADLOCK-01`
-- [ ] `T-H2BR-FEATURE-DISABLED-01`
-- [ ] `T-H2BR-FEATURE-ENABLED-OPEN-01`
-- [ ] `T-H2BR-FEATURE-CONFLICT-01`
-- [ ] `T-H2BR-FEATURE-HOT-SWITCH-REJECT-01`
-- [ ] `T-H2BR-DEFAULT-MVSTORE-REGRESSION-01`
+- [x] `T-H2BR-GATE-COMMIT-01`
+- [x] `T-H2BR-GATE-DDL-01`
+- [x] `T-H2BR-GATE-TIMEOUT-01`
+- [x] `T-H2BR-GATE-INTERRUPT-01`
+- [x] `T-H2BR-GATE-DEADLOCK-01`
+- [x] `T-H2BR-GATE-CLOSE-01`
+- [x] `T-H2BR-BEGIN-DRAIN-RACE-01`
+- [x] `T-H2BR-FEATURE-DISABLED-01`
+- [x] `T-H2BR-FEATURE-ENABLED-OPEN-01`
+- [x] `T-H2BR-FEATURE-CONFLICT-01`
+- [x] `T-H2BR-FEATURE-HOT-SWITCH-REJECT-01`
+- [x] `T-H2BR-DEFAULT-MVSTORE-REGRESSION-01`
+
+实现结论：
+
+- `DatabaseOperationGate`使用公平 `ReentrantLock`和`Condition`实现 `OPEN`、`BACKUP_BARRIER`、`TRANSACTION_DRAIN`和`CLOSED`状态；超时或中断恢复准入并保留线程中断标记。
+- JDBC statement、prepared statement 和 TCP server 在取得`SessionLocal` monitor 前进入命令准入；`Command`内部保留可重入准入，覆盖 JDBC 之外的直接执行路径。专项测试实际取得等待连接的 session monitor，证明 barrier 等待不持有该 monitor。
+- system session 和 lob session 不绕过 transaction/commit 计数；它们与用户 session 共用`SessionLocal`接缝。正常关闭在内部 session 完成提交和关闭后 shutdown gate，异常 power-off 也 shutdown gate 并唤醒等待者。
+- 功能关闭时`Database`不创建 gate，`Command`不创建 gate admission `ThreadLocal`，transaction 和 commit 路径只执行 nullable gate 分支。
+- 指标快照包括状态、active/waiting 数量、barrier/drain 次数、timeout 次数、最近/最长等待时间和结构化最后失败原因。
+
+验证命令：
+
+```powershell
+.\gradlew.bat runOnlineBackupCheck --rerun-tasks
+.\gradlew.bat javadoc
+.\gradlew.bat runPluginArchitectureCheck --rerun-tasks
+.\gradlew.bat legacyTestClasses
+java -cp "build/classes/java/legacyTest;build/classes/java/main;build/resources/legacyTest;build/resources/main" `
+  org.h2.test.LegacyTestGroupRunner `
+  org.h2.test.db.TestBackup `
+  org.h2.test.db.TestOpenClose `
+  org.h2.test.store.TestMVStoreConcurrent
+```
+
+验证结果：
+
+| 范围 | 结果 |
+| --- | --- |
+| P1 专项 | `DatabaseOperationGateTest` 8 项通过，0 failure、0 error、0 skipped。 |
+| JDK 8 / Javadoc | `compileJava`、`compileOnlineBackupTestJava`和`javadoc`通过。 |
+| plugin 回归 | 139 项通过，0 failure、0 error、0 skipped。 |
+| 传统备份与默认 MVStore | `TestBackup`、`TestOpenClose`和`TestMVStoreConcurrent`通过。 |
 
 暂停条件：
 

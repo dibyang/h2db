@@ -602,6 +602,22 @@ public interface CommandInterface extends AutoCloseable {
     ResultWithGeneratedKeys executeUpdate(Object generatedKeysRequest);
 
     /**
+     * Enter the database operation gate before taking the session monitor.
+     * Remote commands do not need local admission and use this default no-op.
+     */
+    default void enterExecutionGate() {
+        // No-op.
+    }
+
+    /**
+     * Leave the database operation gate after releasing the session monitor.
+     * Remote commands do not need local admission and use this default no-op.
+     */
+    default void exitExecutionGate() {
+        // No-op.
+    }
+
+    /**
      * Try to execute the prepared statement batch in one command-level call.
      * Implementations return {@code null} when they do not support a guarded
      * batch fast path, so JDBC can continue with the existing per-row batch

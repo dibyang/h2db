@@ -283,6 +283,14 @@ public class DbSettings extends SettingsBase {
     public final boolean missingStorageReadOnlyDowngrade = get("MISSING_STORAGE_READ_ONLY_DOWNGRADE", false);
 
     /**
+     * Database setting <code>ONLINE_BACKUP_COORDINATION</code>
+     * (default: false).
+     * Whether the database should initialize online backup operation
+     * coordination. This setting is fixed when the database is opened.
+     */
+    public final boolean onlineBackupCoordination = get("ONLINE_BACKUP_COORDINATION", false);
+
+    /**
      * Database setting <code>MV_STORE</code>
      * (default: true).
      * Use the MVStore storage engine.

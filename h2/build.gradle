@@ -124,6 +124,16 @@ sourceSets {
         compileClasspath = sourceSets.main.output + configurations.testCompileClasspath
         runtimeClasspath = output + compileClasspath + configurations.testRuntimeClasspath
     }
+    onlineBackupTest {
+        java {
+            srcDirs = ['src/test-online-backup']
+        }
+        resources {
+            srcDirs = []
+        }
+        compileClasspath = sourceSets.main.output + configurations.testCompileClasspath
+        runtimeClasspath = output + compileClasspath + configurations.testRuntimeClasspath
+    }
     longrun {
         java {
             srcDirs = ['src/longrun']
@@ -266,6 +276,17 @@ task runMvStoreReclamationJUnitCheck(type: Test) {
     exclude '**/*$*.class'
     useJUnitPlatform()
     dependsOn reclamationTestClasses
+}
+
+task runOnlineBackupCheck(type: Test) {
+    description = 'Runs the online backup and shadow restore contract checks.'
+    testClassesDirs = sourceSets.onlineBackupTest.output.classesDirs
+    classpath = sourceSets.onlineBackupTest.runtimeClasspath
+    scanForTestClasses = false
+    include '**/*Test.class'
+    exclude '**/*$*.class'
+    useJUnitPlatform()
+    dependsOn onlineBackupTestClasses
 }
 
 task longRunTestJar(type: Jar) {

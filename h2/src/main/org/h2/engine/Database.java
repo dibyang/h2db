@@ -37,6 +37,7 @@ import org.h2.command.dml.SetTypes;
 import org.h2.constraint.Constraint;
 import org.h2.constraint.Constraint.Type;
 import org.h2.engine.Mode.ModeEnum;
+import org.h2.engine.backup.DatabaseOperationGate;
 import org.h2.index.Cursor;
 import org.h2.index.Index;
 import org.h2.index.IndexType;
@@ -211,6 +212,7 @@ public final class Database implements DataHandler, CastDataProvider {
     private final int pageSize;
     private int defaultTableType = Table.TYPE_CACHED;
     private final DbSettings dbSettings;
+    private final DatabaseOperationGate operationGate;
     private final PluginRegistry pluginRegistry = new PluginRegistry();
     private final String storageEngineId;
     private final StorageEngine storageEngine;
@@ -237,6 +239,7 @@ public final class Database implements DataHandler, CastDataProvider {
         }
         String databaseName = ci.getName();
         this.dbSettings = ci.getDbSettings();
+        this.operationGate = dbSettings.onlineBackupCoordination ? new DatabaseOperationGate() : null;
         this.compareMode = CompareMode.getInstance(null, 0);
         this.persistent = ci.isPersistent();
         this.filePasswordHash = ci.getFilePasswordHash();
@@ -570,6 +573,9 @@ public final class Database implements DataHandler, CastDataProvider {
             } catch (DbException e) {
                 DbException.traceThrowable(e);
             }
+        }
+        if (operationGate != null) {
+            operationGate.shutdown();
         }
         Engine.close(databaseName);
         throw DbException.get(ErrorCode.DATABASE_IS_CLOSED);
@@ -1325,6 +1331,9 @@ public final class Database implements DataHandler, CastDataProvider {
                 }
             }
         } finally {
+            if (operationGate != null) {
+                operationGate.shutdown();
+            }
             Engine.close(databaseName);
         }
         if (lifecycleException != null) {
@@ -2430,6 +2439,15 @@ public final class Database implements DataHandler, CastDataProvider {
 
     public DbSettings getSettings() {
         return dbSettings;
+    }
+
+    /**
+     * Get the optional online backup operation gate.
+     *
+     * @return operation gate, or {@code null} when coordination is disabled
+     */
+    public DatabaseOperationGate getOperationGate() {
+        return operationGate;
     }
 
     /**

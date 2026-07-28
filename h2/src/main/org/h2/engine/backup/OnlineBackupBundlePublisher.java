@@ -48,12 +48,65 @@ final class OnlineBackupBundlePublisher {
     private static final String MANIFEST_NAME = "manifest.json";
     private static final int COPY_BUFFER_SIZE = 64 * 1024;
     private static final long MAX_MANIFEST_BYTES = 4L * 1024L * 1024L;
+    private static final PublishFaultInjector NO_FAULTS =
+            new PublishFaultInjector() {
+                @Override
+                public void before(PublishStep step, Path path)
+                        throws IOException {
+                    // Production publication does not inject failures.
+                }
+            };
+
+    /**
+     * 包内测试使用的发布故障点，不属于公开 API。
+     */
+    enum PublishStep {
+        CHECKSUM,
+        ARTIFACT_FSYNC,
+        MANIFEST_FSYNC,
+        STAGING_DIRECTORY_FSYNC,
+        ATOMIC_MOVE,
+        PARENT_DIRECTORY_FSYNC
+    }
+
+    /**
+     * 包内测试使用的确定性故障接缝。
+     */
+    interface PublishFaultInjector {
+
+        /**
+         * 在指定发布步骤执行前注入失败。
+         *
+         * @param step 发布步骤
+         * @param path 当前步骤操作的路径
+         * @throws IOException 注入的 I/O 失败
+         */
+        void before(PublishStep step, Path path) throws IOException;
+    }
 
     private OnlineBackupBundlePublisher() {
     }
 
     static OnlineBackupPublishResult publish(OnlineBackupSession session,
             Path finalDirectory) throws Exception {
+        return publish(session, finalDirectory, NO_FAULTS);
+    }
+
+    /**
+     * 使用指定包内故障接缝发布 bundle。
+     *
+     * @param session 已准备的备份会话
+     * @param finalDirectory 最终 bundle 目录
+     * @param faultInjector 确定性故障接缝
+     * @return 发布结果
+     * @throws Exception 物化或持久化失败
+     */
+    static OnlineBackupPublishResult publish(OnlineBackupSession session,
+            Path finalDirectory, PublishFaultInjector faultInjector)
+            throws Exception {
+        if (faultInjector == null) {
+            throw new IllegalArgumentException("faultInjector is required");
+        }
         Path parent = finalDirectory.getParent();
         if (parent == null) {
             throw new IllegalArgumentException(
@@ -71,7 +124,8 @@ final class OnlineBackupBundlePublisher {
             OnlineBackupManifest existing = readPublishedManifest(
                     finalDirectory);
             requireSameCut(session, existing);
-            DirectoryFsync parentFsync = forceDirectory(parent);
+            DirectoryFsync parentFsync = forceDirectory(parent, faultInjector,
+                    PublishStep.PARENT_DIRECTORY_FSYNC);
             writeAudit(auditFile, session, "PUBLISHED", true,
                     DirectoryFsync.NOT_APPLICABLE, parentFsync, null);
             return new OnlineBackupPublishResult(finalDirectory, auditFile,
@@ -99,13 +153,13 @@ final class OnlineBackupBundlePublisher {
             String h2RelativePath = "h2/database.mv.db";
             Path h2File = staging.resolve(h2RelativePath);
             session.getH2Snapshot().materialize(h2File.toString());
-            Artifact h2Artifact = checksum(staging, h2File);
+            Artifact h2Artifact = checksum(staging, h2File, faultInjector);
 
             ArrayList<Participant> participantManifests = new ArrayList<>();
             for (OnlineBackupSession.ParticipantMaterializer materializer
                     : session.getParticipantMaterializers()) {
                 participantManifests.add(materializeParticipant(staging,
-                        participantDirectory, materializer));
+                        participantDirectory, materializer, faultInjector));
             }
             OnlineBackupManifest manifest = new OnlineBackupManifest(
                     OnlineBackupManifest.FORMAT_VERSION,
@@ -120,9 +174,12 @@ final class OnlineBackupBundlePublisher {
                     Instant.now().toString(), session.getPreparePauseMillis(),
                     h2Artifact, participantManifests);
             byte[] manifestBytes = OnlineBackupManifestCodec.encode(manifest);
-            writeForcedFile(staging.resolve(MANIFEST_NAME), manifestBytes);
-            DirectoryFsync stagingFsync = forceDirectory(staging);
+            writeForcedFile(staging.resolve(MANIFEST_NAME), manifestBytes,
+                    faultInjector, PublishStep.MANIFEST_FSYNC);
+            DirectoryFsync stagingFsync = forceDirectory(staging,
+                    faultInjector, PublishStep.STAGING_DIRECTORY_FSYNC);
             try {
+                faultInjector.before(PublishStep.ATOMIC_MOVE, finalDirectory);
                 Files.move(staging, finalDirectory,
                         java.nio.file.StandardCopyOption.ATOMIC_MOVE);
             } catch (AtomicMoveNotSupportedException e) {
@@ -133,7 +190,8 @@ final class OnlineBackupBundlePublisher {
                         finalDirectory);
                 requireSameCut(session, existing);
                 deleteTree(staging);
-                DirectoryFsync parentFsync = forceDirectory(parent);
+                DirectoryFsync parentFsync = forceDirectory(parent,
+                        faultInjector, PublishStep.PARENT_DIRECTORY_FSYNC);
                 writeAudit(auditFile, session, "PUBLISHED", true,
                         stagingFsync, parentFsync, null);
                 return new OnlineBackupPublishResult(finalDirectory,
@@ -141,7 +199,8 @@ final class OnlineBackupBundlePublisher {
                         parentFsync);
             }
             published = true;
-            DirectoryFsync parentFsync = forceDirectory(parent);
+            DirectoryFsync parentFsync = forceDirectory(parent, faultInjector,
+                    PublishStep.PARENT_DIRECTORY_FSYNC);
             writeAudit(auditFile, session, "PUBLISHED", false, stagingFsync,
                     parentFsync, null);
             return new OnlineBackupPublishResult(finalDirectory, auditFile,
@@ -176,7 +235,8 @@ final class OnlineBackupBundlePublisher {
 
     private static Participant materializeParticipant(Path staging,
             Path participantDirectory,
-            OnlineBackupSession.ParticipantMaterializer materializer)
+            OnlineBackupSession.ParticipantMaterializer materializer,
+            PublishFaultInjector faultInjector)
             throws Exception {
         OnlineBackupSession.ParticipantSnapshot snapshot =
                 materializer.snapshot;
@@ -227,7 +287,8 @@ final class OnlineBackupBundlePublisher {
         ArrayList<Artifact> artifacts = new ArrayList<>();
         for (String relative : reported) {
             artifacts.add(checksum(staging, root.resolve(
-                    relative.replace('/', java.io.File.separatorChar))));
+                    relative.replace('/', java.io.File.separatorChar)),
+                    faultInjector));
         }
         return new Participant(snapshot.getParticipantId(),
                 snapshot.getPluginId(), snapshot.getPluginVersion(),
@@ -235,8 +296,9 @@ final class OnlineBackupBundlePublisher {
                 snapshot.getMetadata().getAttributes(), artifacts);
     }
 
-    private static Artifact checksum(Path bundleRoot, Path file)
-            throws IOException {
+    private static Artifact checksum(Path bundleRoot, Path file,
+            PublishFaultInjector faultInjector) throws IOException {
+        faultInjector.before(PublishStep.CHECKSUM, file);
         if (!Files.isRegularFile(file,
                 java.nio.file.LinkOption.NOFOLLOW_LINKS)
                 || Files.isSymbolicLink(file)) {
@@ -257,13 +319,15 @@ final class OnlineBackupBundlePublisher {
                 }
             }
         }
-        forceFile(file);
+        forceFile(file, faultInjector);
         String relative = bundleRoot.relativize(file).toString()
                 .replace(java.io.File.separatorChar, '/');
         return new Artifact(relative, Files.size(file), hex(digest.digest()));
     }
 
-    private static void forceFile(Path file) throws IOException {
+    private static void forceFile(Path file,
+            PublishFaultInjector faultInjector) throws IOException {
+        faultInjector.before(PublishStep.ARTIFACT_FSYNC, file);
         try (FileChannel channel = FileChannel.open(file,
                 StandardOpenOption.WRITE)) {
             channel.force(true);
@@ -272,18 +336,34 @@ final class OnlineBackupBundlePublisher {
 
     private static void writeForcedFile(Path file, byte[] bytes)
             throws IOException {
+        writeForcedFile(file, bytes, NO_FAULTS,
+                PublishStep.MANIFEST_FSYNC);
+    }
+
+    private static void writeForcedFile(Path file, byte[] bytes,
+            PublishFaultInjector faultInjector, PublishStep step)
+            throws IOException {
         try (FileChannel channel = FileChannel.open(file,
                 StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
             java.nio.ByteBuffer buffer = java.nio.ByteBuffer.wrap(bytes);
             while (buffer.hasRemaining()) {
                 channel.write(buffer);
             }
+            faultInjector.before(step, file);
             channel.force(true);
         }
     }
 
     private static DirectoryFsync forceDirectory(Path directory)
             throws IOException {
+        return forceDirectory(directory, NO_FAULTS,
+                PublishStep.PARENT_DIRECTORY_FSYNC);
+    }
+
+    private static DirectoryFsync forceDirectory(Path directory,
+            PublishFaultInjector faultInjector, PublishStep step)
+            throws IOException {
+        faultInjector.before(step, directory);
         try (FileChannel channel = FileChannel.open(directory,
                 StandardOpenOption.READ)) {
             channel.force(true);

@@ -5,6 +5,7 @@
  */
 package org.h2.engine.backup;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -39,6 +40,7 @@ public final class OnlineBackupSession implements AutoCloseable {
     public enum State {
         PREPARING,
         PREPARED,
+        MATERIALIZING,
         ABORTING,
         ABORTED,
         CLOSED
@@ -51,6 +53,9 @@ public final class OnlineBackupSession implements AutoCloseable {
 
     private MVStorePreparedSnapshot h2Snapshot;
     private State state = State.PREPARING;
+    private long preparePauseMillis;
+    private Path publishedTarget;
+    private OnlineBackupPublishResult publishedResult;
 
     private OnlineBackupSession(Database database,
             OnlineBackupContext context) {
@@ -81,7 +86,9 @@ public final class OnlineBackupSession implements AutoCloseable {
         Snapshot identity = identityMetadata.requireSnapshot();
         long deadlineNanos = deadline(options.getPrepareTimeoutMillis());
         OnlineBackupContext context = new OnlineBackupContext(
-                UUID.randomUUID(), UUID.randomUUID(),
+                options.getBackupId() != null ? options.getBackupId()
+                        : UUID.randomUUID(),
+                UUID.randomUUID(),
                 identity.getDatabaseId(), identity.getGenerationId(),
                 identity.getSchemaEpoch(), deadlineNanos);
         ArrayList<ResolvedParticipant> resolved =
@@ -92,6 +99,7 @@ public final class OnlineBackupSession implements AutoCloseable {
         synchronized (session) {
             Throwable failure = null;
             try {
+                long barrierStartedNanos = System.nanoTime();
                 long barrierTimeout = requireRemaining(context,
                         "online backup barrier");
                 try (DatabaseOperationGate.BackupBarrier ignored =
@@ -122,6 +130,9 @@ public final class OnlineBackupSession implements AutoCloseable {
                                 "participant " + participant.id);
                     }
                     session.requireH2SnapshotActive();
+                } finally {
+                    session.preparePauseMillis = TimeUnit.NANOSECONDS.toMillis(
+                            System.nanoTime() - barrierStartedNanos);
                 }
                 session.state = State.PREPARED;
                 return session;
@@ -202,6 +213,42 @@ public final class OnlineBackupSession implements AutoCloseable {
     }
 
     /**
+     * Materialize and atomically publish this prepared session.
+     *
+     * @param finalDirectory final bundle directory
+     * @return publish result
+     * @throws Exception if materialization or publication fails
+     */
+    public synchronized OnlineBackupPublishResult publish(
+            Path finalDirectory) throws Exception {
+        if (finalDirectory == null) {
+            throw new IllegalArgumentException(
+                    "finalDirectory must not be null");
+        }
+        Path target = finalDirectory.toAbsolutePath().normalize();
+        if (publishedResult != null) {
+            if (!publishedTarget.equals(target)) {
+                throw new IllegalStateException(
+                        "Session was already published to another target");
+            }
+            return publishedResult;
+        }
+        requirePrepared();
+        state = State.MATERIALIZING;
+        try {
+            publishedResult = OnlineBackupBundlePublisher.publish(this,
+                    target);
+            publishedTarget = target;
+            state = State.PREPARED;
+            return publishedResult;
+        } catch (Throwable e) {
+            state = State.PREPARED;
+            rethrow(e);
+            throw new AssertionError();
+        }
+    }
+
+    /**
      * Abort all prepared resources in reverse order.
      *
      * @throws Exception if cleanup fails
@@ -267,10 +314,32 @@ public final class OnlineBackupSession implements AutoCloseable {
     }
 
     private void requirePrepared() {
-        if (state != State.PREPARED) {
+        if (state != State.PREPARED && state != State.MATERIALIZING) {
             throw new IllegalStateException(
                     "Online backup session is not prepared: " + state);
         }
+    }
+
+    String getDatabaseName() {
+        return database.getShortName();
+    }
+
+    long getPreparePauseMillis() {
+        return preparePauseMillis;
+    }
+
+    List<ParticipantMaterializer> getParticipantMaterializers() {
+        ArrayList<ParticipantMaterializer> result =
+                new ArrayList<>(participants.size());
+        for (ParticipantHandle participant : participants) {
+            result.add(new ParticipantMaterializer(
+                    new ParticipantSnapshot(participant.resolved.id,
+                            participant.resolved.pluginId,
+                            participant.resolved.pluginVersion,
+                            participant.metadata),
+                    participant.prepared));
+        }
+        return result;
     }
 
     private void requireH2SnapshotActive() {
@@ -440,6 +509,18 @@ public final class OnlineBackupSession implements AutoCloseable {
          */
         public PreparedParticipantMetadata getMetadata() {
             return metadata;
+        }
+    }
+
+    static final class ParticipantMaterializer {
+
+        final ParticipantSnapshot snapshot;
+        final PreparedBackupParticipant prepared;
+
+        ParticipantMaterializer(ParticipantSnapshot snapshot,
+                PreparedBackupParticipant prepared) {
+            this.snapshot = snapshot;
+            this.prepared = prepared;
         }
     }
 }

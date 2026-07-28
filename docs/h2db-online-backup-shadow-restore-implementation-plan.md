@@ -1,6 +1,6 @@
 # H2DB 组合在线备份与影子恢复实施计划
 
-状态：实施中（P0-P4 已完成，P5 待开始）
+状态：实施中（P0-P5 已完成，P6 待开始）
 规划日期：2026-07-28  
 目标仓库：`D:\work\java\h2db`  
 需求来源：`D:\work\java2\vexra-adb\docs\requirements\h2db-online-backup-restore-requirements.md`  
@@ -561,7 +561,7 @@ ACTIVATION_ABORT
 | P2 Identity/Epoch | 持久化 databaseId、schemaEpoch，并接收 ADB 提供的运行时 generationId | P0/P1 | [x] |
 | P3 MVStore Snapshot | 实现固定切点的 prepared snapshot | P0.6/P1 | [x] |
 | P4 Session 与 SPI | 实现组合 session 和 participant prepare/abort | P2/P3 | [x] |
-| P5 Bundle Publish | materialize、checksum、manifest 和原子发布 | P4 | [ ] |
+| P5 Bundle Publish | materialize、checksum、manifest 和原子发布 | P4 | [x] |
 | P6 Shadow Restore | 安全 staging、验证和只读试打开 | P2/P5 | [ ] |
 | P7 Activation | 有界排空、token、fence 和取消 | P1/P6 | [ ] |
 | P8 TCP v21 远程适配 | 统一 unwrap API 的 SessionRemote/TcpServerThread 实现 | P4-P7 | [ ] |
@@ -1001,23 +1001,57 @@ java -cp "build/classes/java/legacyTest;build/classes/java/main;build/resources/
 
 ### P5 Bundle、Manifest 与原子发布
 
-- [ ] 实现同父目录 staging 和 final 路径冲突检查。
-- [ ] 为每个 participant 分配受限的相对 artifact root。
-- [ ] materialize H2 和 participant artifacts。
-- [ ] 计算长度、SHA-256 和稳定排序的 artifact 列表。
-- [ ] 实现 `formatVersion=1`的 UTF-8 JSON codec 和未知字段兼容。
-- [ ] 将运行审计状态与不可变 published manifest 分离。
-- [ ] 验证文件 fsync、目录 fsync 能力和 atomic move；不支持时按已确认策略失败或降级。
-- [ ] 处理 final 已存在时的幂等复用或冲突拒绝。
+- [x] 实现同父目录 staging 和 final 路径冲突检查；staging 以 `backupId`确定命名，同一幂等操作重试前清理其未发布 staging。
+- [x] 为每个 participant 分配 Base64URL 编码的独立相对 artifact root；拒绝绝对路径、盘符、空分段、`.`、`..`、反斜杠逃逸、符号链接和未关闭输出流。
+- [x] materialize H2 和 participant artifacts；participant 返回的路径集合必须与实际创建的文件集合完全一致。
+- [x] 计算长度、SHA-256 和稳定排序的 artifact 列表，所有 artifact 在写 manifest 前执行文件 `force(true)`。
+- [x] 实现 `formatVersion=1`的 UTF-8 JSON codec、稳定字段顺序、严格必需字段类型校验和未知字段兼容。
+- [x] 将运行审计状态与不可变 published manifest 分离；final manifest 只允许 `PUBLISHED`，审计文件独立记录 `MATERIALIZING`、`FAILED`或`PUBLISHED`。
+- [x] 文件 fsync 和 atomic move 是成功硬条件；目录 fsync 成功时记录 `SUCCEEDED`，Windows 等平台明确拒绝目录句柄时降级为 `UNSUPPORTED`并写入审计，不把降级伪装为已 fsync。
+- [x] 处理同 session 重复发布、并发同 cut 发布复用，以及 final 身份、cut 或 participant 参数冲突拒绝；不覆盖既有 final。
 
 验收：
 
-- [ ] `T-H2BR-MANIFEST-ROUNDTRIP-01`
-- [ ] `T-H2BR-MANIFEST-UNKNOWN-FIELD-01`
-- [ ] `T-H2BR-BUNDLE-CHECKSUM-01`
-- [ ] `T-H2BR-BUNDLE-ATOMIC-PUBLISH-01`
-- [ ] `T-H2BR-BUNDLE-PUBLISH-FAILURE-01`
-- [ ] `T-H2BR-BUNDLE-IDEMPOTENT-01`
+- [x] `T-H2BR-MANIFEST-ROUNDTRIP-01`
+- [x] `T-H2BR-MANIFEST-UNKNOWN-FIELD-01`
+- [x] `T-H2BR-BUNDLE-CHECKSUM-01`
+- [x] `T-H2BR-BUNDLE-ATOMIC-PUBLISH-01`
+- [x] `T-H2BR-BUNDLE-PUBLISH-FAILURE-01`
+- [x] `T-H2BR-BUNDLE-IDEMPOTENT-01`
+
+实现结果：
+
+- `OnlineBackupOptions`可接收调用方 `backupId`；未提供时仍由 H2 生成。`cutId`始终由每次 prepare 生成。
+- `OnlineBackupSession.publish(Path)`在持有 session 生命周期锁时调用 bundle publisher；相同 target 重复调用返回同一完成结果，其他 target 被拒绝。
+- bundle 固定包含 `manifest.json`、`h2/database.mv.db`和零到多个 `participants/<encoded-id>/...`。
+- participant artifact 输出使用受限 target：每个文件以 `CREATE_NEW`创建，关闭时强制落盘；回调返回前仍有打开流会失败并由 H2 关闭。
+- manifest 记录 format/status、backup/cut/database/generation identity、schema epoch、H2 版本、prepare pause、H2 artifact 以及稳定排序的 participant provenance、cut metadata 和 artifacts。
+- 发布失败只删除本次确定 staging，不删除 final；final 原子移动完成后才对调用方返回成功。
+
+验证命令：
+
+```powershell
+.\gradlew.bat runOnlineBackupCheck --tests org.h2.test.backup.OnlineBackupBundlePublisherTest --rerun-tasks
+.\gradlew.bat runOnlineBackupCheck --rerun-tasks
+.\gradlew.bat javadoc
+.\gradlew.bat runPluginArchitectureCheck --rerun-tasks
+.\gradlew.bat legacyTestClasses
+java -cp "build/classes/java/legacyTest;build/classes/java/main;build/resources/legacyTest;build/resources/main" `
+  org.h2.test.LegacyTestGroupRunner `
+  org.h2.test.db.TestBackup `
+  org.h2.test.db.TestOpenClose `
+  org.h2.test.store.TestMVStoreConcurrent
+```
+
+验证结果：
+
+| 范围 | 结果 |
+| --- | --- |
+| P5 专项 | `OnlineBackupBundlePublisherTest` 7 项通过，0 failure、0 error、0 skipped。 |
+| P1-P5 专项 | `runOnlineBackupCheck` 39 项通过，0 failure、0 error。 |
+| JDK 8 / Javadoc | `compileJava`、`compileOnlineBackupTestJava`和`javadoc`通过。 |
+| plugin 回归 | 140 项通过，0 failure、0 error、0 skipped。 |
+| 传统备份与默认 MVStore | `TestBackup`、`TestOpenClose`和`TestMVStoreConcurrent`通过。 |
 
 ### P6 Shadow Restore 与 Validate
 
@@ -1223,7 +1257,7 @@ P99 由 ADB 或专项性能工具对逐操作 report 聚合，不在 H2 core 内
 | 新错误复用 deadlock/lock-timeout vendor code 导致诊断和重试策略混淆 | P1 | error-code uniqueness 测试 | 分配独立 vendor code，仅复用标准 SQLState 分类 | [ ] |
 | validation open 触发 plugin 外部副作用 | P0 | fake lifecycle/network/thread provider 测试 | 必要 provider 白名单、显式 validation capability、受限 context、未认证依赖 fail-closed | [ ] |
 | 只读模式被误认为足以隔离插件副作用 | P0 | 只读库中注入网络、线程和服务注册尝试 | 将数据库只读与插件 capability/沙箱门禁分离验证，任一层失败都阻止 activation | [ ] |
-| manifest 状态与 atomic publish 冲突 | P1 | crash matrix | final manifest 只写 PUBLISHED，运行状态独立 | [ ] |
+| manifest 状态与 atomic publish 冲突 | P1 | crash matrix | final manifest 只写 PUBLISHED，运行状态独立；P5 已验证正常、materialize 失败、路径拒绝和 final 冲突，进程强杀矩阵留在 P9 | 部分完成 |
 | 旧版本删除或改写未知 metadata map | P1 | 旧版本往返测试 | 已验证 2.3.0 只读打开保留未知 map；降级写入由 ADB 启动策略禁止 | [x] |
 | 路由 pointer 已切到 new 但进程内路由或 token fence 尚未完成时进程退出 | P1 | ADB 各切换点 crash drill | 只按持久化 active pointer 恢复；pointer 为 new 时启动 new 并继续 fence old，不依赖 token 推断 | [ ] |
 | new generation 已接受写入后自动回拨 old 导致新写入丢失 | P0 | post-write rollback drill | 将首次 new 写入视为不可逆点；禁止自动回拨，采用数据对账后的新切换或一致性备份恢复 | [ ] |

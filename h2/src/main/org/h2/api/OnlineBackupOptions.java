@@ -8,6 +8,7 @@ package org.h2.api;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Options for preparing a coordinated online backup session.
@@ -17,6 +18,7 @@ public final class OnlineBackupOptions {
     private final List<String> participantIds;
     private final long prepareTimeoutMillis;
     private final long snapshotLeaseMillis;
+    private final UUID backupId;
 
     /**
      * Create options.
@@ -26,6 +28,19 @@ public final class OnlineBackupOptions {
      * @param snapshotLeaseMillis prepared snapshot lease
      */
     public OnlineBackupOptions(List<String> participantIds,
+            long prepareTimeoutMillis, long snapshotLeaseMillis) {
+        this(null, participantIds, prepareTimeoutMillis, snapshotLeaseMillis);
+    }
+
+    /**
+     * Create options with a caller-provided idempotency key.
+     *
+     * @param backupId backup idempotency key, or {@code null} to generate one
+     * @param participantIds explicitly selected participant IDs
+     * @param prepareTimeoutMillis total prepare timeout
+     * @param snapshotLeaseMillis prepared snapshot lease
+     */
+    public OnlineBackupOptions(UUID backupId, List<String> participantIds,
             long prepareTimeoutMillis, long snapshotLeaseMillis) {
         if (participantIds == null) {
             throw new IllegalArgumentException(
@@ -39,6 +54,7 @@ public final class OnlineBackupOptions {
                 new ArrayList<>(participantIds));
         this.prepareTimeoutMillis = prepareTimeoutMillis;
         this.snapshotLeaseMillis = snapshotLeaseMillis;
+        this.backupId = backupId;
     }
 
     /**
@@ -60,5 +76,12 @@ public final class OnlineBackupOptions {
      */
     public long getSnapshotLeaseMillis() {
         return snapshotLeaseMillis;
+    }
+
+    /**
+     * @return caller-provided backup idempotency key, or {@code null}
+     */
+    public UUID getBackupId() {
+        return backupId;
     }
 }

@@ -812,6 +812,10 @@ public class Schema extends DbObject {
             if (provider != null) {
                 return createTable(provider, data);
             }
+            if (database.isOnlineBackupValidation()) {
+                throw DbException.get(ErrorCode.UNVALIDATABLE_PROVIDER_1,
+                        TableEngineProvider.TYPE + '/' + tableEngine);
+            }
             return database.getTableEngine(tableEngine).createTable(data);
         }
     }

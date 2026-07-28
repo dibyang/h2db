@@ -51,6 +51,19 @@ public final class OnlineBackupManifestCodec {
                 manifest.getSourceGenerationId().toString());
         number(target, "schemaEpoch", manifest.getSchemaEpoch());
         string(target, "h2dbVersion", manifest.getH2dbVersion());
+        string(target, "storageEngineId", manifest.getStorageEngineId());
+        target.member("requiredProviders");
+        target.startArray();
+        for (OnlineBackupManifest.RequiredProvider provider
+                : manifest.getRequiredProviders()) {
+            target.startObject();
+            string(target, "type", provider.getType());
+            string(target, "id", provider.getId());
+            string(target, "pluginId", provider.getPluginId());
+            string(target, "pluginVersion", provider.getPluginVersion());
+            target.endObject();
+        }
+        target.endArray();
         string(target, "createdAt", manifest.getCreatedAt());
         number(target, "preparePauseMillis",
                 manifest.getPreparePauseMillis());
@@ -108,6 +121,28 @@ public final class OnlineBackupManifestCodec {
         UUID generationId = uuid(object, "sourceGenerationId");
         long schemaEpoch = longValue(object, "schemaEpoch");
         String h2dbVersion = string(object, "h2dbVersion");
+        JSONValue storageEngineValue = object.getFirst("storageEngineId");
+        String storageEngineId = storageEngineValue == null ? "mvstore"
+                : string(storageEngineValue, "storageEngineId");
+        ArrayList<OnlineBackupManifest.RequiredProvider> requiredProviders =
+                new ArrayList<>();
+        JSONValue requiredProviderValue = object.getFirst(
+                "requiredProviders");
+        if (requiredProviderValue != null) {
+            JSONArray requiredProviderArray = array(requiredProviderValue,
+                    "requiredProviders");
+            for (JSONValue providerValue
+                    : requiredProviderArray.getArray()) {
+                JSONObject provider = object(providerValue,
+                        "requiredProvider");
+                requiredProviders.add(
+                        new OnlineBackupManifest.RequiredProvider(
+                                string(provider, "type"),
+                                string(provider, "id"),
+                                string(provider, "pluginId"),
+                                string(provider, "pluginVersion")));
+            }
+        }
         String createdAt = string(object, "createdAt");
         long preparePauseMillis = longValue(object, "preparePauseMillis");
         OnlineBackupManifest.Artifact h2dbArtifact = readArtifact(
@@ -147,8 +182,8 @@ public final class OnlineBackupManifestCodec {
         }
         return new OnlineBackupManifest(formatVersion, status, backupId,
                 cutId, databaseName, databaseId, generationId, schemaEpoch,
-                h2dbVersion, createdAt, preparePauseMillis, h2dbArtifact,
-                participants);
+                h2dbVersion, storageEngineId, requiredProviders, createdAt,
+                preparePauseMillis, h2dbArtifact, participants);
     }
 
     private static void writeArtifact(JSONByteArrayTarget target,

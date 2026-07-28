@@ -103,6 +103,11 @@ public final class FunctionAlias extends UserDefinedFunction {
     }
 
     private void init(boolean force) {
+        // Validation open 不执行或反射加载用户代码。若 catalog 后续确实依赖该
+        // alias，load() 会 fail-closed，而不是退回普通打开模式。
+        if (database.isOnlineBackupValidation()) {
+            return;
+        }
         try {
             // at least try to compile the class, otherwise the data type is not
             // initialized if it could be
@@ -117,6 +122,10 @@ public final class FunctionAlias extends UserDefinedFunction {
     private synchronized void load() {
         if (javaMethods != null) {
             return;
+        }
+        if (database.isOnlineBackupValidation()) {
+            throw DbException.get(ErrorCode.UNVALIDATABLE_PROVIDER_1,
+                    "Java alias " + getName());
         }
         if (source != null) {
             loadFromSource();

@@ -28,5 +28,10 @@ public enum PluginSource {
     /**
      * ServiceLoader 发现的 provider。
      */
-    SERVICE_LOADER
+    SERVICE_LOADER,
+
+    /**
+     * Shadow validation 显式白名单注入的 provider。
+     */
+    VALIDATION_ALLOWLIST
 }

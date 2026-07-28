@@ -38,7 +38,8 @@ public final class SecondaryMVStoreStorageEngineProvider implements StorageEngin
         return PluginCapability.STORAGE_PERSISTENT.equals(capability)
                 || PluginCapability.STORAGE_TRANSACTIONAL.equals(capability)
                 || PluginCapability.STORAGE_MVCC.equals(capability)
-                || PluginCapability.STORAGE_BACKUP.equals(capability);
+                || PluginCapability.STORAGE_BACKUP.equals(capability)
+                || PluginCapability.VALIDATION_OPEN.equals(capability);
     }
 
     @Override

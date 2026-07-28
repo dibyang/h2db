@@ -297,6 +297,13 @@ public class DbSettings extends SettingsBase {
     public final String onlineBackupGenerationId = get("ONLINE_BACKUP_GENERATION_ID", "");
 
     /**
+     * 仅供 shadow restore coordinator 使用的内部 fail-closed 模式。
+     * 该模式要求只读访问和线程绑定的 provider 白名单。
+     */
+    public final boolean onlineBackupValidation = get(
+            "ONLINE_BACKUP_VALIDATION", false);
+
+    /**
      * Database setting <code>MV_STORE</code>
      * (default: true).
      * Use the MVStore storage engine.

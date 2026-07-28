@@ -36,6 +36,8 @@ public final class OnlineBackupManifest {
     private final UUID sourceGenerationId;
     private final long schemaEpoch;
     private final String h2dbVersion;
+    private final String storageEngineId;
+    private final List<RequiredProvider> requiredProviders;
     private final String createdAt;
     private final long preparePauseMillis;
     private final Artifact h2dbArtifact;
@@ -44,7 +46,9 @@ public final class OnlineBackupManifest {
     OnlineBackupManifest(int formatVersion, String status, UUID backupId,
             UUID cutId, String databaseName, UUID databaseId,
             UUID sourceGenerationId, long schemaEpoch, String h2dbVersion,
-            String createdAt, long preparePauseMillis, Artifact h2dbArtifact,
+            String storageEngineId,
+            List<RequiredProvider> requiredProviders, String createdAt,
+            long preparePauseMillis, Artifact h2dbArtifact,
             List<Participant> participants) {
         if (formatVersion != FORMAT_VERSION) {
             throw new IllegalArgumentException(
@@ -68,6 +72,22 @@ public final class OnlineBackupManifest {
         }
         this.schemaEpoch = schemaEpoch;
         this.h2dbVersion = requireNonBlank(h2dbVersion, "h2dbVersion");
+        this.storageEngineId = requireNonBlank(storageEngineId,
+                "storageEngineId");
+        ArrayList<RequiredProvider> providerCopy = new ArrayList<>(
+                requireNonNull(requiredProviders, "requiredProviders"));
+        String previousProvider = null;
+        for (RequiredProvider provider : providerCopy) {
+            requireNonNull(provider, "requiredProvider");
+            String key = provider.getType() + '\0' + provider.getId();
+            if (previousProvider != null
+                    && previousProvider.compareTo(key) >= 0) {
+                throw new IllegalArgumentException(
+                        "Required providers must be strictly sorted");
+            }
+            previousProvider = key;
+        }
+        this.requiredProviders = Collections.unmodifiableList(providerCopy);
         this.createdAt = requireNonBlank(createdAt, "createdAt");
         this.preparePauseMillis = preparePauseMillis;
         this.h2dbArtifact = requireNonNull(h2dbArtifact, "h2dbArtifact");
@@ -150,6 +170,20 @@ public final class OnlineBackupManifest {
     }
 
     /**
+     * @return 源数据库 storage engine ID
+     */
+    public String getStorageEngineId() {
+        return storageEngineId;
+    }
+
+    /**
+     * @return 只读打开 H2 catalog 所需的 provider 来源信息
+     */
+    public List<RequiredProvider> getRequiredProviders() {
+        return requiredProviders;
+    }
+
+    /**
      * @return UTC creation timestamp
      */
     public String getCreatedAt() {
@@ -215,6 +249,54 @@ public final class OnlineBackupManifest {
          */
         public String getSha256() {
             return sha256;
+        }
+    }
+
+    /**
+     * Validation open 所需的不可变 provider 来源信息。
+     */
+    public static final class RequiredProvider {
+
+        private final String type;
+        private final String id;
+        private final String pluginId;
+        private final String pluginVersion;
+
+        RequiredProvider(String type, String id, String pluginId,
+                String pluginVersion) {
+            this.type = requireNonBlank(type, "provider type");
+            this.id = requireNonBlank(id, "provider id");
+            this.pluginId = requireNonBlank(pluginId, "provider pluginId");
+            this.pluginVersion = requireNonBlank(pluginVersion,
+                    "provider pluginVersion");
+        }
+
+        /**
+         * @return provider 类型
+         */
+        public String getType() {
+            return type;
+        }
+
+        /**
+         * @return provider ID
+         */
+        public String getId() {
+            return id;
+        }
+
+        /**
+         * @return 所属插件 ID
+         */
+        public String getPluginId() {
+            return pluginId;
+        }
+
+        /**
+         * @return 所属插件版本
+         */
+        public String getPluginVersion() {
+            return pluginVersion;
         }
     }
 

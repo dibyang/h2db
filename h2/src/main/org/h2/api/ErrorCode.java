@@ -2261,7 +2261,13 @@ public class ErrorCode {
      */
     public static final int ONLINE_BACKUP_GENERATION_MISMATCH_2 = 90159;
 
-    // next is 90160
+    /**
+     * Shadow validation 所需 provider 缺失、不兼容、未进入白名单，或未声明
+     * validation-safe capability。
+     */
+    public static final int UNVALIDATABLE_PROVIDER_1 = 90160;
+
+    // next is 90161
 
     private ErrorCode() {
         // utility class

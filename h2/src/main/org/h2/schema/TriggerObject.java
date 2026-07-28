@@ -145,6 +145,11 @@ public final class TriggerObject extends SchemaObject {
     private void setTriggerAction(String triggerClassName, String source, boolean force) {
         this.triggerClassName = triggerClassName;
         this.triggerSource = source;
+        // Shadow validation 只验证 catalog 结构，不加载或初始化可能产生网络、
+        // 线程和外部服务副作用的业务 trigger。
+        if (database.isOnlineBackupValidation()) {
+            return;
+        }
         try {
             load();
         } catch (DbException e) {

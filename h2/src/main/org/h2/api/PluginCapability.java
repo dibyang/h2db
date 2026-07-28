@@ -105,6 +105,17 @@ public final class PluginCapability {
     public static final String ONLINE_BACKUP_PREPARE =
             "onlineBackup.prepare";
 
+    /**
+     * Provider 可在无普通 lifecycle 和外部副作用的模式下参与只读数据库打开。
+     */
+    public static final String VALIDATION_OPEN = "validation.open";
+
+    /**
+     * Participant 可在受限上下文中校验 shadow artifact。
+     */
+    public static final String ONLINE_BACKUP_VALIDATE =
+            "onlineBackup.validate";
+
     private static final List<String> ALL = Collections.unmodifiableList(Arrays.asList(
             TABLE_CREATE,
             SYSTEM_CATALOG,
@@ -123,7 +134,9 @@ public final class PluginCapability {
             STORAGE_VACUUM_ONLINE,
             STORAGE_PUBLISH_CRASH_SAFE,
             STORAGE_TRUNCATE_SAFE,
-            ONLINE_BACKUP_PREPARE));
+            ONLINE_BACKUP_PREPARE,
+            VALIDATION_OPEN,
+            ONLINE_BACKUP_VALIDATE));
 
     /**
      * 获取当前版本已知的 capability 名称。

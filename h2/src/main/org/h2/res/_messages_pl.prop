@@ -198,6 +198,7 @@
 90157=#Column index {0} in GROUP BY clause is outside valid range 1 - {1}
 90158=#Online backup identity metadata is required: {0}
 90159=#Online backup generation mismatch; requested {0}, active {1}
+90160=#Provider required for shadow validation is not validation-safe: {0}
 HY000=Błąd ogólny: {0}
 HY004=Nieznany typ danych: {0}
 HYC00=Cecha nie jest wspierana: {0}

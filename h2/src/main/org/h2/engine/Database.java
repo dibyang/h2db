@@ -40,6 +40,7 @@ import org.h2.engine.Mode.ModeEnum;
 import org.h2.engine.backup.DatabaseIdentityMetadata;
 import org.h2.engine.backup.DatabaseOperationGate;
 import org.h2.engine.backup.OnlineBackupSession;
+import org.h2.engine.restore.ValidationProviderRegistry;
 import org.h2.index.Cursor;
 import org.h2.index.Index;
 import org.h2.index.IndexType;
@@ -244,6 +245,12 @@ public final class Database implements DataHandler, CastDataProvider {
         }
         String databaseName = ci.getName();
         this.dbSettings = ci.getDbSettings();
+        if (dbSettings.onlineBackupValidation
+                && !dbSettings.onlineBackupCoordination) {
+            throw DbException.get(ErrorCode.UNSUPPORTED_SETTING_COMBINATION,
+                    "ONLINE_BACKUP_VALIDATION requires "
+                            + "ONLINE_BACKUP_COORDINATION=TRUE");
+        }
         if (dbSettings.onlineBackupCoordination) {
             this.onlineBackupMetadata = new DatabaseIdentityMetadata(
                     dbSettings.onlineBackupGenerationId);
@@ -273,12 +280,22 @@ public final class Database implements DataHandler, CastDataProvider {
         if ("r".equals(accessModeData)) {
             readOnly = true;
         }
+        if (dbSettings.onlineBackupValidation && !readOnly) {
+            throw DbException.get(ErrorCode.UNSUPPORTED_SETTING_COMBINATION,
+                    "ONLINE_BACKUP_VALIDATION requires ACCESS_MODE_DATA=r");
+        }
         String lockMethodName = ci.getProperty("FILE_LOCK", null);
         fileLockMethod = lockMethodName != null ? FileLock.getFileLockMethod(lockMethodName) :
                             autoServerMode ? FileLockMethod.FILE : FileLockMethod.FS;
         this.databaseURL = ci.getURL();
         String s = ci.removeProperty("DATABASE_EVENT_LISTENER", null);
         if (s != null) {
+            if (dbSettings.onlineBackupValidation) {
+                throw DbException.get(
+                        ErrorCode.UNSUPPORTED_SETTING_COMBINATION,
+                        "DATABASE_EVENT_LISTENER is forbidden in "
+                                + "ONLINE_BACKUP_VALIDATION");
+            }
             setEventListenerClass(StringUtils.trim(s, true, true, '\''));
         }
         s = ci.removeProperty("MODE", null);
@@ -351,10 +368,16 @@ public final class Database implements DataHandler, CastDataProvider {
                         startServer(lock.getUniqueId());
                     }
                 }
-                deleteOldTempFiles();
+                if (!dbSettings.onlineBackupValidation) {
+                    deleteOldTempFiles();
+                }
             }
             BuiltinPlugins.register(pluginRegistry);
-            PluginLoader.loadServiceLoaderPlugins(pluginRegistry, true);
+            if (dbSettings.onlineBackupValidation) {
+                ValidationProviderRegistry.installInto(pluginRegistry);
+            } else {
+                PluginLoader.loadServiceLoaderPlugins(pluginRegistry, true);
+            }
             starting = true;
             if (dbSettings.mvStore) {
                 String requestedStorageEngineId = StorageEngineResolver.resolveRequested(dbSettings);
@@ -435,7 +458,7 @@ public final class Database implements DataHandler, CastDataProvider {
                 int writeDelay = ci.getProperty("WRITE_DELAY", Constants.DEFAULT_WRITE_DELAY);
                 setWriteDelay(writeDelay);
             }
-            if (closeAtVmShutdown) {
+            if (closeAtVmShutdown && !dbSettings.onlineBackupValidation) {
                 OnExitDatabaseCloser.register(this);
             }
         } catch (Throwable e) {
@@ -1299,10 +1322,14 @@ public final class Database implements DataHandler, CastDataProvider {
                 }
             }
         }
-        DatabaseLifecycleEventContext lifecycleContext = new DatabaseLifecycleEventContext(fromShutdownHook);
+        DatabaseLifecycleEventContext lifecycleContext =
+                new DatabaseLifecycleEventContext(fromShutdownHook);
         closeOnlineBackupSession();
-        lifecycleException = fireDatabaseLifecycleEvent(lifecycleContext, DatabaseLifecycleEvent.BEFORE_CLOSE,
-                lifecycleException);
+        if (!dbSettings.onlineBackupValidation) {
+            lifecycleException = fireDatabaseLifecycleEvent(lifecycleContext,
+                    DatabaseLifecycleEvent.BEFORE_CLOSE,
+                    lifecycleException);
+        }
         try {
             try {
                 if (systemSession != null) {
@@ -1347,8 +1374,12 @@ public final class Database implements DataHandler, CastDataProvider {
             } catch (DbException | MVStoreException e) {
                 trace.error(e, "close");
             }
-            lifecycleException = fireDatabaseLifecycleEvent(lifecycleContext, DatabaseLifecycleEvent.AFTER_CLOSE,
-                    lifecycleException);
+            if (!dbSettings.onlineBackupValidation) {
+                lifecycleException = fireDatabaseLifecycleEvent(
+                        lifecycleContext,
+                        DatabaseLifecycleEvent.AFTER_CLOSE,
+                        lifecycleException);
+            }
             trace.info("closed");
             traceSystem.close();
             OnExitDatabaseCloser.unregister(this);
@@ -1627,6 +1658,16 @@ public final class Database implements DataHandler, CastDataProvider {
 
     public String getName() {
         return databaseName;
+    }
+
+    /**
+     * 当前 Database 是否由 shadow restore coordinator 以受限 validation
+     * mode 打开。
+     *
+     * @return validation mode 时返回 {@code true}
+     */
+    public boolean isOnlineBackupValidation() {
+        return dbSettings.onlineBackupValidation;
     }
 
     /**

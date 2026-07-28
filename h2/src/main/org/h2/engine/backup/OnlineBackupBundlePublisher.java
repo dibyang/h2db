@@ -115,6 +115,8 @@ final class OnlineBackupBundlePublisher {
                     session.getContext().getDatabaseId(),
                     session.getContext().getGenerationId(),
                     session.getContext().getSchemaEpoch(), Constants.VERSION,
+                    session.getStorageEngineId(),
+                    session.getRequiredValidationProviders(),
                     Instant.now().toString(), session.getPreparePauseMillis(),
                     h2Artifact, participantManifests);
             byte[] manifestBytes = OnlineBackupManifestCodec.encode(manifest);
@@ -302,9 +304,33 @@ final class OnlineBackupBundlePublisher {
                 || !manifest.getDatabaseId().equals(
                         session.getContext().getDatabaseId())
                 || manifest.getSchemaEpoch()
-                        != session.getContext().getSchemaEpoch()) {
+                        != session.getContext().getSchemaEpoch()
+                || !manifest.getStorageEngineId().equals(
+                        session.getStorageEngineId())) {
             throw new IllegalStateException(
                     "Final bundle already exists with different identity");
+        }
+        List<OnlineBackupManifest.RequiredProvider> expectedProviders =
+                session.getRequiredValidationProviders();
+        List<OnlineBackupManifest.RequiredProvider> actualProviders =
+                manifest.getRequiredProviders();
+        if (expectedProviders.size() != actualProviders.size()) {
+            throw new IllegalStateException(
+                    "Final bundle required providers differ");
+        }
+        for (int i = 0; i < expectedProviders.size(); i++) {
+            OnlineBackupManifest.RequiredProvider left =
+                    expectedProviders.get(i);
+            OnlineBackupManifest.RequiredProvider right =
+                    actualProviders.get(i);
+            if (!left.getType().equals(right.getType())
+                    || !left.getId().equals(right.getId())
+                    || !left.getPluginId().equals(right.getPluginId())
+                    || !left.getPluginVersion().equals(
+                            right.getPluginVersion())) {
+                throw new IllegalStateException(
+                        "Final bundle required providers differ");
+            }
         }
         List<OnlineBackupSession.ParticipantSnapshot> expected =
                 session.getParticipants();

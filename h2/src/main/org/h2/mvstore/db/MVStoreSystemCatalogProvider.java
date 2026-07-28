@@ -43,7 +43,8 @@ public final class MVStoreSystemCatalogProvider implements SystemCatalogProvider
 
     @Override
     public boolean supports(String capability) {
-        return PluginCapability.SYSTEM_CATALOG.equals(capability);
+        return PluginCapability.SYSTEM_CATALOG.equals(capability)
+                || PluginCapability.VALIDATION_OPEN.equals(capability);
     }
 
     @Override

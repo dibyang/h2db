@@ -1,6 +1,6 @@
 # H2DB 组合在线备份与影子恢复实施计划
 
-状态：实施中（P0-P5 已完成，P6 待开始）
+状态：实施中（P0-P6 已完成，P7 待开始）
 规划日期：2026-07-28  
 目标仓库：`D:\work\java\h2db`  
 需求来源：`D:\work\java2\vexra-adb\docs\requirements\h2db-online-backup-restore-requirements.md`  
@@ -562,7 +562,7 @@ ACTIVATION_ABORT
 | P3 MVStore Snapshot | 实现固定切点的 prepared snapshot | P0.6/P1 | [x] |
 | P4 Session 与 SPI | 实现组合 session 和 participant prepare/abort | P2/P3 | [x] |
 | P5 Bundle Publish | materialize、checksum、manifest 和原子发布 | P4 | [x] |
-| P6 Shadow Restore | 安全 staging、验证和只读试打开 | P2/P5 | [ ] |
+| P6 Shadow Restore | 安全 staging、验证和只读试打开 | P2/P5 | [x] |
 | P7 Activation | 有界排空、token、fence 和取消 | P1/P6 | [ ] |
 | P8 TCP v21 远程适配 | 统一 unwrap API 的 SessionRemote/TcpServerThread 实现 | P4-P7 | [ ] |
 | P9 联调与灰度 | ADB/LDB 联调、性能门禁、故障矩阵和发布准备 | P3-P8 | [ ] |
@@ -1055,31 +1055,71 @@ java -cp "build/classes/java/legacyTest;build/classes/java/main;build/resources/
 
 ### P6 Shadow Restore 与 Validate
 
-- [ ] 新增独立 shadow restore API，不修改旧 `Restore.execute()`行为。
-- [ ] 校验 manifest、artifact path、长度和 checksum。
-- [ ] 拒绝 zip-slip/path traversal、symlink 和 shadow root 逃逸。
-- [ ] 恢复到全新 shadow generation，不覆盖已有目录。
-- [ ] 增加只读 `ValidationOpenContext`，且不得携带活动 generation 的可写路径、生产 endpoint 或普通业务运行上下文。
-- [ ] 解析试打开所需 provider，校验 provider 类型、ID、版本、validation capability 和服务端 allowlist。
-- [ ] 只加载必要且已认证的 storage/catalog/data-type/participant provider；非必要业务插件不加载。
-- [ ] 在 validation mode 禁止后台线程、服务注册、迁移、初始化写入、消息发布和生产网络连接。
-- [ ] 对缺失、未认证、版本不兼容或不在 allowlist 内的必要 provider 返回 `UNVALIDATABLE_PROVIDER`，禁止普通模式兜底。
-- [ ] 验证 validation open 和 close 均不触发普通业务 plugin lifecycle。
-- [ ] 试打开 shadow Database 并验证 catalog、databaseId、schemaEpoch。
-- [ ] 失败后保留诊断报告，并按 options 决定保留或清理 shadow。
+- [x] 新增独立 `ShadowRestoreCoordinator.stageAndValidate()` API，不修改旧 `Restore.execute()`行为。
+- [x] 校验 manifest、artifact path、长度和 SHA-256；拒绝未声明、重复、缺失和非普通文件。
+- [x] 拒绝 zip-slip/path traversal、Windows ADS/保留分隔符、symlink/junction、bundle root link 和 shadow root 逃逸。
+- [x] 恢复到全新 staging 和 shadow generation，不覆盖已有目录；验证报告强制落盘后才执行同父目录 atomic move。
+- [x] 增加只读 `OnlineBackupValidationContext`和`ParticipantArtifactSource`；二者不暴露活动 generation 路径、生产 endpoint、scheduler 或可写句柄。
+- [x] 从 manifest 和显式启动选择解析必要 provider，校验类型、ID、插件 ID、版本、`validation.open` capability 和 allowlist。
+- [x] validation open 注册 builtin provider 和显式选择的必要 provider，跳过 `ServiceLoader`；participant 必须精确匹配 manifest 和 allowlist。
+- [x] 建立第一阶段副作用隔离边界：validation Database 强制只读、不注册退出钩子、不扫描普通插件、不执行 trigger 或 Database lifecycle；provider 的网络/线程安全仍由 capability 认证契约保证，不宣称存在 JVM 强制沙箱。
+- [x] 对缺失、未认证、版本不兼容或不在 allowlist 内的必要 provider 返回独立 `UNVALIDATABLE_PROVIDER`错误码 90160，禁止普通模式或反射类名兜底。
+- [x] 验证 validation open 和 close 均不触发普通业务 trigger/Database lifecycle；catalog 确实依赖 Java alias 时 fail-closed。
+- [x] 只读试打开 shadow Database，查询 `INFORMATION_SCHEMA`并验证 storage engine、`databaseId`、`generationId`和`schemaEpoch`。
+- [x] 失败时 final 始终不可见；写入 FAILED 诊断报告，并按 `keepFailedShadow`选择保留或清理 staging。
 
 验收：
 
-- [ ] `T-H2BR-RESTORE-PATH-SAFETY-01`
-- [ ] `T-H2BR-RESTORE-CHECKSUM-01`
-- [ ] `T-H2BR-RESTORE-READONLY-OPEN-01`
-- [ ] `T-H2BR-RESTORE-CATALOG-VALIDATE-01`
-- [ ] `T-H2BR-VALIDATION-PROVIDER-ALLOWLIST-01`
-- [ ] `T-H2BR-VALIDATION-LEGACY-PROVIDER-REJECT-01`
-- [ ] `T-H2BR-VALIDATION-NO-LIFECYCLE-SIDE-EFFECT-01`
-- [ ] `T-H2BR-VALIDATION-NO-NETWORK-OR-THREAD-01`
-- [ ] `T-H2BR-VALIDATION-REQUIRED-PROVIDER-01`
-- [ ] `T-H2BR-RESTORE-ACTIVE-UNCHANGED-01`
+- [x] `T-H2BR-RESTORE-PATH-SAFETY-01`
+- [x] `T-H2BR-RESTORE-CHECKSUM-01`
+- [x] `T-H2BR-RESTORE-READONLY-OPEN-01`
+- [x] `T-H2BR-RESTORE-CATALOG-VALIDATE-01`
+- [x] `T-H2BR-VALIDATION-PROVIDER-ALLOWLIST-01`
+- [x] `T-H2BR-VALIDATION-LEGACY-PROVIDER-REJECT-01`
+- [x] `T-H2BR-VALIDATION-NO-LIFECYCLE-SIDE-EFFECT-01`
+- [x] `T-H2BR-VALIDATION-NO-NETWORK-OR-THREAD-01`
+- [x] `T-H2BR-VALIDATION-REQUIRED-PROVIDER-01`
+- [x] `T-H2BR-RESTORE-ACTIVE-UNCHANGED-01`
+
+实现结果：
+
+- `OnlineBackupManifest`在 format v1 中增加 `storageEngineId`和稳定排序的 `requiredProviders`来源信息；decoder 对缺少这些新增字段的既有 v1 bundle 保持 builtin MVStore 兼容。
+- `BackupBundleVerifier`先验证完整 bundle 文件树，再以 `CREATE_NEW`复制到 staging；每个文件同时校验长度和 SHA-256 并执行 `force(true)`。
+- `ShadowRestoreOptions`携带新 generation ID、participant 精确 allowlist、额外必要 core provider 选择、共享 validation deadline、失败保留策略和仅在内存中使用的解密参数。
+- `ValidationProviderRegistry`使用一次性线程绑定 scope；validation Database 只能消费一次，直接在 JDBC URL 中启用内部 validation mode 会以 90160 失败。
+- validation Database 强制 `ACCESS_MODE_DATA=r`、`IFEXISTS=TRUE`和协调模式，跳过 `ServiceLoader`、临时文件清理、VM shutdown 注册及普通关闭 lifecycle。
+- builtin storage/catalog/table provider 显式声明 `validation.open`；自定义必要 provider 必须同时满足来源版本、capability 和显式 allowlist。
+- participant validation 只获得身份/epoch 上下文以及 manifest 已声明 artifact 的稳定只读流；旧 participant 即使进入 allowlist，也会因缺少 `onlineBackup.validate` capability 而 fail-closed。
+- trigger 定义在 validation open 中保留 catalog 元数据但不加载业务类；Java alias 被实际解析时返回 90160；旧 table engine 反射兜底在 validation mode 中被禁止。
+- 成功路径在 shadow 内保存不可变 `backup-manifest.json`和强制落盘的 `validation-report.json`；旁路审计独立记录阶段和目录 fsync 结果。
+- 加密数据库由调用方提供 cipher/password 完成只读验证；manifest、validation report 和 audit 均不持久化密钥。
+- capability 是进入 validation 的安全认证信号，不是对恶意 provider 的 JVM 沙箱。P9 仍须建立真实 provider 认证清单并验证网络、线程、服务注册和外部副作用契约。
+
+验证命令：
+
+```powershell
+.\gradlew.bat compileJava compileOnlineBackupTestJava
+.\gradlew.bat runOnlineBackupCheck --tests org.h2.test.backup.ShadowRestoreCoordinatorTest --rerun-tasks
+.\gradlew.bat runOnlineBackupCheck --rerun-tasks
+.\gradlew.bat runPluginArchitectureCheck --rerun-tasks
+.\gradlew.bat javadoc
+.\gradlew.bat legacyTestClasses
+java -cp "build/classes/java/legacyTest;build/classes/java/main;build/resources/legacyTest;build/resources/main" `
+  org.h2.test.LegacyTestGroupRunner `
+  org.h2.test.db.TestBackup `
+  org.h2.test.db.TestOpenClose `
+  org.h2.test.store.TestMVStoreConcurrent
+```
+
+验证结果：
+
+| 范围 | 结果 |
+| --- | --- |
+| P6 专项 | `ShadowRestoreCoordinatorTest` 13 项通过，0 failure、0 error、0 skipped。 |
+| P1-P6 专项 | `runOnlineBackupCheck` 52 项通过，0 failure、0 error、0 skipped。 |
+| JDK 8 / Javadoc | `compileJava`、`compileOnlineBackupTestJava`和`javadoc`通过。 |
+| plugin 回归 | 140 项通过，0 failure、0 error、0 skipped。 |
+| 传统备份与默认 MVStore | `TestBackup`、`TestOpenClose`和`TestMVStoreConcurrent`通过。 |
 
 ### P7 Activation、Drain 与 Fence
 
@@ -1255,8 +1295,8 @@ P99 由 ADB 或专项性能工具对逐操作 report 聚合，不在 H2 core 内
 | quiesce 与 transaction begin 竞态产生漏计事务 | P0 | begin/drain race 测试 | begin/end 与状态检查在同一 gate 协议内 | [ ] |
 | ADB 把永久 fence 当作可重试错误并复用旧连接 | P0 | embedded/TCP error contract 测试 | 独立 vendor code、`08006`和 non-transient connection exception；fence 后强制作废旧连接 | [ ] |
 | 新错误复用 deadlock/lock-timeout vendor code 导致诊断和重试策略混淆 | P1 | error-code uniqueness 测试 | 分配独立 vendor code，仅复用标准 SQLState 分类 | [ ] |
-| validation open 触发 plugin 外部副作用 | P0 | fake lifecycle/network/thread provider 测试 | 必要 provider 白名单、显式 validation capability、受限 context、未认证依赖 fail-closed | [ ] |
-| 只读模式被误认为足以隔离插件副作用 | P0 | 只读库中注入网络、线程和服务注册尝试 | 将数据库只读与插件 capability/沙箱门禁分离验证，任一层失败都阻止 activation | [ ] |
+| validation open 触发 plugin 外部副作用 | P0 | fake lifecycle/network/thread provider 测试 | P6 已实现必要 provider 白名单、显式 validation capability、受限 context、trigger/lifecycle 抑制和未认证依赖 fail-closed；P9 仍需完成真实 provider 认证 | 部分完成 |
+| 只读模式被误认为足以隔离插件副作用 | P0 | 只读库中注入网络、线程和服务注册尝试 | P6 已将数据库只读与 provider capability/allowlist 分层，并明确 capability 不是 JVM 沙箱；P9 继续验证真实 provider 外部副作用契约 | 部分完成 |
 | manifest 状态与 atomic publish 冲突 | P1 | crash matrix | final manifest 只写 PUBLISHED，运行状态独立；P5 已验证正常、materialize 失败、路径拒绝和 final 冲突，进程强杀矩阵留在 P9 | 部分完成 |
 | 旧版本删除或改写未知 metadata map | P1 | 旧版本往返测试 | 已验证 2.3.0 只读打开保留未知 map；降级写入由 ADB 启动策略禁止 | [x] |
 | 路由 pointer 已切到 new 但进程内路由或 token fence 尚未完成时进程退出 | P1 | ADB 各切换点 crash drill | 只按持久化 active pointer 恢复；pointer 为 new 时启动 new 并继续 fence old，不依赖 token 推断 | [ ] |

@@ -23,6 +23,8 @@ import org.h2.api.PluginCapability;
 import org.h2.api.PluginProvider;
 import org.h2.api.PreparedBackupParticipant;
 import org.h2.api.PreparedParticipantMetadata;
+import org.h2.api.StorageEngineProvider;
+import org.h2.api.SystemCatalogProvider;
 import org.h2.engine.Database;
 import org.h2.engine.PluginRegistry.RegisteredProvider;
 import org.h2.engine.backup.DatabaseIdentityMetadata.Snapshot;
@@ -326,6 +328,39 @@ public final class OnlineBackupSession implements AutoCloseable {
 
     long getPreparePauseMillis() {
         return preparePauseMillis;
+    }
+
+    String getStorageEngineId() {
+        return database.getStorageEngineId();
+    }
+
+    List<OnlineBackupManifest.RequiredProvider>
+            getRequiredValidationProviders() {
+        ArrayList<OnlineBackupManifest.RequiredProvider> result =
+                new ArrayList<>();
+        addRequiredProvider(result, StorageEngineProvider.TYPE,
+                database.getStorageEngineId());
+        addRequiredProvider(result, SystemCatalogProvider.TYPE,
+                database.getSystemCatalogProvider().getId());
+        result.sort(Comparator
+                .comparing(OnlineBackupManifest.RequiredProvider::getType)
+                .thenComparing(
+                        OnlineBackupManifest.RequiredProvider::getId));
+        return result;
+    }
+
+    private void addRequiredProvider(
+            List<OnlineBackupManifest.RequiredProvider> result, String type,
+            String id) {
+        RegisteredProvider registered = database.getPluginRegistry()
+                .getProviders(type).get(id);
+        if (registered == null) {
+            throw new IllegalStateException(
+                    "Required provider is not registered: " + type + '/'
+                            + id);
+        }
+        result.add(new OnlineBackupManifest.RequiredProvider(type, id,
+                registered.getPluginId(), registered.getPluginVersion()));
     }
 
     List<ParticipantMaterializer> getParticipantMaterializers() {

@@ -37,7 +37,8 @@ public final class MVStoreTableEngineProvider implements TableEngineProvider {
 
     @Override
     public boolean supports(String capability) {
-        return PluginCapability.TABLE_CREATE.equals(capability);
+        return PluginCapability.TABLE_CREATE.equals(capability)
+                || PluginCapability.VALIDATION_OPEN.equals(capability);
     }
 
     @Override

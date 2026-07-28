@@ -674,7 +674,8 @@ public class TcpServerThread implements Runnable {
             int handleId = registerManagementHandle(
                     new RestoreHandle(currentDatabaseId()));
             transfer.writeInt(SessionRemote.STATUS_OK).writeInt(handleId);
-            OnlineBackupProtocolCodec.writeRestoreReport(transfer, report);
+            OnlineBackupProtocolCodec.writeRestoreReport(
+                    transfer, report, clientVersion);
             transfer.flush();
             break;
         }

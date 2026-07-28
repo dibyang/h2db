@@ -27,4 +27,4 @@
   staging，但它不具备 final 路径语义且不得被手工改名为 final。
 - rename 后失败以持久化 final 或 active pointer 为真相，重试向前收敛。
 - generation 恢复不依赖进程内缓存；registry 重开测试模拟进程状态丢失。
-- H2 `runOnlineBackupCheck`当前 76/76 通过；故障矩阵测试无 skipped。
+- H2 `runOnlineBackupCheck`当前 77/77 通过；故障矩阵测试无 skipped。

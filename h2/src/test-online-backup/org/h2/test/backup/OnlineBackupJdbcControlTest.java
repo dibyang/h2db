@@ -79,6 +79,8 @@ public class OnlineBackupJdbcControlTest {
                                     shadowGeneration))) {
                 assertEquals(shadowGeneration,
                         restore.getReport().getShadowGenerationId());
+                assertEquals(descriptor.getCutId(),
+                        restore.getReport().getCutId());
             }
             assertTrue(Files.isDirectory(shadow));
 

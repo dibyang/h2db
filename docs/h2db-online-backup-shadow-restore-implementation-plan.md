@@ -47,7 +47,7 @@
 
 | 范围 | 内容 |
 | --- | --- |
-| In | commit/DDL barrier、事务准入、MVStore prepared snapshot、持久化数据库身份和 schema epoch、participant SPI、组合 manifest、原子发布、shadow restore、只读试打开、activation token、统一 JDBC `unwrap`入口、H2 TCP v21 远程管理协议、指标、故障清理、兼容与性能测试。 |
+| In | commit/DDL barrier、事务准入、MVStore prepared snapshot、持久化数据库身份和 schema epoch、participant SPI、组合 manifest、原子发布、shadow restore、只读试打开、activation token、统一 JDBC `unwrap`入口、H2 TCP v21/v22 远程管理协议、指标、故障清理、兼容与性能测试。 |
 | Out | 增量备份、PITR、对象存储 SDK、组合备份 SQL 语法、ADB 路由实现、跨节点共识、强杀失控插件线程、旧连接透明迁移、内存库物理备份。 |
 
 ## 现状与拟修改路径
@@ -1190,7 +1190,8 @@ java -cp "build/classes/java/legacyTest;build/classes/java/main;build/resources/
 ### P8 TCP v21 远程适配
 
 - [x] 让 `JdbcConnection`实现统一 `OnlineBackupControl`，本地和远程连接使用同一公开 API。
-- [x] 将 H2 TCP 最大协议版本从 20 提升到 21，并保持最低兼容版本不变。
+- [x] 将 H2 TCP 在线备份管理基础协议从 20 提升到 21，并保持最低兼容版本不变；P9.1
+  为 restore report 的兼容扩展进一步提升到 22。
 - [x] 在 `SessionRemote`增加在线备份、shadow restore 和 activation 管理操作。
 - [x] 在 `TcpServerThread`增加对应分发，只调用服务端 core coordinator，不复制业务实现。
 - [x] 为 prepared backup、restore 和 activation token 建立 TCP session 级不透明 handle registry。
@@ -1296,7 +1297,7 @@ java -cp "build/classes/java/legacyTest;build/classes/java/main;build/resources/
 - ADB `b92b9c2`增加生产灰度策略，模式严格按 `DISABLED -> GENERATE_ONLY -> SHADOW_VALIDATE -> ACTIVATE`放开；首次生产入口只接受单个已认证 `adb_ldb`，该限制不进入 H2 SPI、bundle 格式或 H2 core。
 - 真实已发布 `h2db-2.3.0.jar`参与兼容测试：旧版本创建的数据文件和传统 zip 可由当前版本打开/恢复；2.3 client 对 2.4 server、2.4 client 对 2.3 server 的普通 JDBC/传统 `BACKUP TO`保持可用，v21 管理操作在协商到 v20 后由客户端本地拒绝；仅按 2.3 API 编译的插件可由当前插件加载器加载。
 - 修复 Windows 显式插件路径解析：只把反斜杠加逗号解释为逗号转义，普通 `C:\...`不再被通用字符串拆分器吞掉反斜杠。
-- 当前 `runOnlineBackupCheck`为 76/76，`runPluginArchitectureCheck`为 140/140；Gradle 制品、`Constants.VERSION/FULL_VERSION`和 bundle manifest 已统一为 `2.4.0-SNAPSHOT`语义。
+- 当前 `runOnlineBackupCheck`为 77/77，`runPluginArchitectureCheck`为 140/140；Gradle 制品、`Constants.VERSION/FULL_VERSION`和 bundle manifest 已统一为 `2.4.0-SNAPSHOT`语义。
 - `AdbOnlineBackupParticipantIntegrationTest#restoresSameMonotonicCutFromH2AndLdbArtifacts`在一个事务中向 MVStore 和 ADB/LDB 写入相同单调序号；恢复后的两边最大序号同为 40，切点后提交的 41 在两边都不存在。
 - `AdbOnlineBackupPerformanceGateTest`在最终全量验收轮次的持续 DML 下测得 30 次 prepare 的 P50/P95/P99/max 为 `0/1/2/2 ms`；500 ms 提交基线为 601，1,012 ms 内出现 809 提交的恢复窗口，达到“5 秒内恢复到基线 90%”门禁，LDB 净文件增长 0 byte。
 - `AdbOnlineBackupMixedLoadGateTest`在 1 MiB 预装 LDB 脏数据、持续 LDB DML、持续 MVStore DDL 和一个未提交 MVStore 长事务并存时，20 次 prepare 的 P50/P95/P99/max 为 `4/7/21/21 ms`，期间完成 48 次 DML 提交和 14 轮 DDL，长事务回滚后为 0 行。详见 `docs/online-backup/p9-performance-report.md`。
@@ -1317,6 +1318,42 @@ java -cp "build/classes/java/legacyTest;build/classes/java/main;build/resources/
 - [x] `T-H2BR-PERFORMANCE-GATE-01`
 - [x] `T-H2BR-ROLLBACK-DRILL-01`
 
+### P9.1 Restore report 切点 provenance 补齐
+
+ADB generation registry 在激活前必须持久化已验证 bundle 的 `backupId + cutId`。
+`cutId` 已存在于 manifest 和 validation report，但公开
+`OnlineBackupRestoreReport` 尚未携带该字段。补齐约束如下：
+
+- `OnlineBackupApiMapper` 只能从已校验 `ShadowRestoreResult` 的 manifest 复制
+  `cutId`，调用方不能指定或推导。
+- `OnlineBackupRestoreReport` 增加 `getCutId()` 和包含 `cutId` 的新构造器；保留旧
+  构造器，旧构造路径的 `cutId` 为 `null`。
+- embedded restore 成功报告的 `cutId` 必须非空，并与 prepare descriptor 的
+  `cutId` 相等。
+- TCP 最大协议版本提升到 22；v22 在现有 restore report 字段末尾追加 `cutId`。
+- 协商到 v21 时读写布局保持逐字节不变，客户端报告的 `cutId` 为 `null`；在线备份
+  管理操作的最低版本仍为 v21，不改变 v17-v20 的 feature-not-supported 契约。
+- 测试同时覆盖 embedded、TCP v22 provenance 一致性，以及强制协商 v21 后的旧
+  布局降级，避免新 server 向旧 client 多写字段导致后续响应错位。
+
+验收：
+
+- [x] `OnlineBackupJdbcControlTest` 验证 embedded `cutId`。
+- [x] `OnlineBackupTcpV21Test` 验证 v22 `cutId` 和 v21 wire 兼容。
+- [x] `runOnlineBackupCheck`、plugin architecture、Javadoc 和传统备份回归通过。
+
+2026-07-29 本地验收结果：
+
+- embedded 与默认 TCP v22 restore report 的 `cutId` 均与 prepare descriptor 相等。
+- 强制协商 TCP v21 时 restore report 的 `cutId` 为 `null`，关闭 handle 后继续执行
+  SQL 成功，证明旧 wire 布局没有多写字段或污染后续响应。
+- `runOnlineBackupCheck --rerun-tasks` 通过：77 个测试，0 failure、0 error、
+  0 skipped。
+- `runPluginArchitectureCheck --rerun-tasks` 通过：140 个测试，0 failure、
+  0 error、0 skipped。
+- `javadoc`、`legacyTestClasses`以及 `TestBackup`、`TestOpenClose`、
+  `TestMVStoreConcurrent` legacy runner 通过。
+
 ## 测试与验证计划
 
 ### 最小编译门禁
@@ -1335,7 +1372,7 @@ java -cp "build/classes/java/legacyTest;build/classes/java/main;build/resources/
 .\gradlew.bat runOnlineBackupCheck
 ```
 
-该任务应聚合 core gate、MVStore snapshot、participant SPI、bundle、shadow restore、activation 和 TCP v21 远程协议测试。由于当前构建脚本会禁用名称中包含 `test`的 Gradle task，不以普通 `gradlew test`作为有效验证结果。
+该任务应聚合 core gate、MVStore snapshot、participant SPI、bundle、shadow restore、activation 和 TCP v21/v22 远程协议测试。由于当前构建脚本会禁用名称中包含 `test`的 Gradle task，不以普通 `gradlew test`作为有效验证结果。
 
 ### 关键一致性测试模型
 
@@ -1468,7 +1505,7 @@ P99 由 ADB 或专项性能工具对逐操作 report 聚合，不在 H2 core 内
 
 最终命令与结果：
 
-- H2：`runOnlineBackupCheck --rerun-tasks` 76/76；`runPluginArchitectureCheck --rerun-tasks` 140/140；`javadoc`通过；`TestBackup`、`TestOpenClose`和`TestMVStoreConcurrent`通过。
+- H2：`runOnlineBackupCheck --rerun-tasks` 77/77；`runPluginArchitectureCheck --rerun-tasks` 140/140；`javadoc`通过；`TestBackup`、`TestOpenClose`和`TestMVStoreConcurrent`通过。
 - ADB：全量 `test`和`javadoc`通过；持续 DML 吞吐在 1,012 ms 内达到基线 90%以上；混合 DML/DDL/长事务/高脏页门禁通过。
 - LDB：全量 `:test --rerun-tasks`和`:javadoc`通过。
 

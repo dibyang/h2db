@@ -8,6 +8,7 @@ package org.h2.test.backup;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -96,6 +97,8 @@ public class OnlineBackupTcpV21Test {
                         restore.getReport().getShadowGenerationId());
                 assertEquals("shadow-1",
                         restore.getReport().getShadowName());
+                assertEquals(descriptor.getCutId(),
+                        restore.getReport().getCutId());
             }
             assertTrue(Files.isDirectory(
                     testServer.shadowRoot.resolve("shadow-1")));
@@ -110,6 +113,38 @@ public class OnlineBackupTcpV21Test {
                         activation.abortActivation().getStatus());
             }
             execute(connection, "INSERT INTO TEST VALUES(2, 'two')");
+        } finally {
+            testServer.stop();
+        }
+    }
+
+    /**
+     * 验证新 server 与强制协商 v21 的 client 保持旧 restore report wire 布局。
+     */
+    @Test
+    public void v21RestoreReportOmitsCutIdWithoutCorruptingNextResponse()
+            throws Exception {
+        TestServer testServer = startServer("v21-restore-report");
+        try (Connection connection = testServer.connectWithProtocolMax(
+                Constants.TCP_PROTOCOL_VERSION_21)) {
+            execute(connection,
+                    "CREATE TABLE TEST(ID INT PRIMARY KEY, NAME VARCHAR)");
+            execute(connection, "INSERT INTO TEST VALUES(1, 'one')");
+            OnlineBackupControl control =
+                    connection.unwrap(OnlineBackupControl.class);
+            try (OnlineBackupHandle backup =
+                    control.prepareOnlineBackup(options())) {
+                backup.publish("bundle-v21");
+            }
+
+            try (OnlineBackupRestoreHandle restore =
+                    control.stageAndValidateShadow(
+                            "bundle-v21", "shadow-v21",
+                            OnlineBackupRestoreOptions.defaults(
+                                    UUID.randomUUID()))) {
+                assertNull(restore.getReport().getCutId());
+            }
+            execute(connection, "SELECT COUNT(*) FROM TEST");
         } finally {
             testServer.stop();
         }

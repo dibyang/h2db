@@ -340,7 +340,8 @@ public final class SessionRemote extends Session implements DataHandler {
             OnlineBackupProtocolCodec.writeRestoreOptions(transfer, options);
             done(transfer);
             RemoteRestore restore = new RemoteRestore(transfer.readInt(),
-                    OnlineBackupProtocolCodec.readRestoreReport(transfer));
+                    OnlineBackupProtocolCodec.readRestoreReport(
+                            transfer, clientVersion));
             activeManagementHandles++;
             return restore;
         } catch (IOException e) {

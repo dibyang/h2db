@@ -85,7 +85,8 @@ public final class OnlineBackupApiMapper {
             String shadowName, ShadowRestoreResult result) {
         OnlineBackupManifest manifest = result.getManifest();
         return new OnlineBackupRestoreReport(shadowName,
-                manifest.getBackupId(), manifest.getDatabaseId(),
+                manifest.getBackupId(), manifest.getCutId(),
+                manifest.getDatabaseId(),
                 manifest.getSourceGenerationId(),
                 result.getShadowGenerationId(), manifest.getSchemaEpoch(),
                 result.getValidationMillis());

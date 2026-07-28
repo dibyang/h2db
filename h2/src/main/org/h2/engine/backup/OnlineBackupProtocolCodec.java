@@ -16,6 +16,7 @@ import org.h2.api.OnlineBackupOptions;
 import org.h2.api.OnlineBackupPublishReport;
 import org.h2.api.OnlineBackupRestoreOptions;
 import org.h2.api.OnlineBackupRestoreReport;
+import org.h2.engine.Constants;
 import org.h2.value.Transfer;
 
 /**
@@ -160,10 +161,12 @@ public final class OnlineBackupProtocolCodec {
     /**
      * @param transfer 传输通道
      * @param report restore 报告
+     * @param protocolVersion 已协商 TCP 协议版本
      * @throws IOException 传输失败
      */
     public static void writeRestoreReport(Transfer transfer,
-            OnlineBackupRestoreReport report) throws IOException {
+            OnlineBackupRestoreReport report, int protocolVersion)
+            throws IOException {
         transfer.writeString(report.getShadowName());
         writeUuid(transfer, report.getBackupId());
         writeUuid(transfer, report.getDatabaseId());
@@ -171,19 +174,35 @@ public final class OnlineBackupProtocolCodec {
         writeUuid(transfer, report.getShadowGenerationId());
         transfer.writeLong(report.getSchemaEpoch())
                 .writeLong(report.getValidationMillis());
+        if (protocolVersion >= Constants.TCP_PROTOCOL_VERSION_22) {
+            writeUuid(transfer, report.getCutId());
+        }
     }
 
     /**
      * @param transfer 传输通道
+     * @param protocolVersion 已协商 TCP 协议版本
      * @return restore 报告
      * @throws IOException 传输失败
      */
+    @SuppressWarnings("deprecation")
     public static OnlineBackupRestoreReport readRestoreReport(
-            Transfer transfer) throws IOException {
-        return new OnlineBackupRestoreReport(transfer.readString(),
-                requireUuid(transfer), requireUuid(transfer),
-                requireUuid(transfer), requireUuid(transfer),
-                transfer.readLong(), transfer.readLong());
+            Transfer transfer, int protocolVersion) throws IOException {
+        String shadowName = transfer.readString();
+        UUID backupId = requireUuid(transfer);
+        UUID databaseId = requireUuid(transfer);
+        UUID sourceGenerationId = requireUuid(transfer);
+        UUID shadowGenerationId = requireUuid(transfer);
+        long schemaEpoch = transfer.readLong();
+        long validationMillis = transfer.readLong();
+        if (protocolVersion >= Constants.TCP_PROTOCOL_VERSION_22) {
+            return new OnlineBackupRestoreReport(shadowName, backupId,
+                    requireUuid(transfer), databaseId, sourceGenerationId,
+                    shadowGenerationId, schemaEpoch, validationMillis);
+        }
+        return new OnlineBackupRestoreReport(shadowName, backupId,
+                databaseId, sourceGenerationId, shadowGenerationId,
+                schemaEpoch, validationMillis);
     }
 
     /**

@@ -51,7 +51,7 @@ public class VersionMetadataConsistencyTest {
         assertEquals(artifactVersion, Constants.VERSION);
         assertTrue(Constants.FULL_VERSION.startsWith(
                 artifactVersion + " ("));
-        assertEquals(Constants.TCP_PROTOCOL_VERSION_21,
+        assertEquals(Constants.TCP_PROTOCOL_VERSION_22,
                 Constants.TCP_PROTOCOL_VERSION_MAX_SUPPORTED);
 
         UUID generationId = UUID.randomUUID();

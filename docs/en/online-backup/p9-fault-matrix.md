@@ -21,4 +21,4 @@ backup ID. A hard process exit may leave complete staging, but staging has no
 final-path semantics and must never be manually renamed into a final bundle.
 Failures after rename or pointer CAS follow the persisted final or pointer and
 converge forward. Registry reopen tests model loss of all process-local state.
-The H2 online-backup suite currently passes 76/76 with no skipped tests.
+The H2 online-backup suite currently passes 77/77 with no skipped tests.

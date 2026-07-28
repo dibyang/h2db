@@ -2251,7 +2251,17 @@ public class ErrorCode {
      */
     public static final int GROUP_BY_NOT_IN_THE_RESULT = 90157;
 
-    // next is 90158
+    /**
+     * Online backup identity metadata is required for this database.
+     */
+    public static final int ONLINE_BACKUP_IDENTITY_REQUIRED = 90158;
+
+    /**
+     * A management request targets a different database generation.
+     */
+    public static final int ONLINE_BACKUP_GENERATION_MISMATCH_2 = 90159;
+
+    // next is 90160
 
     private ErrorCode() {
         // utility class

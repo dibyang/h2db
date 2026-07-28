@@ -8,8 +8,11 @@ package org.h2.command;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Set;
+
+import org.h2.command.ddl.DefineCommand;
 import org.h2.engine.DbObject;
 import org.h2.engine.SessionLocal;
+import org.h2.engine.backup.DatabaseOperationGate;
 import org.h2.expression.Parameter;
 import org.h2.expression.ParameterInterface;
 import org.h2.result.ResultInterface;
@@ -46,7 +49,7 @@ class CommandList extends Command {
             if (prepared.isQuery()) {
                 prepared.query(0);
             } else {
-                prepared.update();
+                executePreparedUpdate(prepared);
             }
         }
         if (remaining != null) {
@@ -55,7 +58,29 @@ class CommandList extends Command {
             if (remainingCommand.isQuery()) {
                 remainingCommand.query(0);
             } else {
-                remainingCommand.update(null);
+                remainingCommand.enterExecutionGate();
+                try {
+                    remainingCommand.update(null);
+                } finally {
+                    remainingCommand.exitExecutionGate();
+                }
+            }
+        }
+    }
+
+    private void executePreparedUpdate(Prepared prepared) {
+        DatabaseOperationGate operationGate =
+                session.getDatabase().getOperationGate();
+        boolean ddl = operationGate != null
+                && prepared instanceof DefineCommand;
+        if (ddl) {
+            operationGate.enterDdl();
+        }
+        try {
+            prepared.update();
+        } finally {
+            if (ddl) {
+                operationGate.exitDdl();
             }
         }
     }

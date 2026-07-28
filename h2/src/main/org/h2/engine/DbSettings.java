@@ -291,6 +291,12 @@ public class DbSettings extends SettingsBase {
     public final boolean onlineBackupCoordination = get("ONLINE_BACKUP_COORDINATION", false);
 
     /**
+     * Database setting <code>ONLINE_BACKUP_GENERATION_ID</code>.
+     * Runtime generation UUID supplied by the routing owner.
+     */
+    public final String onlineBackupGenerationId = get("ONLINE_BACKUP_GENERATION_ID", "");
+
+    /**
      * Database setting <code>MV_STORE</code>
      * (default: true).
      * Use the MVStore storage engine.

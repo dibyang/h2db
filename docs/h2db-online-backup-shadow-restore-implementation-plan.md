@@ -1,6 +1,6 @@
 # H2DB 组合在线备份与影子恢复实施计划
 
-状态：实施中（P0-P1 已完成，P2 待开始）
+状态：实施中（P0-P2 已完成，P3 待开始）
 规划日期：2026-07-28  
 目标仓库：`D:\work\java\h2db`  
 需求来源：`D:\work\java2\vexra-adb\docs\requirements\h2db-online-backup-restore-requirements.md`  
@@ -558,7 +558,7 @@ ACTIVATION_ABORT
 | P0.5 Identity Metadata Spike | 用最小原型验证内部事务型 MVStore map 的原子性、持久化和兼容性，再决定 OQ-05 | P0 | [x] |
 | P0.6 Snapshot Lease Spike | 验证 prepared snapshot 过期取消、reader 排空和安全解除 reuse-space pin，再决定 OQ-09 | P0 | [x] |
 | P1 Operation Gate | 建立 commit、DDL、transaction 准入和指标接缝 | P0/P0.5 | [x] |
-| P2 Identity/Epoch | 持久化 databaseId、schemaEpoch，并接收 ADB 提供的运行时 generationId | P0/P1 | [ ] |
+| P2 Identity/Epoch | 持久化 databaseId、schemaEpoch，并接收 ADB 提供的运行时 generationId | P0/P1 | [x] |
 | P3 MVStore Snapshot | 实现固定切点的 prepared snapshot | P0.6/P1 | [ ] |
 | P4 Session 与 SPI | 实现组合 session 和 participant prepare/abort | P2/P3 | [ ] |
 | P5 Bundle Publish | materialize、checksum、manifest 和原子发布 | P4 | [ ] |
@@ -821,34 +821,66 @@ java -cp "build/classes/java/legacyTest;build/classes/java/main;build/resources/
 
 ### P2 Database Identity 与 Schema Epoch
 
-- [ ] 仅在 `ONLINE_BACKUP_COORDINATION=TRUE`时增加内部事务型 metadata map。
-- [ ] 功能启用时为新库生成稳定 `databaseId`，为可写旧库初始化 identity/epoch。
-- [ ] 功能关闭时不创建、读取或更新在线备份 metadata map。
-- [ ] 只读旧库缺少 identity metadata 时以稳定 `IDENTITY_METADATA_REQUIRED`原因拒绝组合备份，不修改原库，不创建 sidecar，不接受调用方 identity。
-- [ ] 已有 identity metadata 的只读库可组合备份，验证 prepare/materialize 全程不写 metadata。
-- [ ] 实现或记录独立可写 clone onboarding 流程：生成新 identity/epoch，并显式开启新的备份链。
-- [ ] 为加密数据库定义启用协调功能时的初始化策略。
-- [ ] 在 DDL 命令成功且 catalog 确实改变后设置 session 级 catalog-changed 标记；禁止仅按 `TransactionContext.isDdl()`递增。
-- [ ] 在 catalog 实际修改事务中每事务递增一次 `schemaEpoch`。
-- [ ] 验证 DDL 回滚不递增 epoch，重启后 epoch 保持。
-- [ ] 扩展 `Recover`以显式恢复 identity metadata，或固定逻辑灾难恢复生成新 `databaseId`并使旧备份链失效的语义。
-- [ ] 文档和启动检查明确：已启用协调功能的数据库降级到 2.3.x 时只允许只读打开。
-- [ ] 接收并校验 ADB 提供的实例级 `generationId`；不得把它写入会随物理备份复制的 `h2.onlineBackup.meta`。
-- [ ] 在 activation token、日志和验证报告中携带 `databaseId/generationId`，并拒绝 generation 关联不一致的管理调用。
-- [ ] 验证旧代码忽略附加 map，新代码再次打开仍读取原身份。
+- [x] 仅在 `ONLINE_BACKUP_COORDINATION=TRUE`时增加内部事务型 metadata map。
+- [x] 功能启用时为新库生成稳定 `databaseId`，为可写旧库初始化 identity/epoch。
+- [x] 功能关闭时不创建、读取或更新在线备份 metadata map。
+- [x] 只读旧库缺少 identity metadata 时以稳定 `ONLINE_BACKUP_IDENTITY_REQUIRED`错误拒绝组合备份，不修改原库，不创建 sidecar，不接受调用方 identity。
+- [x] 已有 identity metadata 的只读库可取得完整 identity snapshot 且打开过程不写 metadata；P4/P5 继续验证 prepare/materialize 全程只读。
+- [x] 固定独立可写 clone onboarding 语义：各 clone 生成新 identity/epoch，并显式开启新的备份链。
+- [x] 加密数据库的 metadata map 使用数据库文件自身的加密上下文，不创建明文 sidecar。
+- [x] 在 catalog 确实改变后设置可回滚的 session 级 catalog-changed 标记；禁止仅按 `TransactionContext.isDdl()`递增。
+- [x] 在 catalog 实际修改事务中每事务递增一次 `schemaEpoch`，并对并发提交后的内存发布做单调保护。
+- [x] 验证 DDL 回滚不递增 epoch，重启后 epoch 保持。
+- [x] 固定逻辑 `Recover`灾难恢复生成新 `databaseId`并使旧备份链失效的语义。
+- [x] 固定降级契约：已启用协调功能的数据库在 2.3.x 下只允许只读应急打开。2.4.x 无法反向约束已发布的 2.3.x 二进制，P9 的 ADB 启动策略必须阻止降级写入。
+- [x] 接收并校验 ADB 提供的实例级 `generationId`；不得把它写入会随物理备份复制的 `h2.onlineBackup.meta`。
+- [x] `DatabaseIdentityMetadata.Snapshot`提供 `databaseId/generationId/schemaEpoch`统一载体，并提供 generation 一致性校验；P6/P7 将其写入 validation report 和 activation token。
+- [x] 验证 2.3.0 只读打开会忽略并保留附加 map，新代码再次打开仍读取原身份。
 
 验收：
 
-- [ ] `T-H2BR-DATABASE-ID-01`
-- [ ] `T-H2BR-SCHEMA-EPOCH-COMMIT-01`
-- [ ] `T-H2BR-SCHEMA-EPOCH-ROLLBACK-01`
-- [ ] `T-H2BR-SCHEMA-EPOCH-REOPEN-01`
-- [ ] `T-H2BR-METADATA-OLD-VERSION-01`
-- [ ] `T-H2BR-GENERATION-RUNTIME-ID-01`
-- [ ] `T-H2BR-READONLY-IDENTITY-PRESENT-01`
-- [ ] `T-H2BR-READONLY-IDENTITY-MISSING-REJECT-01`
-- [ ] `T-H2BR-READONLY-NO-SIDECAR-OR-TEMP-ID-01`
-- [ ] `T-H2BR-IDENTITY-ONBOARDING-NEW-LINEAGE-01`
+- [x] `T-H2BR-DATABASE-ID-01`
+- [x] `T-H2BR-SCHEMA-EPOCH-COMMIT-01`
+- [x] `T-H2BR-SCHEMA-EPOCH-ROLLBACK-01`
+- [x] `T-H2BR-SCHEMA-EPOCH-REOPEN-01`
+- [x] `T-H2BR-METADATA-OLD-VERSION-01`
+- [x] `T-H2BR-GENERATION-RUNTIME-ID-01`
+- [x] `T-H2BR-READONLY-IDENTITY-PRESENT-01`
+- [x] `T-H2BR-READONLY-IDENTITY-MISSING-REJECT-01`
+- [x] `T-H2BR-READONLY-NO-SIDECAR-OR-TEMP-ID-01`
+- [x] `T-H2BR-IDENTITY-ONBOARDING-NEW-LINEAGE-01`
+
+实现结果：
+
+- 新增 `DatabaseIdentityMetadata`，使用事务型 `h2.onlineBackup.meta` map 保存 `databaseId/schemaEpoch`；`generationId`是启动期必填的运行时 UUID，不持久化到数据库文件。
+- epoch 写入与 catalog 修改使用同一事务。实际 meta row 变更设置 session 标记，失败 DDL 和 savepoint 回滚会撤销标记；普通 DML、identity sequence 更新、失败或 no-op DDL 不误增。
+- 多语句 SQL 和 `EXECUTE IMMEDIATE`只为内层动态 DDL补充可重入 DDL gate，不引入额外 command lifecycle 或 commit，保持原提交边界。
+- 一个 SQL（例如 `ALTER TABLE`）可能产生多个真实 catalog 事务，因此可能递增多个 epoch；保证的是“每个实际 catalog 修改事务最多一次”，不是“每条 SQL 恰好一次”。
+- 只读旧库缺 map 时保持 metadata unavailable，调用 `requireSnapshot()`返回稳定 vendor code `90158`；已有 map 的只读库可读取 identity。
+- 物理副本保留 `databaseId`；两个不含 identity 的可写 clone 各自生成不同 lineage；逻辑 `Recover`重建也生成新 lineage。
+
+验证命令：
+
+```powershell
+.\gradlew.bat runOnlineBackupCheck --rerun-tasks
+.\gradlew.bat javadoc
+.\gradlew.bat runPluginArchitectureCheck --rerun-tasks
+.\gradlew.bat legacyTestClasses
+java -cp "build/classes/java/legacyTest;build/classes/java/main;build/resources/legacyTest;build/resources/main" `
+  org.h2.test.LegacyTestGroupRunner `
+  org.h2.test.db.TestBackup `
+  org.h2.test.db.TestOpenClose `
+  org.h2.test.store.TestMVStoreConcurrent
+```
+
+验证结果：
+
+| 范围 | 结果 |
+| --- | --- |
+| P1 + P2 专项 | 16 项通过，0 failure、0 error、0 skipped；其中 P2 `DatabaseIdentityMetadataTest` 8 项。 |
+| JDK 8 / Javadoc | `compileJava`、`compileOnlineBackupTestJava`和`javadoc`通过。 |
+| plugin 回归 | 139 项通过，0 failure、0 error、0 skipped。 |
+| 传统备份与默认 MVStore | `TestBackup`、`TestOpenClose`和`TestMVStoreConcurrent`通过。 |
 
 ### P3 MVStore Prepared Snapshot
 
@@ -1132,7 +1164,7 @@ P99 由 ADB 或专项性能工具对逐操作 report 聚合，不在 H2 core 内
 | validation open 触发 plugin 外部副作用 | P0 | fake lifecycle/network/thread provider 测试 | 必要 provider 白名单、显式 validation capability、受限 context、未认证依赖 fail-closed | [ ] |
 | 只读模式被误认为足以隔离插件副作用 | P0 | 只读库中注入网络、线程和服务注册尝试 | 将数据库只读与插件 capability/沙箱门禁分离验证，任一层失败都阻止 activation | [ ] |
 | manifest 状态与 atomic publish 冲突 | P1 | crash matrix | final manifest 只写 PUBLISHED，运行状态独立 | [ ] |
-| 旧版本删除或改写未知 metadata map | P1 | 旧版本往返测试 | 验证未知 map 保留，不满足则调整持久化位置 | [ ] |
+| 旧版本删除或改写未知 metadata map | P1 | 旧版本往返测试 | 已验证 2.3.0 只读打开保留未知 map；降级写入由 ADB 启动策略禁止 | [x] |
 | 路由 pointer 已切到 new 但进程内路由或 token fence 尚未完成时进程退出 | P1 | ADB 各切换点 crash drill | 只按持久化 active pointer 恢复；pointer 为 new 时启动 new 并继续 fence old，不依赖 token 推断 | [ ] |
 | new generation 已接受写入后自动回拨 old 导致新写入丢失 | P0 | post-write rollback drill | 将首次 new 写入视为不可逆点；禁止自动回拨，采用数据对账后的新切换或一致性备份恢复 | [ ] |
 | TCP 断线遗留 snapshot pin 或 quiesce | P0 | 断线、server stop 和半关闭测试 | handle 绑定 TCP session，连接清理时逆序 abort/close | [ ] |

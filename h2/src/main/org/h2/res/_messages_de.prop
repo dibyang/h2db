@@ -196,6 +196,8 @@
 90155=Erzeugte Spalte {0} kann nicht durch eine referentielle Integrität mit dem Ausdruck {1} veränderbar sein
 90156=Spalten-Alias ist nicht für den Audruck {0} angegeben
 90157=#Column index {0} in GROUP BY clause is outside valid range 1 - {1}
+90158=#Online backup identity metadata is required: {0}
+90159=#Online backup generation mismatch; requested {0}, active {1}
 HY000=Allgemeiner Fehler: {0}
 HY004=Unbekannter Datentyp: {0}
 HYC00=Dieses Feature wird nicht unterstützt: {0}

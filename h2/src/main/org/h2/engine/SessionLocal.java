@@ -31,6 +31,7 @@ import org.h2.command.Prepared;
 import org.h2.command.ddl.Analyze;
 import org.h2.command.query.Query;
 import org.h2.constraint.Constraint;
+import org.h2.engine.backup.DatabaseIdentityMetadata;
 import org.h2.engine.backup.DatabaseOperationGate;
 import org.h2.index.Index;
 import org.h2.index.QueryExpressionIndex;
@@ -220,6 +221,8 @@ public final class SessionLocal extends Session implements TransactionStore.Roll
 
     private Transaction transaction;
     private boolean operationGateTransaction;
+    private boolean onlineBackupCatalogChanged;
+    private long pendingSchemaEpoch = -1L;
     private final AtomicReference<State> state = new AtomicReference<>(State.INIT);
     private long startStatement = -1;
 
@@ -676,7 +679,10 @@ public final class SessionLocal extends Session implements TransactionStore.Roll
      * @param ddl if the statement was a data definition statement
      */
     public void commit(boolean ddl) {
-        DatabaseOperationGate operationGate = getDatabase().getOperationGate();
+        Database database = getDatabase();
+        DatabaseOperationGate operationGate = database.getOperationGate();
+        DatabaseIdentityMetadata identityMetadata =
+                database.getOnlineBackupMetadata();
         boolean gateCommit = operationGate != null && hasTransaction() && transaction.hasChanges()
                 && !operationGate.isCommitEnteredByCurrentThread()
                 && !(ddl && operationGate.isDdlEnteredByCurrentThread());
@@ -686,15 +692,25 @@ public final class SessionLocal extends Session implements TransactionStore.Roll
         try {
             beforeCommitOrRollback();
             if (hasTransaction()) {
+                if (identityMetadata != null && onlineBackupCatalogChanged
+                        && pendingSchemaEpoch < 0L) {
+                    pendingSchemaEpoch = identityMetadata
+                            .prepareSchemaEpochIncrement(this);
+                }
                 TransactionEventContext transactionContext = new TransactionEventContext(ddl, true);
                 fireTransactionEvent(transactionContext, TransactionEvent.BEFORE_COMMIT);
                 try {
                     markUsedTablesAsUpdated();
                     transaction.commit();
+                    if (pendingSchemaEpoch >= 0L) {
+                        identityMetadata.schemaEpochCommitted(
+                                pendingSchemaEpoch);
+                    }
                     removeTemporaryLobs(true);
                     endTransaction();
                 } finally {
                     transaction = null;
+                    clearOnlineBackupCatalogChange();
                     endOperationGateTransaction();
                 }
                 fireTransactionEvent(transactionContext, TransactionEvent.AFTER_COMMIT);
@@ -927,6 +943,13 @@ public final class SessionLocal extends Session implements TransactionStore.Roll
                 transaction.rollbackToSavepoint(savepoint.transactionSavepoint);
             }
         }
+        if (savepoint == null) {
+            clearOnlineBackupCatalogChange();
+        } else {
+            onlineBackupCatalogChanged =
+                    savepoint.onlineBackupCatalogChanged;
+            pendingSchemaEpoch = -1L;
+        }
         if (savepoints != null) {
             String[] names = savepoints.keySet().toArray(new String[0]);
             for (String name : names) {
@@ -959,6 +982,7 @@ public final class SessionLocal extends Session implements TransactionStore.Roll
     public Savepoint setSavepoint() {
         Savepoint sp = new Savepoint();
         sp.transactionSavepoint = getStatementSavepoint();
+        sp.onlineBackupCatalogChanged = onlineBackupCatalogChanged;
         return sp;
     }
 
@@ -1742,6 +1766,27 @@ public final class SessionLocal extends Session implements TransactionStore.Roll
         }
     }
 
+    void recordCatalogMutation() {
+        recordCatalogMutation(null);
+    }
+
+    void recordCatalogMutation(DbObject object) {
+        Database database = getDatabase();
+        DatabaseIdentityMetadata metadata =
+                database.getOnlineBackupMetadata();
+        DatabaseOperationGate operationGate = database.getOperationGate();
+        if (metadata != null && metadata.isTrackingEnabled()
+                && (object == null || object.getType() != DbObject.SEQUENCE
+                        || operationGate.isDdlEnteredByCurrentThread())) {
+            onlineBackupCatalogChanged = true;
+        }
+    }
+
+    private void clearOnlineBackupCatalogChange() {
+        onlineBackupCatalogChanged = false;
+        pendingSchemaEpoch = -1L;
+    }
+
     private long getStatementSavepoint() {
         if (startStatement == -1) {
             startStatement = getTransaction().setSavepoint();
@@ -1940,6 +1985,8 @@ public final class SessionLocal extends Session implements TransactionStore.Roll
          * The transaction savepoint id.
          */
         long transactionSavepoint;
+
+        boolean onlineBackupCatalogChanged;
     }
 
     /**

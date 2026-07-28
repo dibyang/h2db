@@ -11,6 +11,7 @@ import java.util.Objects;
 import org.h2.api.ErrorCode;
 import org.h2.command.CommandInterface;
 import org.h2.command.dml.SetTypes;
+import org.h2.engine.backup.DatabaseIdentityMetadata;
 import org.h2.message.DbException;
 import org.h2.message.Trace;
 import org.h2.security.auth.AuthenticationException;
@@ -124,6 +125,17 @@ public final class Engine {
                         != database.getSettings().onlineBackupCoordination) {
             throw DbException.get(ErrorCode.UNSUPPORTED_SETTING_COMBINATION,
                     "ONLINE_BACKUP_COORDINATION conflicts with the opened database");
+        }
+        String generationId = ci.getProperty("ONLINE_BACKUP_GENERATION_ID");
+        if (generationId != null) {
+            DatabaseIdentityMetadata metadata =
+                    database.getOnlineBackupMetadata();
+            if (metadata == null) {
+                throw DbException.get(ErrorCode.UNSUPPORTED_SETTING_COMBINATION,
+                        "ONLINE_BACKUP_GENERATION_ID requires ONLINE_BACKUP_COORDINATION=TRUE");
+            }
+            metadata.validateGenerationId(
+                    DatabaseIdentityMetadata.parseGenerationId(generationId));
         }
         if (user == null) {
             if (database.validateFilePasswordHash(cipher, ci.getFilePasswordHash())) {

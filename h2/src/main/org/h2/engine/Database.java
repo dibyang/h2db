@@ -37,6 +37,7 @@ import org.h2.command.dml.SetTypes;
 import org.h2.constraint.Constraint;
 import org.h2.constraint.Constraint.Type;
 import org.h2.engine.Mode.ModeEnum;
+import org.h2.engine.backup.DatabaseIdentityMetadata;
 import org.h2.engine.backup.DatabaseOperationGate;
 import org.h2.index.Cursor;
 import org.h2.index.Index;
@@ -213,6 +214,7 @@ public final class Database implements DataHandler, CastDataProvider {
     private int defaultTableType = Table.TYPE_CACHED;
     private final DbSettings dbSettings;
     private final DatabaseOperationGate operationGate;
+    private final DatabaseIdentityMetadata onlineBackupMetadata;
     private final PluginRegistry pluginRegistry = new PluginRegistry();
     private final String storageEngineId;
     private final StorageEngine storageEngine;
@@ -239,7 +241,18 @@ public final class Database implements DataHandler, CastDataProvider {
         }
         String databaseName = ci.getName();
         this.dbSettings = ci.getDbSettings();
-        this.operationGate = dbSettings.onlineBackupCoordination ? new DatabaseOperationGate() : null;
+        if (dbSettings.onlineBackupCoordination) {
+            this.onlineBackupMetadata = new DatabaseIdentityMetadata(
+                    dbSettings.onlineBackupGenerationId);
+            this.operationGate = new DatabaseOperationGate();
+        } else {
+            if (!dbSettings.onlineBackupGenerationId.isEmpty()) {
+                throw DbException.get(ErrorCode.UNSUPPORTED_SETTING_COMBINATION,
+                        "ONLINE_BACKUP_GENERATION_ID requires ONLINE_BACKUP_COORDINATION=TRUE");
+            }
+            this.onlineBackupMetadata = null;
+            this.operationGate = null;
+        }
         this.compareMode = CompareMode.getInstance(null, 0);
         this.persistent = ci.isPersistent();
         this.filePasswordHash = ci.getFilePasswordHash();
@@ -411,6 +424,9 @@ public final class Database implements DataHandler, CastDataProvider {
             lobStorage = new LobStorageMap(this);
             lobSession.commit(true);
             systemSession.commit(true);
+            if (onlineBackupMetadata != null) {
+                onlineBackupMetadata.initialize(this, systemSession);
+            }
             trace.info("opened {0}", databaseName);
             if (persistent) {
                 int writeDelay = ci.getProperty("WRITE_DELAY", Constants.DEFAULT_WRITE_DELAY);
@@ -803,6 +819,7 @@ public final class Database implements DataHandler, CastDataProvider {
         int id = obj.getId();
         if (id > 0 && !obj.isTemporary()) {
             if (!isReadOnly()) {
+                boolean changed = false;
                 Row r = meta.getTemplateRow();
                 MetaRecord.populateRowFromDBObject(obj, r);
                 assert objectIds.get(id);
@@ -812,6 +829,7 @@ public final class Database implements DataHandler, CastDataProvider {
                 Cursor cursor = metaIdIndex.find(session, r, r);
                 if (!cursor.next()) {
                     meta.addRow(session, r);
+                    changed = true;
                 } else {
                     assert starting;
                     Row oldRow = cursor.get();
@@ -820,7 +838,11 @@ public final class Database implements DataHandler, CastDataProvider {
                     assert rec.getObjectType() == obj.getType();
                     if (!rec.getSQL().equals(obj.getCreateSQLForMeta())) {
                         meta.updateRow(session, oldRow, r);
+                        changed = true;
                     }
+                }
+                if (changed && !starting) {
+                    session.recordCatalogMutation();
                 }
             }
         }
@@ -917,11 +939,13 @@ public final class Database implements DataHandler, CastDataProvider {
             SearchRow r = meta.getRowFactory().createRow();
             r.setValue(0, ValueInteger.get(id));
             boolean wasLocked = lockMeta(session);
+            boolean changed = false;
             try {
                 Cursor cursor = metaIdIndex.find(session, r, r);
                 if (cursor.next()) {
                     Row found = cursor.get();
                     meta.removeRow(session, found);
+                    changed = true;
                     if (SysProperties.CHECK) {
                         checkMetaFree(session, id);
                     }
@@ -932,6 +956,9 @@ public final class Database implements DataHandler, CastDataProvider {
                     // otherwise updating sequences may cause a deadlock
                     unlockMeta(session);
                 }
+            }
+            if (changed) {
+                session.recordCatalogMutation();
             }
             // release of the object id has to be postponed until the end of the transaction,
             // otherwise it might be re-used prematurely, and it would make
@@ -1640,6 +1667,7 @@ public final class Database implements DataHandler, CastDataProvider {
                 Row oldRow = metaIdIndex.getRow(session, id);
                 if (oldRow != null) {
                     meta.updateRow(session, oldRow, newRow);
+                    session.recordCatalogMutation(obj);
                 }
             }
             // for temporary objects
@@ -2230,6 +2258,9 @@ public final class Database implements DataHandler, CastDataProvider {
      * notifies the event listener if one has been set.
      */
     void opened() {
+        if (onlineBackupMetadata != null) {
+            onlineBackupMetadata.startTracking();
+        }
         if (eventListener != null) {
             eventListener.opened();
         }
@@ -2448,6 +2479,15 @@ public final class Database implements DataHandler, CastDataProvider {
      */
     public DatabaseOperationGate getOperationGate() {
         return operationGate;
+    }
+
+    /**
+     * Get online backup identity metadata.
+     *
+     * @return metadata, or {@code null} when coordination is disabled
+     */
+    public DatabaseIdentityMetadata getOnlineBackupMetadata() {
+        return onlineBackupMetadata;
     }
 
     /**

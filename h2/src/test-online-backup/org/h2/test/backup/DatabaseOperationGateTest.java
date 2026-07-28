@@ -12,6 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -297,6 +298,11 @@ public class DatabaseOperationGateTest {
         StringBuilder url = new StringBuilder("jdbc:h2:mem:").append(name);
         if (enabled != null) {
             url.append(";ONLINE_BACKUP_COORDINATION=").append(enabled);
+            if (enabled) {
+                url.append(";ONLINE_BACKUP_GENERATION_ID=")
+                        .append(UUID.nameUUIDFromBytes(
+                                name.getBytes(StandardCharsets.UTF_8)));
+            }
         }
         return DriverManager.getConnection(url.toString(), "sa", "");
     }

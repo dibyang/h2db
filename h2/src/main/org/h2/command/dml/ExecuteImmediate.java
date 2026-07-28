@@ -8,7 +8,9 @@ package org.h2.command.dml;
 import org.h2.api.ErrorCode;
 import org.h2.command.CommandInterface;
 import org.h2.command.Prepared;
+import org.h2.command.ddl.DefineCommand;
 import org.h2.engine.SessionLocal;
+import org.h2.engine.backup.DatabaseOperationGate;
 import org.h2.expression.Expression;
 import org.h2.message.DbException;
 import org.h2.result.ResultInterface;
@@ -36,7 +38,19 @@ public class ExecuteImmediate extends Prepared {
         if (command.isQuery()) {
             throw DbException.get(ErrorCode.SYNTAX_ERROR_2, sql, "<not a query>");
         }
-        return command.update();
+        DatabaseOperationGate operationGate =
+                session.getDatabase().getOperationGate();
+        boolean ddl = operationGate != null && command instanceof DefineCommand;
+        if (ddl) {
+            operationGate.enterDdl();
+        }
+        try {
+            return command.update();
+        } finally {
+            if (ddl) {
+                operationGate.exitDdl();
+            }
+        }
     }
 
     @Override

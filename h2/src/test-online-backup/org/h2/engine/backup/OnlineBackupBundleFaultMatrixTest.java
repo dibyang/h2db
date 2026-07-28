@@ -6,11 +6,14 @@
 package org.h2.engine.backup;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -18,6 +21,7 @@ import java.sql.DriverManager;
 import java.sql.Statement;
 import java.util.Collections;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 import org.h2.api.MaterializedParticipantArtifact;
@@ -135,6 +139,44 @@ public class OnlineBackupBundleFaultMatrixTest {
         }
     }
 
+    /**
+     * participant 已全部物化且 staging 已 fsync 后进程直接退出，final 仍必须
+     * 不可见；源库重开后可以用新任务继续备份。
+     */
+    @Test
+    public void processExitBeforeAtomicRenameNeverPublishesStaging()
+            throws Exception {
+        Path databasePath = directory.resolve("crash-source");
+        Path bundle = directory.resolve("bundle-crash");
+        Process process = new ProcessBuilder(javaExecutable(), "-cp",
+                System.getProperty("java.class.path"),
+                OnlineBackupCrashProbe.class.getName(),
+                databasePath.toString(), bundle.toString())
+                        .redirectErrorStream(true).start();
+        assertTrue(process.waitFor(15L, TimeUnit.SECONDS),
+                "crash probe did not exit");
+        String output = readOutput(process.getInputStream());
+        assertEquals(OnlineBackupCrashProbe.EXIT_CODE, process.exitValue(),
+                output);
+        assertFalse(Files.exists(bundle));
+        Path staging = findStaging(bundle);
+        assertTrue(Files.isRegularFile(staging.resolve("manifest.json")));
+        assertTrue(Files.isDirectory(staging.resolve("participants")));
+
+        Path recoveredBundle = directory.resolve("bundle-after-crash");
+        try (Connection connection = connectPath(databasePath);
+                Statement statement = connection.createStatement()) {
+            statement.executeUpdate("INSERT INTO TEST VALUES(2)");
+            try (OnlineBackupSession session =
+                    OnlineBackupSession.prepare(database(connection),
+                            options())) {
+                session.publish(recoveredBundle);
+            }
+        }
+        assertTrue(Files.isDirectory(recoveredBundle));
+        assertFalse(Files.exists(bundle));
+    }
+
     private OnlineBackupOptions options() {
         return new OnlineBackupOptions(UUID.randomUUID(),
                 Collections.<String>emptyList(), 5_000L, 30_000L);
@@ -165,13 +207,42 @@ public class OnlineBackupBundleFaultMatrixTest {
         }
     }
 
+    private Path findStaging(Path bundle) throws Exception {
+        String prefix = "." + bundle.getFileName() + ".staging-";
+        try (Stream<Path> paths = Files.list(bundle.getParent())) {
+            return paths.filter(path -> path.getFileName().toString()
+                    .startsWith(prefix)).findFirst().get();
+        }
+    }
+
     private Connection connect(String name) throws Exception {
-        String url = "jdbc:h2:"
-                + directory.resolve(name).toAbsolutePath().toString()
+        return connectPath(directory.resolve(name));
+    }
+
+    private Connection connectPath(Path path) throws Exception {
+        String url = "jdbc:h2:" + path.toAbsolutePath().toString()
                         .replace(File.separatorChar, '/')
                 + ";ONLINE_BACKUP_COORDINATION=TRUE"
                 + ";ONLINE_BACKUP_GENERATION_ID=" + UUID.randomUUID();
         return DriverManager.getConnection(url, "sa", "");
+    }
+
+    private static String javaExecutable() {
+        return new File(new File(System.getProperty("java.home"), "bin"),
+                System.getProperty("os.name", "").startsWith("Windows")
+                        ? "java.exe" : "java").getAbsolutePath();
+    }
+
+    private static String readOutput(InputStream input) throws Exception {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        byte[] buffer = new byte[4_096];
+        int read;
+        while ((read = input.read(buffer)) >= 0) {
+            if (read > 0) {
+                output.write(buffer, 0, read);
+            }
+        }
+        return output.toString("UTF-8");
     }
 
     private static Database database(Connection connection) {

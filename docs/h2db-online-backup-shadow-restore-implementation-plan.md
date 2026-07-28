@@ -1,6 +1,6 @@
 # H2DB 组合在线备份与影子恢复实施计划
 
-状态：实施中（P0-P6 已完成，P7 待开始）
+状态：实施中（P0-P7 已完成，P8 待开始）
 规划日期：2026-07-28  
 目标仓库：`D:\work\java\h2db`  
 需求来源：`D:\work\java2\vexra-adb\docs\requirements\h2db-online-backup-restore-requirements.md`  
@@ -563,7 +563,7 @@ ACTIVATION_ABORT
 | P4 Session 与 SPI | 实现组合 session 和 participant prepare/abort | P2/P3 | [x] |
 | P5 Bundle Publish | materialize、checksum、manifest 和原子发布 | P4 | [x] |
 | P6 Shadow Restore | 安全 staging、验证和只读试打开 | P2/P5 | [x] |
-| P7 Activation | 有界排空、token、fence 和取消 | P1/P6 | [ ] |
+| P7 Activation | 有界排空、token、fence 和取消 | P1/P6 | [x] |
 | P8 TCP v21 远程适配 | 统一 unwrap API 的 SessionRemote/TcpServerThread 实现 | P4-P7 | [ ] |
 | P9 联调与灰度 | ADB/LDB 联调、性能门禁、故障矩阵和发布准备 | P3-P8 | [ ] |
 
@@ -1123,31 +1123,69 @@ java -cp "build/classes/java/legacyTest;build/classes/java/main;build/resources/
 
 ### P7 Activation、Drain 与 Fence
 
-- [ ] 在 transaction begin 路径拒绝 quiesce 后的新事务。
-- [ ] 等待 quiesce 前已开始事务全部结束，超时恢复准入。
-- [ ] 返回只允许一次成功消费的 activation token。
-- [ ] `commitActivation()`把旧 generation 转为 FENCED。
-- [ ] `abortActivation()`和未消费 token 的 `close()`恢复旧库准入。
-- [ ] 为临时 quiesce、永久 fence 和 activation timeout 分配三个未占用 vendor error code，并显式映射已确认的 SQLState/JDBC 异常类型。
-- [ ] quiesce 和 activation timeout 后恢复 admission，原连接保持有效；fence 后将旧 generation 的既有连接标记为永久不可用。
-- [ ] 在 report 中输出稳定 reason，禁止 ADB 解析本地化异常消息。
-- [ ] 验证旧 generation 已 fence 后不能通过旧 session 重新开始写事务。
-- [ ] 验证健康检查和回滚窗口由 ADB 控制，H2 不自动删除旧 generation。
-- [ ] 明确 token 是进程内协调对象，不作为重启后的 active generation 判断依据。
+- [x] 在 transaction begin 和 DDL admission 路径拒绝 quiesce 后的新事务/DDL；begin 与 drain 状态转换、计数和拒绝在同一 gate lock 下完成。
+- [x] 等待 quiesce 前已开始的 transaction、commit 和 DDL 全部结束；超时和 interrupt 均恢复或终止 gate，不签发失效 token。
+- [x] 返回进程内 `ActivationToken`；相同 commit 或 abort 可幂等重试，互相冲突的重复消费明确失败。
+- [x] `commitActivation()`把旧 generation 原子转为 `FENCED`，且仅在 active transaction/commit/DDL 全部为零时完成。
+- [x] `abortActivation()`和未消费 token 的 `close()`恢复旧库准入。
+- [x] 分配 90161 `ONLINE_BACKUP_QUIESCING_1`、90162 `GENERATION_FENCED_1`和 90163 `ONLINE_BACKUP_ACTIVATION_TIMEOUT_1`，分别显式映射 `40001`/`SQLTransactionRollbackException`、`08006`/`SQLNonTransientConnectionException`和`HYT00`/`SQLTimeoutException`。
+- [x] quiesce 和 activation timeout 后恢复 admission，原连接保持有效；fence 后既有 embedded 连接 `isClosed=true`、`isValid=false`，旧 statement 和新连接均稳定返回 90162。
+- [x] `ActivationReport`输出结构化 `ActivationStatus`和非本地化 `ActivationReason`；gate metrics 对拒绝和 timeout 输出 `QUIESCING`、`GENERATION_FENCED`、`ACTIVATION_TIMEOUT`。
+- [x] 验证旧 generation 已 fence 后不能通过旧 session、已 prepare statement 或重新连接继续操作。
+- [x] H2 activation core 不包含路由、健康检查、旧 generation 删除或 rollback-window 策略；这些仍由 ADB 持久化 active pointer 驱动。
+- [x] `ActivationToken`文档和实现均限定为当前 H2 进程内协调对象，不作为重启后的 active generation 判断依据。
 
 验收：
 
-- [ ] `T-H2BR-DRAIN-SUCCESS-01`
-- [ ] `T-H2BR-DRAIN-TIMEOUT-01`
-- [ ] `T-H2BR-ACTIVATION-ABORT-01`
-- [ ] `T-H2BR-ACTIVATION-CONSUME-ONCE-01`
-- [ ] `T-H2BR-OLD-GENERATION-FENCE-01`
-- [ ] `T-H2BR-BEGIN-DRAIN-RACE-01`
-- [ ] `T-H2BR-ACTIVATION-GENERATION-MISMATCH-01`
-- [ ] `T-H2BR-QUIESCE-ERROR-CONTRACT-01`
-- [ ] `T-H2BR-FENCE-ERROR-CONTRACT-01`
-- [ ] `T-H2BR-ACTIVATION-TIMEOUT-CONTRACT-01`
-- [ ] `T-H2BR-ACTIVATION-CONNECTION-LIFECYCLE-01`
+- [x] `T-H2BR-DRAIN-SUCCESS-01`
+- [x] `T-H2BR-DRAIN-TIMEOUT-01`
+- [x] `T-H2BR-ACTIVATION-ABORT-01`
+- [x] `T-H2BR-ACTIVATION-CONSUME-ONCE-01`
+- [x] `T-H2BR-OLD-GENERATION-FENCE-01`
+- [x] `T-H2BR-BEGIN-DRAIN-RACE-01`
+- [x] `T-H2BR-ACTIVATION-GENERATION-MISMATCH-01`
+- [x] `T-H2BR-QUIESCE-ERROR-CONTRACT-01`
+- [x] `T-H2BR-FENCE-ERROR-CONTRACT-01`
+- [x] `T-H2BR-ACTIVATION-TIMEOUT-CONTRACT-01`
+- [x] `T-H2BR-ACTIVATION-CONNECTION-LIFECYCLE-01`
+
+实现结果：
+
+- `DatabaseOperationGate`增加持久到 Database 关闭的 `FENCED`状态；`TRANSACTION_DRAIN → OPEN`只由 abort/close 完成，`TRANSACTION_DRAIN → FENCED`只由 token commit 完成。
+- drain 设置状态与 transaction/DDL begin 计数使用同一公平锁，消除 begin/drain 漏计窗口；已有事务的 commit 仍可在 drain 中完成。
+- drain timeout 解除 quiesce 并返回独立 90163；Database shutdown 会改变 gate generation、唤醒 waiter，并阻止其返回已失效 handle。
+- `ActivationCoordinator.prepare()`在 drain 前后校验 old generation；report 使用 drain 完成后的 `databaseId/schemaEpoch`，并拒绝 old/new generation 相同。
+- `ActivationToken`持有 drain handle 和不可变 report；相同动作返回第一次结果，commit-after-abort 和 abort-after-commit 不改变状态并明确报错。
+- `ActivationReport`记录 `activationId`、database/old/new generation、schema epoch、drain 时长、状态、稳定 reason 和更新时间。
+- 三个 vendor code 在 `ErrorCode.getState()`和`DbException.getJdbcSQLException()`中显式映射；消息查找保留 vendor-code 专用文本，避免复用 deadlock、connection-broken 或 lock-timeout 诊断。
+- embedded `JdbcConnection.checkClosed()`识别 permanent fence；现存连接、已创建 statement、`isClosed/isValid`和 fence 后新 session 均表现为不可恢复连接失效。
+- 默认未启用协调功能的 Database 不创建 gate；JDBC 路径只增加可预测的 null 分支，传统备份和默认 MVStore 回归保持通过。
+- H2 不持久化 token，不更新 active pointer，也不删除旧 generation；P9 的 ADB 崩溃恢复仍只依据持久化 active pointer。
+
+验证命令：
+
+```powershell
+.\gradlew.bat runOnlineBackupCheck --tests org.h2.test.backup.ActivationCoordinatorTest --rerun-tasks
+.\gradlew.bat runOnlineBackupCheck --rerun-tasks
+.\gradlew.bat runPluginArchitectureCheck --rerun-tasks
+.\gradlew.bat javadoc
+.\gradlew.bat legacyTestClasses
+java -cp "build/classes/java/legacyTest;build/classes/java/main;build/resources/legacyTest;build/resources/main" `
+  org.h2.test.LegacyTestGroupRunner `
+  org.h2.test.db.TestBackup `
+  org.h2.test.db.TestOpenClose `
+  org.h2.test.store.TestMVStoreConcurrent
+```
+
+验证结果：
+
+| 范围 | 结果 |
+| --- | --- |
+| P7 专项 | `ActivationCoordinatorTest` 6 项通过，0 failure、0 error、0 skipped。 |
+| P1-P7 专项 | `runOnlineBackupCheck` 58 项通过，0 failure、0 error、0 skipped。 |
+| JDK 8 / Javadoc | `compileJava`、`compileOnlineBackupTestJava`和`javadoc`通过。 |
+| plugin 回归 | 140 项通过，0 failure、0 error、0 skipped。 |
+| 传统备份与默认 MVStore | `TestBackup`、`TestOpenClose`和`TestMVStoreConcurrent`通过。 |
 
 ### P8 TCP v21 远程适配
 
@@ -1292,9 +1330,9 @@ P99 由 ADB 或专项性能工具对逐操作 report 聚合，不在 H2 core 内
 | 多 participant 逐个消耗完整 timeout，导致总 barrier 时间随数量失控 | P0 | 多 fake participant deadline 测试 | 使用单一绝对 deadline，每次 prepare 只获得剩余预算；首次灰度限制一个真实 participant | [x] |
 | flush 无法在 1 秒内安全中断 | P1 | 高脏页性能测试 | barrier 外预 flush、deadline overrun、重新定义硬上限口径 | [ ] |
 | DDL 只在 commit 处阻塞导致 catalog 已变更 | P0 | DDL race 测试 | DDL 执行前进入 gate | [ ] |
-| quiesce 与 transaction begin 竞态产生漏计事务 | P0 | begin/drain race 测试 | begin/end 与状态检查在同一 gate 协议内 | [ ] |
-| ADB 把永久 fence 当作可重试错误并复用旧连接 | P0 | embedded/TCP error contract 测试 | 独立 vendor code、`08006`和 non-transient connection exception；fence 后强制作废旧连接 | [ ] |
-| 新错误复用 deadlock/lock-timeout vendor code 导致诊断和重试策略混淆 | P1 | error-code uniqueness 测试 | 分配独立 vendor code，仅复用标准 SQLState 分类 | [ ] |
+| quiesce 与 transaction begin 竞态产生漏计事务 | P0 | begin/drain race 测试 | P7 已将 begin/end、drain 状态和计数放入同一 gate lock，并覆盖 DML/DDL race、timeout 和 shutdown | [x] |
+| ADB 把永久 fence 当作可重试错误并复用旧连接 | P0 | embedded/TCP error contract 测试 | P7 embedded 已使用独立 90162、`08006`和 non-transient connection exception，并使旧连接/statement/新 session 永久不可用；TCP parity 留在 P8 | 部分完成 |
+| 新错误复用 deadlock/lock-timeout vendor code 导致诊断和重试策略混淆 | P1 | error-code uniqueness 测试 | P7 已分配 90161-90163，显式映射 SQLState/JDBC 类型并保留独立消息；未复用既有 vendor code | [x] |
 | validation open 触发 plugin 外部副作用 | P0 | fake lifecycle/network/thread provider 测试 | P6 已实现必要 provider 白名单、显式 validation capability、受限 context、trigger/lifecycle 抑制和未认证依赖 fail-closed；P9 仍需完成真实 provider 认证 | 部分完成 |
 | 只读模式被误认为足以隔离插件副作用 | P0 | 只读库中注入网络、线程和服务注册尝试 | P6 已将数据库只读与 provider capability/allowlist 分层，并明确 capability 不是 JVM 沙箱；P9 继续验证真实 provider 外部副作用契约 | 部分完成 |
 | manifest 状态与 atomic publish 冲突 | P1 | crash matrix | final manifest 只写 PUBLISHED，运行状态独立；P5 已验证正常、materialize 失败、路径拒绝和 final 冲突，进程强杀矩阵留在 P9 | 部分完成 |

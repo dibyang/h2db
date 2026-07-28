@@ -199,6 +199,9 @@
 90158=#Online backup identity metadata is required: {0}
 90159=#Online backup generation mismatch; requested {0}, active {1}
 90160=#Provider required for shadow validation is not validation-safe: {0}
+90161=#Online backup activation is quiescing generation {0}
+90162=#Database generation is permanently fenced: {0}
+90163=#Online backup activation timed out while draining generation {0}
 HY000=常规错误: {0}
 HY004=位置数据类型: {0}
 HYC00=不支持的特性: {0}

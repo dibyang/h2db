@@ -485,8 +485,19 @@ public class DbException extends RuntimeException {
      */
     public static SQLException getJdbcSQLException(int errorCode, Throwable cause, String... params) {
         String sqlstate = getState(errorCode);
-        String message = translate(sqlstate, params);
+        String message = translate(messageKey(errorCode, sqlstate), params);
         return getJdbcSQLException(message, null, sqlstate, errorCode, cause, null);
+    }
+
+    private static String messageKey(int errorCode, String sqlstate) {
+        switch (errorCode) {
+        case ONLINE_BACKUP_QUIESCING_1:
+        case GENERATION_FENCED_1:
+        case ONLINE_BACKUP_ACTIVATION_TIMEOUT_1:
+            return Integer.toString(errorCode);
+        default:
+            return sqlstate;
+        }
     }
 
     /**
@@ -569,7 +580,14 @@ public class DbException extends RuntimeException {
         case LOCK_TIMEOUT_1:
         case STATEMENT_WAS_CANCELED:
         case LOB_CLOSED_ON_TIMEOUT_1:
+        case ONLINE_BACKUP_ACTIVATION_TIMEOUT_1:
             return new JdbcSQLTimeoutException(message, sql, state, errorCode, cause, stackTrace);
+        case ONLINE_BACKUP_QUIESCING_1:
+            return new JdbcSQLTransactionRollbackException(message, sql, state,
+                    errorCode, cause, stackTrace);
+        case GENERATION_FENCED_1:
+            return new JdbcSQLNonTransientConnectionException(message, sql,
+                    state, errorCode, cause, stackTrace);
         case FUNCTION_MUST_RETURN_RESULT_SET_1:
         case INVALID_TRIGGER_FLAGS_1:
         case SUM_OR_AVG_ON_WRONG_DATATYPE_1:

@@ -41,9 +41,11 @@ import org.h2.engine.Constants;
 import org.h2.engine.IsolationLevel;
 import org.h2.engine.Mode;
 import org.h2.engine.Session;
+import org.h2.engine.SessionLocal;
 import org.h2.engine.Session.StaticSettings;
 import org.h2.engine.SessionRemote;
 import org.h2.engine.SysProperties;
+import org.h2.engine.backup.DatabaseOperationGate;
 import org.h2.message.DbException;
 import org.h2.message.TraceObject;
 import org.h2.result.ResultInterface;
@@ -480,7 +482,8 @@ public class JdbcConnection extends TraceObject implements Connection, JdbcConne
     public boolean isClosed() throws SQLException {
         try {
             debugCodeCall("isClosed");
-            return session == null || session.isClosed();
+            return session == null || session.isClosed()
+                    || isGenerationFenced();
         } catch (Exception e) {
             throw logAndConvert(e);
         }
@@ -1374,6 +1377,22 @@ public class JdbcConnection extends TraceObject implements Connection, JdbcConne
         if (session.isClosed()) {
             throw DbException.get(ErrorCode.DATABASE_CALLED_AT_SHUTDOWN);
         }
+        if (session instanceof SessionLocal) {
+            DatabaseOperationGate gate = ((SessionLocal) session)
+                    .getDatabase().getOperationGate();
+            if (gate != null) {
+                gate.checkNotFenced();
+            }
+        }
+    }
+
+    private boolean isGenerationFenced() {
+        if (session instanceof SessionLocal) {
+            DatabaseOperationGate gate = ((SessionLocal) session)
+                    .getDatabase().getOperationGate();
+            return gate != null && gate.isFenced();
+        }
+        return false;
     }
 
     String getURL() {

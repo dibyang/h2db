@@ -2267,7 +2267,22 @@ public class ErrorCode {
      */
     public static final int UNVALIDATABLE_PROVIDER_1 = 90160;
 
-    // next is 90161
+    /**
+     * Activation 正在排空事务，新的事务暂时不能准入。
+     */
+    public static final int ONLINE_BACKUP_QUIESCING_1 = 90161;
+
+    /**
+     * 当前 generation 已被永久 fence，旧连接不得继续使用。
+     */
+    public static final int GENERATION_FENCED_1 = 90162;
+
+    /**
+     * Activation prepare 未能在 deadline 内排空事务。
+     */
+    public static final int ONLINE_BACKUP_ACTIVATION_TIMEOUT_1 = 90163;
+
+    // next is 90164
 
     private ErrorCode() {
         // utility class
@@ -2322,6 +2337,7 @@ public class ErrorCode {
 
         // 08: connection exception
         case ERROR_OPENING_DATABASE_1: return "08000";
+        case GENERATION_FENCED_1: return "08006";
 
         // 21: cardinality violation
         case COLUMN_COUNT_DOES_NOT_MATCH: return "21S02";
@@ -2329,6 +2345,9 @@ public class ErrorCode {
         // 22: data exception
         case NULL_VALUE_IN_ARRAY_TARGET: return "2200E";
         case ARRAY_ELEMENT_ERROR_2: return "2202E";
+
+        // 40: transaction rollback
+        case ONLINE_BACKUP_QUIESCING_1: return "40001";
 
         // 42: syntax error or access rule violation
         case TABLE_OR_VIEW_ALREADY_EXISTS_1: return "42S01";
@@ -2351,6 +2370,7 @@ public class ErrorCode {
 
         case FEATURE_NOT_SUPPORTED_1: return "HYC00";
         case LOCK_TIMEOUT_1: return "HYT00";
+        case ONLINE_BACKUP_ACTIVATION_TIMEOUT_1: return "HYT00";
         default:
             return Integer.toString(errorCode);
         }

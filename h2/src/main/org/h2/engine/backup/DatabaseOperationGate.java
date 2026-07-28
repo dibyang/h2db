@@ -28,6 +28,7 @@ public final class DatabaseOperationGate {
         OPEN,
         BACKUP_BARRIER,
         TRANSACTION_DRAIN,
+        FENCED,
         CLOSED
     }
 
@@ -38,6 +39,9 @@ public final class DatabaseOperationGate {
         NONE,
         BACKUP_BARRIER_TIMEOUT,
         TRANSACTION_DRAIN_TIMEOUT,
+        ACTIVATION_TIMEOUT,
+        QUIESCING,
+        GENERATION_FENCED,
         INTERRUPTED,
         CLOSED,
         BUSY
@@ -55,6 +59,8 @@ public final class DatabaseOperationGate {
     private int activeTransactions;
     private int waitingCommits;
     private int waitingDdl;
+    private String drainingGenerationId;
+    private String fencedGenerationId;
     private long backupBarrierCount;
     private long backupBarrierTimeoutCount;
     private long transactionDrainCount;
@@ -162,8 +168,7 @@ public final class DatabaseOperationGate {
                 }
             }
             if (state == State.TRANSACTION_DRAIN) {
-                lastFailureReason = FailureReason.BUSY;
-                throw DbException.get(ErrorCode.DATABASE_IS_IN_EXCLUSIVE_MODE);
+                throw quiescing();
             }
             checkUsable();
             activeDdl++;
@@ -215,8 +220,7 @@ public final class DatabaseOperationGate {
         lockInterruptibly();
         try {
             if (state == State.TRANSACTION_DRAIN && ddlDepth.get() == null) {
-                lastFailureReason = FailureReason.BUSY;
-                throw DbException.get(ErrorCode.DATABASE_IS_IN_EXCLUSIVE_MODE);
+                throw quiescing();
             }
             checkUsable();
             activeTransactions++;
@@ -266,7 +270,9 @@ public final class DatabaseOperationGate {
                     throw timeout("online backup barrier");
                 }
                 remainingNanos = awaitChanged(remainingNanos);
+                requireOwned(State.BACKUP_BARRIER, barrierGeneration);
             }
+            requireOwned(State.BACKUP_BARRIER, barrierGeneration);
             recordBackupBarrierWait(startNanos);
             return new BackupBarrier(this, barrierGeneration);
         } catch (RuntimeException e) {
@@ -288,31 +294,52 @@ public final class DatabaseOperationGate {
      * @return drain handle
      */
     public TransactionDrain beginTransactionDrain(long timeoutMillis) {
+        return beginTransactionDrain(timeoutMillis, "unknown");
+    }
+
+    /**
+     * 启动 activation transaction drain，并等待已准入工作结束。
+     *
+     * @param timeoutMillis 总超时毫秒数
+     * @param generationId 正在排空的 generation ID
+     * @return drain handle
+     */
+    public TransactionDrain beginTransactionDrain(long timeoutMillis,
+            String generationId) {
         validateTimeout(timeoutMillis);
+        if (generationId == null || generationId.trim().isEmpty()) {
+            throw DbException.getInvalidValueException("generationId",
+                    generationId);
+        }
         lockInterruptibly();
         long startNanos = System.nanoTime();
         try {
             requireOpen();
             state = State.TRANSACTION_DRAIN;
+            drainingGenerationId = generationId;
             long drainGeneration = ++generation;
             transactionDrainCount++;
             long remainingNanos = toNanos(timeoutMillis);
             while (activeTransactions != 0 || activeCommits != 0 || activeDdl != 0) {
                 if (remainingNanos <= 0L) {
                     transactionDrainTimeoutCount++;
-                    lastFailureReason = FailureReason.TRANSACTION_DRAIN_TIMEOUT;
+                    lastFailureReason = FailureReason.ACTIVATION_TIMEOUT;
                     state = State.OPEN;
+                    drainingGenerationId = null;
                     changed.signalAll();
-                    throw timeout("online backup transaction drain");
+                    throw activationTimeout(generationId);
                 }
                 remainingNanos = awaitChanged(remainingNanos);
+                requireOwned(State.TRANSACTION_DRAIN, drainGeneration);
             }
+            requireOwned(State.TRANSACTION_DRAIN, drainGeneration);
             recordTransactionDrainWait(startNanos);
             return new TransactionDrain(this, drainGeneration);
         } catch (RuntimeException e) {
             recordTransactionDrainWait(startNanos);
             if (state == State.TRANSACTION_DRAIN) {
                 state = State.OPEN;
+                drainingGenerationId = null;
                 changed.signalAll();
             }
             throw e;
@@ -355,16 +382,73 @@ public final class DatabaseOperationGate {
         }
     }
 
+    /**
+     * 若 generation 已被永久 fence，则抛出稳定的连接错误。
+     */
+    public void checkNotFenced() {
+        lock.lock();
+        try {
+            if (state == State.FENCED) {
+                throw fenced();
+            }
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * @return generation 是否已被永久 fence
+     */
+    public boolean isFenced() {
+        lock.lock();
+        try {
+            return state == State.FENCED;
+        } finally {
+            lock.unlock();
+        }
+    }
+
     private void release(State expectedState, long expectedGeneration) {
         lock.lock();
         try {
             if (state == expectedState && generation == expectedGeneration) {
                 state = State.OPEN;
+                if (expectedState == State.TRANSACTION_DRAIN) {
+                    drainingGenerationId = null;
+                }
                 changed.signalAll();
             }
         } finally {
             lock.unlock();
         }
+    }
+
+    private void fence(long expectedGeneration, String generationId) {
+        lock.lock();
+        try {
+            requireOwned(State.TRANSACTION_DRAIN, expectedGeneration);
+            if (activeTransactions != 0 || activeCommits != 0
+                    || activeDdl != 0) {
+                throw new IllegalStateException(
+                        "Cannot fence generation with active operations");
+            }
+            state = State.FENCED;
+            drainingGenerationId = null;
+            fencedGenerationId = generationId;
+            generation++;
+            changed.signalAll();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private void requireOwned(State expectedState, long expectedGeneration) {
+        if (state == expectedState && generation == expectedGeneration) {
+            return;
+        }
+        checkUsable();
+        lastFailureReason = FailureReason.BUSY;
+        throw DbException.get(ErrorCode.DATABASE_IS_IN_EXCLUSIVE_MODE);
     }
 
     private void requireOpen() {
@@ -376,10 +460,26 @@ public final class DatabaseOperationGate {
     }
 
     private void checkUsable() {
+        if (state == State.FENCED) {
+            throw fenced();
+        }
         if (state == State.CLOSED) {
             lastFailureReason = FailureReason.CLOSED;
             throw DbException.get(ErrorCode.DATABASE_IS_CLOSED);
         }
+    }
+
+    private DbException quiescing() {
+        lastFailureReason = FailureReason.QUIESCING;
+        return DbException.get(ErrorCode.ONLINE_BACKUP_QUIESCING_1,
+                drainingGenerationId == null ? "unknown"
+                        : drainingGenerationId);
+    }
+
+    private DbException fenced() {
+        lastFailureReason = FailureReason.GENERATION_FENCED;
+        return DbException.get(ErrorCode.GENERATION_FENCED_1,
+                fencedGenerationId == null ? "unknown" : fencedGenerationId);
     }
 
     private void recordAdmissionWait(long startNanos) {
@@ -446,6 +546,11 @@ public final class DatabaseOperationGate {
         return DbException.get(ErrorCode.LOCK_TIMEOUT_1, operation);
     }
 
+    private static DbException activationTimeout(String generationId) {
+        return DbException.get(
+                ErrorCode.ONLINE_BACKUP_ACTIVATION_TIMEOUT_1, generationId);
+    }
+
     /**
      * Acquired backup barrier.
      */
@@ -486,6 +591,15 @@ public final class DatabaseOperationGate {
         public void close() {
             if (closed.compareAndSet(false, true)) {
                 gate.release(State.TRANSACTION_DRAIN, generation);
+            }
+        }
+
+        void fence(String generationId) {
+            if (closed.compareAndSet(false, true)) {
+                gate.fence(generation, generationId);
+            } else {
+                throw new IllegalStateException(
+                        "Transaction drain was already consumed");
             }
         }
     }

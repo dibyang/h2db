@@ -1174,6 +1174,9 @@ public final class Database implements DataHandler, CastDataProvider {
         if (closing) {
             return null;
         }
+        if (operationGate != null) {
+            operationGate.checkNotFenced();
+        }
         if (exclusiveSession.get() != null) {
             throw DbException.get(ErrorCode.DATABASE_IS_IN_EXCLUSIVE_MODE);
         }

@@ -878,14 +878,16 @@ public abstract class FileStore<C extends Chunk<C>>
      * @return if any chunk was re-written
      */
     public boolean compact(int targetFillRate, int write) {
-        if (hasPersistentData()) {
+        if (hasPersistentData() && !mvStore.hasPreparedSnapshot()) {
             if (targetFillRate > 0 && getChunksFillRate() < targetFillRate) {
                 // We can't wait forever for the lock here,
                 // because if called from the background thread,
                 // it might go into deadlock with concurrent database closure
                 // and attempt to stop this thread.
                 try {
-                    Boolean result = mvStore.tryExecuteUnderStoreLock(() -> rewriteChunks(write, 100));
+                    Boolean result = mvStore.tryExecuteUnderStoreLock(
+                            () -> mvStore.hasPreparedSnapshot() ? false
+                                    : rewriteChunks(write, 100));
                     return result != null && result;
                 } catch (InterruptedException e) {
                     throw new RuntimeException(e);
@@ -1895,6 +1897,9 @@ public abstract class FileStore<C extends Chunk<C>>
     }
 
     protected boolean rewriteChunks(int writeLimit, int targetFillRate) {
+        if (mvStore.hasPreparedSnapshot()) {
+            return false;
+        }
         serializationLock.lock();
         try {
             MVStore.TxCounter txCounter = mvStore.registerVersionUsage();

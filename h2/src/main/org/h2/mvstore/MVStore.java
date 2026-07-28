@@ -6,6 +6,9 @@
 package org.h2.mvstore;
 
 import java.lang.Thread.UncaughtExceptionHandler;
+import java.nio.ByteBuffer;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Deque;
@@ -32,6 +35,7 @@ import org.h2.compress.CompressLZF;
 import org.h2.compress.Compressor;
 import org.h2.mvstore.type.StringDataType;
 import org.h2.store.fs.FileUtils;
+import org.h2.util.StringUtils;
 import org.h2.util.Utils;
 
 /*
@@ -165,6 +169,8 @@ public class MVStore implements AutoCloseable {
     private volatile int state;
 
     private final FileStore<?> fileStore;
+
+    private volatile MVStorePreparedSnapshot preparedSnapshot;
 
     private final boolean fileStoreShallBeClosed;
 
@@ -650,6 +656,7 @@ public class MVStore implements AutoCloseable {
      */
     @Override
     public void close() {
+        cancelPreparedSnapshot();
         closeStore(true, 0);
     }
 
@@ -667,6 +674,7 @@ public class MVStore implements AutoCloseable {
      *                              -1 means unlimited time (full compaction)
      */
     public void close(int allowedCompactionTime) {
+        cancelPreparedSnapshot();
         if (!isClosed()) {
             if (fileStore != null) {
                 boolean compactFully = allowedCompactionTime == -1;
@@ -700,6 +708,7 @@ public class MVStore implements AutoCloseable {
      */
     public void closeImmediately() {
         try {
+            cancelPreparedSnapshot();
             closeStore(false, 0);
         } catch (Throwable e) {
             handleException(e);
@@ -999,6 +1008,102 @@ public class MVStore implements AutoCloseable {
         }
     }
 
+    private void cancelPreparedSnapshot() {
+        MVStorePreparedSnapshot snapshot = preparedSnapshot;
+        if (snapshot != null) {
+            snapshot.abort();
+        }
+    }
+
+    /**
+     * Prepare a fixed-cut snapshot of this single-file store.
+     *
+     * @param leaseMillis snapshot lease in milliseconds
+     * @return prepared snapshot
+     */
+    public MVStorePreparedSnapshot prepareSnapshot(long leaseMillis) {
+        DataUtils.checkArgument(leaseMillis >= 0L,
+                "Snapshot lease must not be negative");
+        storeLock.lock();
+        try {
+            checkOpen();
+            if (!(fileStore instanceof SingleFileStore)) {
+                throw new IllegalStateException(
+                        "Prepared snapshot requires a single-file store");
+            }
+            if (preparedSnapshot != null) {
+                throw new IllegalStateException(
+                        "Another prepared snapshot is active");
+            }
+            if (!isReadOnly()) {
+                commit();
+            }
+            sync();
+            SingleFileStore source = (SingleFileStore) fileStore;
+            boolean previousReuseSpace = source.isSpaceReused();
+            source.setReuseSpace(false);
+            try {
+                byte[] headerBlocks = source.captureSnapshotHeader();
+                long copyLength = source.getSnapshotLength();
+                if (copyLength < headerBlocks.length) {
+                    throw DataUtils.newMVStoreException(
+                            DataUtils.ERROR_FILE_CORRUPT,
+                            "Snapshot source is shorter than its header");
+                }
+                long snapshotVersion = currentVersion;
+                long initialPhysicalLength =
+                        source.getSnapshotPhysicalLength();
+                String fingerprint = snapshotFingerprint(headerBlocks,
+                        copyLength, snapshotVersion);
+                MVStorePreparedSnapshot snapshot =
+                        new MVStorePreparedSnapshot(this, source,
+                        headerBlocks, copyLength, initialPhysicalLength,
+                        snapshotVersion, fingerprint, leaseMillis,
+                        previousReuseSpace);
+                preparedSnapshot = snapshot;
+                snapshot.startLease();
+                return snapshot;
+            } catch (RuntimeException | Error e) {
+                preparedSnapshot = null;
+                source.setReuseSpace(previousReuseSpace);
+                throw e;
+            }
+        } finally {
+            storeLock.unlock();
+        }
+    }
+
+    void releasePreparedSnapshot(MVStorePreparedSnapshot snapshot,
+            boolean previousReuseSpace) {
+        storeLock.lock();
+        try {
+            if (preparedSnapshot == snapshot) {
+                fileStore.setReuseSpace(previousReuseSpace);
+                preparedSnapshot = null;
+            }
+        } finally {
+            storeLock.unlock();
+        }
+    }
+
+    boolean hasPreparedSnapshot() {
+        return preparedSnapshot != null;
+    }
+
+    private static String snapshotFingerprint(byte[] headerBlocks,
+            long copyLength, long snapshotVersion) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            digest.update(headerBlocks);
+            ByteBuffer values = ByteBuffer.allocate(16);
+            values.putLong(copyLength).putLong(snapshotVersion);
+            digest.update(values.array());
+            return StringUtils.convertBytesToHex(digest.digest());
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
     /**
      * Compact store file, that is, compact blocks that have a low
      * fill rate, and move chunks next to each other. This will typically
@@ -1012,7 +1117,9 @@ public class MVStore implements AutoCloseable {
             setRetentionTime(0);
             storeLock.lock();
             try {
-                fileStore.compactStore(maxCompactTime);
+                if (preparedSnapshot == null) {
+                    fileStore.compactStore(maxCompactTime);
+                }
             } finally {
                 unlockAndCheckPanicCondition();
             }

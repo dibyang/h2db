@@ -248,6 +248,90 @@ public class SingleFileStore extends RandomAccessStore {
         out.closeEntry();
     }
 
+    byte[] captureSnapshotHeader() {
+        ByteBuffer buffer = ByteBuffer.allocate(getSnapshotHeaderLength());
+        try {
+            readSnapshotBytes(0L, buffer);
+        } catch (IOException e) {
+            throw DataUtils.newMVStoreException(DataUtils.ERROR_READING_FAILED,
+                    "Could not capture snapshot header from {0}", getFileName(),
+                    e);
+        }
+        return buffer.array();
+    }
+
+    long getSnapshotLength() {
+        saveChunkLock.lock();
+        try {
+            long encryptionHeaderLength = snapshotFileChannel().size()
+                    - fileChannel.size();
+            if (encryptionHeaderLength < 0L) {
+                throw DataUtils.newMVStoreException(
+                        DataUtils.ERROR_FILE_CORRUPT,
+                        "Invalid physical header length for {0}",
+                        getFileName());
+            }
+            return encryptionHeaderLength
+                    + getAfterLastBlock_() * FileStore.BLOCK_SIZE;
+        } catch (IOException e) {
+            throw DataUtils.newMVStoreException(DataUtils.ERROR_READING_FAILED,
+                    "Could not determine snapshot length of {0}",
+                    getFileName(), e);
+        } finally {
+            saveChunkLock.unlock();
+        }
+    }
+
+    long getSnapshotPhysicalLength() {
+        try {
+            return snapshotFileChannel().size();
+        } catch (IOException e) {
+            throw DataUtils.newMVStoreException(DataUtils.ERROR_READING_FAILED,
+                    "Could not determine physical length of {0}",
+                    getFileName(), e);
+        }
+    }
+
+    private int getSnapshotHeaderLength() {
+        long encryptionHeaderLength;
+        try {
+            encryptionHeaderLength = snapshotFileChannel().size()
+                    - fileChannel.size();
+        } catch (IOException e) {
+            throw DataUtils.newMVStoreException(DataUtils.ERROR_READING_FAILED,
+                    "Could not determine snapshot header length of {0}",
+                    getFileName(), e);
+        }
+        if (encryptionHeaderLength < 0L
+                || encryptionHeaderLength > Integer.MAX_VALUE
+                        - 2 * FileStore.BLOCK_SIZE) {
+            throw DataUtils.newMVStoreException(DataUtils.ERROR_FILE_CORRUPT,
+                    "Invalid physical header length for {0}", getFileName());
+        }
+        return (int) encryptionHeaderLength + 2 * FileStore.BLOCK_SIZE;
+    }
+
+    void readSnapshotBytes(long position, ByteBuffer target)
+            throws IOException {
+        FileChannel source = snapshotFileChannel();
+        while (target.hasRemaining()) {
+            int read = source.read(target, position);
+            if (read < 0) {
+                throw new IOException("Unexpected end of snapshot source "
+                        + getFileName());
+            }
+            if (read == 0) {
+                throw new IOException("Unable to read snapshot source "
+                        + getFileName());
+            }
+            position += read;
+        }
+    }
+
+    private FileChannel snapshotFileChannel() {
+        return originalFileChannel != null ? originalFileChannel : fileChannel;
+    }
+
     /**
      * Fix the file name, replacing backslash with slash.
      *

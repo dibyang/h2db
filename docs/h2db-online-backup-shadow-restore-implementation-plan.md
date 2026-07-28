@@ -1,6 +1,6 @@
 # H2DB 组合在线备份与影子恢复实施计划
 
-状态：实施中（P0-P2 已完成，P3 待开始）
+状态：实施中（P0-P3 已完成，P4 待开始）
 规划日期：2026-07-28  
 目标仓库：`D:\work\java\h2db`  
 需求来源：`D:\work\java2\vexra-adb\docs\requirements\h2db-online-backup-restore-requirements.md`  
@@ -559,7 +559,7 @@ ACTIVATION_ABORT
 | P0.6 Snapshot Lease Spike | 验证 prepared snapshot 过期取消、reader 排空和安全解除 reuse-space pin，再决定 OQ-09 | P0 | [x] |
 | P1 Operation Gate | 建立 commit、DDL、transaction 准入和指标接缝 | P0/P0.5 | [x] |
 | P2 Identity/Epoch | 持久化 databaseId、schemaEpoch，并接收 ADB 提供的运行时 generationId | P0/P1 | [x] |
-| P3 MVStore Snapshot | 实现固定切点的 prepared snapshot | P0.6/P1 | [ ] |
+| P3 MVStore Snapshot | 实现固定切点的 prepared snapshot | P0.6/P1 | [x] |
 | P4 Session 与 SPI | 实现组合 session 和 participant prepare/abort | P2/P3 | [ ] |
 | P5 Bundle Publish | materialize、checksum、manifest 和原子发布 | P4 | [ ] |
 | P6 Shadow Restore | 安全 staging、验证和只读试打开 | P2/P5 | [ ] |
@@ -884,31 +884,61 @@ java -cp "build/classes/java/legacyTest;build/classes/java/main;build/resources/
 
 ### P3 MVStore Prepared Snapshot
 
-- [ ] 在 MVStore store lock 内执行最终 flush、capture 和 reuse-space pin。
-- [ ] 固定 header blocks、copy length、snapshot version 和源文件 fingerprint。
-- [ ] 在 materialize 期间阻止 compact、reclamation 和并发 prepared snapshot。
-- [ ] 只复制固定高水位以内的数据，并使用捕获 header 生成目标文件。
-- [ ] 对成功、失败、中断、超时和重复 close 恢复空间复用。
-- [ ] 实现 snapshot lease、绝对 deadline、active reader 计数和唯一 cleanup owner。
-- [ ] lease 在 idle `PREPARED`状态过期时由 watchdog 自动 abort。
-- [ ] lease 在 `MATERIALIZING`状态过期时只设置 cancel request；复制循环在分块边界协作退出，不依赖 `Thread.interrupt()`。
-- [ ] 仅在 active reader 降为零后恢复 reuse-space、compact/reclamation 和新 snapshot 准入。
-- [ ] 让显式 abort、重复 close、session close、TCP disconnect 和 watchdog 共享同一幂等 cleanup 状态机。
-- [ ] reader 卡死时保持 pin，熔断新 snapshot/maintenance，并输出文件增长、pin 存活时间、reader owner 和受控重启告警。
-- [ ] 验证持续写入速度高于复制速度时行为仍可控或明确拒绝。
+- [x] 在 MVStore store lock 内执行最终 flush、capture 和 reuse-space pin。
+- [x] 固定 raw header blocks、copy length、snapshot version 和 SHA-256 源 fingerprint；加密库同时捕获物理加密头。
+- [x] 在 materialize 期间阻止 compact、reclamation 和并发 prepared snapshot，并在真正持有 store lock 的 rewrite 临界区二次检查。
+- [x] 只复制 `afterLastBlock`固定高水位以内的数据，并使用捕获 header 生成目标文件；不把预分配尾部误纳入 copyLength。
+- [x] 对成功、失败、中断、超时和重复 close 恢复空间复用，失败物化删除未完成目标。
+- [x] 实现 snapshot lease、绝对单调 deadline、active reader 计数和唯一 cleanup owner。
+- [x] lease 在 idle `PREPARED`状态过期时由 daemon watchdog 自动 abort；取消 task 从调度队列及时移除。
+- [x] lease 在 `MATERIALIZING`状态过期时只设置 cancel request；复制循环每 64 KiB 协作检查，不依赖 `Thread.interrupt()`。
+- [x] 仅在 active reader 降为零后恢复 reuse-space、compact/reclamation 和新 snapshot 准入。
+- [x] 显式 abort、重复 close、store/session shutdown 和 watchdog 共享同一幂等 cleanup 状态机；P8 将 TCP handle close 接到同一 `close()`。
+- [x] reader 卡死时保持 pin并熔断新 snapshot/maintenance；暴露文件增长、pin 存活时间、reader owner 和受控重启建议，供 P4/P9 报告与告警消费。
+- [x] 验证 prepare 后持续提交可与固定高水位复制并行；源文件可控增长且 close 后恢复 reuse-space。
 
 验收：
 
-- [ ] `T-H2BR-SNAPSHOT-FIXED-CUT-01`
-- [ ] `T-H2BR-SNAPSHOT-CONCURRENT-WRITE-01`
-- [ ] `T-H2BR-SNAPSHOT-HEADER-RACE-01`
-- [ ] `T-H2BR-SNAPSHOT-CLOSE-IDEMPOTENT-01`
-- [ ] `T-H2BR-SNAPSHOT-RECLAIM-CONFLICT-01`
-- [ ] `T-H2BR-SNAPSHOT-FILE-GROWTH-01`
-- [ ] `T-H2BR-SNAPSHOT-LEASE-IDLE-EXPIRY-01`
-- [ ] `T-H2BR-SNAPSHOT-LEASE-MATERIALIZE-CANCEL-01`
-- [ ] `T-H2BR-SNAPSHOT-LEASE-CLEANUP-RACE-01`
-- [ ] `T-H2BR-SNAPSHOT-LEASE-STUCK-READER-01`
+- [x] `T-H2BR-SNAPSHOT-FIXED-CUT-01`
+- [x] `T-H2BR-SNAPSHOT-CONCURRENT-WRITE-01`
+- [x] `T-H2BR-SNAPSHOT-HEADER-RACE-01`
+- [x] `T-H2BR-SNAPSHOT-CLOSE-IDEMPOTENT-01`
+- [x] `T-H2BR-SNAPSHOT-RECLAIM-CONFLICT-01`
+- [x] `T-H2BR-SNAPSHOT-FILE-GROWTH-01`
+- [x] `T-H2BR-SNAPSHOT-LEASE-IDLE-EXPIRY-01`
+- [x] `T-H2BR-SNAPSHOT-LEASE-MATERIALIZE-CANCEL-01`
+- [x] `T-H2BR-SNAPSHOT-LEASE-CLEANUP-RACE-01`
+- [x] `T-H2BR-SNAPSHOT-LEASE-STUCK-READER-01`
+
+实现结果：
+
+- 新增 `MVStorePreparedSnapshot`；Database 在 P1 backup barrier 内完成最终 flush 和 capture 后立即恢复 commit/DDL 准入，长时间复制不持有 database/store lock。
+- copyLength 使用“可选加密头 + `freeSpace.afterLastBlock`”，不使用可能包含预分配空洞的 `FileChannel.size()`；物化时首部使用 capture 时的 raw bytes，其余区域只读固定高水位。
+- 同一 MVStore 同时只允许一个 prepared snapshot。reuse-space pin 同时阻止 compact、reclamation 和第二个 snapshot；所有释放路径在最后一个 reader 退出后线性化。
+- watchdog 使用惰性初始化的单 daemon scheduler；功能关闭且从未 prepare 时不创建线程。过期不 interrupt reader，只把状态转为 `CANCEL_REQUESTED`。
+- 加密、只读 identity-present 数据库均可物化；加密目标可用原密码重开，只读源文件在 prepare/materialize/close 前后逐字节一致。
+
+验证命令：
+
+```powershell
+.\gradlew.bat runOnlineBackupCheck --rerun-tasks
+.\gradlew.bat javadoc
+.\gradlew.bat runPluginArchitectureCheck --rerun-tasks
+java -cp "build/classes/java/legacyTest;build/classes/java/main;build/resources/legacyTest;build/resources/main" `
+  org.h2.test.LegacyTestGroupRunner `
+  org.h2.test.db.TestBackup `
+  org.h2.test.db.TestOpenClose `
+  org.h2.test.store.TestMVStoreConcurrent
+```
+
+验证结果：
+
+| 范围 | 结果 |
+| --- | --- |
+| P1-P3 专项 | `runOnlineBackupCheck` 26 项通过，0 failure、0 error、0 skipped；P3 新增 10 项。 |
+| JDK 8 / Javadoc | `compileJava`、`compileOnlineBackupTestJava`和`javadoc`通过。 |
+| plugin 回归 | 139 项通过，0 failure、0 error、0 skipped。 |
+| 传统备份与默认 MVStore | `TestBackup`、`TestOpenClose`和`TestMVStoreConcurrent`通过。 |
 
 暂停条件：
 

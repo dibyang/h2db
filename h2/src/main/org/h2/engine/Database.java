@@ -48,6 +48,7 @@ import org.h2.message.TraceSystem;
 import org.h2.mode.DefaultNullOrdering;
 import org.h2.mode.PgCatalogSchema;
 import org.h2.mvstore.MVStoreException;
+import org.h2.mvstore.MVStorePreparedSnapshot;
 import org.h2.mvstore.db.MVStoreBackedStorageEngine;
 import org.h2.mvstore.db.MVStoreStorageEngineProvider;
 import org.h2.mvstore.db.LobStorageMap;
@@ -2488,6 +2489,30 @@ public final class Database implements DataHandler, CastDataProvider {
      */
     public DatabaseIdentityMetadata getOnlineBackupMetadata() {
         return onlineBackupMetadata;
+    }
+
+    /**
+     * Prepare a fixed-cut MVStore snapshot under a short backup barrier.
+     *
+     * @param barrierTimeoutMillis barrier timeout in milliseconds
+     * @param leaseMillis snapshot lease in milliseconds
+     * @return prepared snapshot
+     */
+    public MVStorePreparedSnapshot prepareOnlineBackupSnapshot(
+            long barrierTimeoutMillis, long leaseMillis) {
+        if (onlineBackupMetadata == null) {
+            throw DbException.get(ErrorCode.UNSUPPORTED_SETTING_COMBINATION,
+                    "ONLINE_BACKUP_COORDINATION is disabled");
+        }
+        if (!persistent) {
+            throw DbException.get(ErrorCode.DATABASE_IS_NOT_PERSISTENT);
+        }
+        onlineBackupMetadata.requireSnapshot();
+        try (DatabaseOperationGate.BackupBarrier ignored =
+                operationGate.beginBackupBarrier(barrierTimeoutMillis)) {
+            store.flush();
+            return store.getMvStore().prepareSnapshot(leaseMillis);
+        }
     }
 
     /**

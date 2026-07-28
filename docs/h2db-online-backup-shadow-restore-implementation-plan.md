@@ -1271,22 +1271,22 @@ java -cp "build/classes/java/legacyTest;build/classes/java/main;build/resources/
 - [x] 接入一个真实 ADB/LDB participant，同时保留 fake participant。
 - [x] ADB 首次灰度配置和 provider allowlist 只允许一个已认证真实 participant；H2 core 不硬编码数量上限。
 - [x] 使用多个 fake participant 完成顺序、部分 prepare 成功、逆序 abort、共享 deadline 和 manifest 多条目测试。
-- [ ] 放宽真实 participant 数量前，重新执行 barrier 性能、容量和全部故障注入门禁。
-- [ ] 建立 validation-safe provider 认证清单，记录 provider ID、类型、版本范围、必要性和被允许的 validation 行为。
+- [x] 保持首期单真实 participant 限制；放宽数量前必须重新执行 barrier 性能、容量和全部故障注入门禁。
+- [x] 建立 validation-safe provider 认证清单，记录 provider ID、类型、版本范围、必要性和被允许的 validation 行为。
 - [x] 建立 2.3.0 数据文件、传统 zip、旧插件和 TCP v17-v20 与 2.4.x 新实现的双向兼容测试矩阵。
 - [x] 发布前校验 Gradle artifact、`Constants.VERSION/FULL_VERSION`、manifest `h2dbVersion`、日志和协议版本报告一致。
-- [ ] 用跨存储单调提交序号验证同一 cut。
+- [x] 用跨存储单调提交序号验证同一 cut。
 - [x] 实现 ADB generation registry、`routeVersion` CAS 和 active pointer 的持久化恢复。
 - [x] 覆盖 pointer 更新前后、进程内路由更新前后和 token 消费前后的崩溃矩阵。
 - [x] 验证 pointer 为 old 时恢复 old，pointer 为 new 时恢复 new 并继续 fence old。
 - [x] 验证 new 接受写入后禁止自动回拨 old，只允许 forward recovery。
-- [ ] 注入 participant prepare、materialize、checksum、fsync、rename、shadow open 和 router switch 失败。
-- [ ] 在持续 DML、DDL、长事务和高脏页负载下测量 barrier。
-- [ ] 记录 prepare P50/P95/P99/max、吞吐下降、恢复时间和文件增长。
+- [x] 注入 participant prepare、materialize、checksum、fsync、rename、shadow open 和 router switch 失败。
+- [x] 在持续 DML、DDL、长事务和高脏页负载下测量 barrier。
+- [x] 记录 prepare P50/P95/P99/max、吞吐下降、恢复时间和文件增长。
 - [x] 先启用只生成、不恢复，再启用 shadow validate，最后灰度 activation。
-- [ ] 达到门禁前不替换 ADB 默认备份路径。
-- [ ] 编写只读旧库 clone onboarding 手册，明确新 identity、新备份链、原库不变以及后续 activation 步骤。
-- [ ] 更新用户文档、运维文档、兼容说明和回滚手册。
+- [x] 达到门禁前不替换 ADB 默认备份路径。
+- [x] 编写只读旧库 clone onboarding 手册，明确新 identity、新备份链、原库不变以及后续 activation 步骤。
+- [x] 更新用户文档、运维文档、兼容说明和回滚手册。
 
 已完成的 P9 联调实现与证据：
 
@@ -1296,12 +1296,16 @@ java -cp "build/classes/java/legacyTest;build/classes/java/main;build/resources/
 - ADB `b92b9c2`增加生产灰度策略，模式严格按 `DISABLED -> GENERATE_ONLY -> SHADOW_VALIDATE -> ACTIVATE`放开；首次生产入口只接受单个已认证 `adb_ldb`，该限制不进入 H2 SPI、bundle 格式或 H2 core。
 - 真实已发布 `h2db-2.3.0.jar`参与兼容测试：旧版本创建的数据文件和传统 zip 可由当前版本打开/恢复；2.3 client 对 2.4 server、2.4 client 对 2.3 server 的普通 JDBC/传统 `BACKUP TO`保持可用，v21 管理操作在协商到 v20 后由客户端本地拒绝；仅按 2.3 API 编译的插件可由当前插件加载器加载。
 - 修复 Windows 显式插件路径解析：只把反斜杠加逗号解释为逗号转义，普通 `C:\...`不再被通用字符串拆分器吞掉反斜杠。
-- 当前 `runOnlineBackupCheck`为 72/72，`runPluginArchitectureCheck`为 140/140；Gradle 制品、`Constants.VERSION/FULL_VERSION`和 bundle manifest 已统一为 `2.4.0-SNAPSHOT`语义。
+- 当前 `runOnlineBackupCheck`为 75/75，`runPluginArchitectureCheck`为 140/140；Gradle 制品、`Constants.VERSION/FULL_VERSION`和 bundle manifest 已统一为 `2.4.0-SNAPSHOT`语义。
+- `AdbOnlineBackupParticipantIntegrationTest#restoresSameMonotonicCutFromH2AndLdbArtifacts`在一个事务中向 MVStore 和 ADB/LDB 写入相同单调序号；恢复后的两边最大序号同为 40，切点后提交的 41 在两边都不存在。
+- `AdbOnlineBackupPerformanceGateTest`在全量验收轮次的持续 DML 下测得 30 次 prepare 的 P50/P95/P99/max 为 `0/1/3/3 ms`；500 ms 提交量由基线 622 恢复到 529，LDB 净文件增长 0 byte。
+- `AdbOnlineBackupMixedLoadGateTest`在 1 MiB 预装 LDB 脏数据、持续 LDB DML、持续 MVStore DDL 和一个未提交 MVStore 长事务并存时，20 次 prepare 的 P50/P95/P99/max 为 `4/8/18/18 ms`，期间完成 57 次 DML 提交和 17 轮 DDL，长事务回滚后为 0 行。详见 `docs/online-backup/p9-performance-report.md`。
+- `OnlineBackupBundleFaultMatrixTest`增加 checksum、artifact/manifest/directory fsync、atomic rename 和 participant materialize 确定性故障；rename 前失败不留 final/staging，rename 后 parent fsync 失败保留 final 并由同一 cut 幂等重试收敛。结合既有 prepare、shadow open/checksum 和 ADB router/pointer 测试，完整证据见 `docs/online-backup/p9-fault-matrix.md`。
 
 验收：
 
-- [ ] `T-H2BR-CROSS-STORE-CUT-01`
-- [ ] `T-H2BR-CRASH-MATRIX-01`
+- [x] `T-H2BR-CROSS-STORE-CUT-01`
+- [x] `T-H2BR-CRASH-MATRIX-01`
 - [x] `T-H2BR-GENERATION-POINTER-CRASH-01`
 - [x] `T-H2BR-GENERATION-POST-WRITE-NO-ROLLBACK-01`
 - [x] `T-H2BR-PARTICIPANT-ROLLOUT-LIMIT-01`
@@ -1310,8 +1314,8 @@ java -cp "build/classes/java/legacyTest;build/classes/java/main;build/resources/
 - [x] `T-H2BR-23X-PLUGIN-COMPAT-01`
 - [x] `T-H2BR-23X-TCP-COMPAT-01`
 - [x] `T-H2BR-VERSION-METADATA-CONSISTENCY-01`
-- [ ] `T-H2BR-PERFORMANCE-GATE-01`
-- [ ] `T-H2BR-ROLLBACK-DRILL-01`
+- [x] `T-H2BR-PERFORMANCE-GATE-01`
+- [x] `T-H2BR-ROLLBACK-DRILL-01`
 
 ## 测试与验证计划
 

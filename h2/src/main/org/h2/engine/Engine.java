@@ -247,11 +247,7 @@ public final class Engine {
                 throw DbException.get(ErrorCode.DATABASE_ALREADY_OPEN_1,
                         "Waited for database closing longer than 1 minute");
             }
-            try {
-                Thread.sleep(1);
-            } catch (InterruptedException e) {
-                throw DbException.get(ErrorCode.DATABASE_CALLED_AT_SHUTDOWN);
-            }
+            waitForDatabaseClose();
         }
         synchronized (session) {
             session.setAllowLiterals(true);
@@ -306,6 +302,15 @@ public final class Engine {
             session.commit(true);
         }
         return session;
+    }
+
+    private static void waitForDatabaseClose() {
+        try {
+            Thread.sleep(1);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw DbException.get(ErrorCode.DATABASE_CALLED_AT_SHUTDOWN);
+        }
     }
 
     private static void checkClustering(ConnectionInfo ci, Database database) {

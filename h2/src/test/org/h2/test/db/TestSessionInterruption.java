@@ -5,12 +5,18 @@
  */
 package org.h2.test.db;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.sql.Connection;
 import java.sql.Statement;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.h2.api.ErrorCode;
+import org.h2.engine.Database;
+import org.h2.engine.Engine;
 import org.h2.engine.SessionLocal;
 import org.h2.jdbc.JdbcConnection;
 import org.h2.message.DbException;
@@ -41,6 +47,8 @@ public class TestSessionInterruption extends TestDb {
         testThrottle();
         testExclusiveModeWait();
         testTableLockWait();
+        testDatabaseCloseWait();
+        testEngineCloseWait();
     }
 
     private void testThrottle() throws Exception {
@@ -97,7 +105,67 @@ public class TestSessionInterruption extends TestDb {
         }
     }
 
+    private void testDatabaseCloseWait() throws Exception {
+        deleteDb("sessionInterruptDatabaseClose");
+        try (Connection retainedConnection = getConnection("sessionInterruptDatabaseClose");
+                Connection closingConnection = getConnection("sessionInterruptDatabaseClose")) {
+            SessionLocal retainedSession = getSession(retainedConnection);
+            SessionLocal closingSession = getSession(closingConnection);
+            closingSession.waitIfExclusiveModeEnabled();
+            Database database = retainedSession.getDatabase();
+            Method closeAllSessionsExcept = Database.class
+                    .getDeclaredMethod("closeAllSessionsExcept", SessionLocal.class);
+            closeAllSessionsExcept.setAccessible(true);
+            CountDownLatch closeStarted = new CountDownLatch(1);
+            CountDownLatch closeReturned = new CountDownLatch(1);
+            AtomicBoolean interruptRestored = new AtomicBoolean();
+            AtomicReference<Throwable> failure = new AtomicReference<>();
+            Thread closer = new Thread(() -> {
+                Thread.currentThread().interrupt();
+                closeStarted.countDown();
+                try {
+                    invoke(closeAllSessionsExcept, database, retainedSession);
+                    interruptRestored.set(Thread.currentThread().isInterrupted());
+                } catch (Throwable e) {
+                    failure.set(e);
+                } finally {
+                    closeReturned.countDown();
+                }
+            }, "H2-test-database-close-interruption");
+            closer.setDaemon(true);
+            try {
+                closer.start();
+                assertTrue(closeStarted.await(5, TimeUnit.SECONDS));
+                waitForState(closingSession, SessionLocal.State.SUSPENDED);
+                assertFalse(closeReturned.await(100, TimeUnit.MILLISECONDS));
+                closingSession.close();
+                assertTrue(closeReturned.await(5, TimeUnit.SECONDS));
+                closer.join(5_000);
+                assertFalse(closer.isAlive());
+                assertNull(failure.get());
+                assertTrue(interruptRestored.get());
+            } finally {
+                closingSession.close();
+                closer.interrupt();
+                closer.join(5_000);
+            }
+        } finally {
+            deleteDb("sessionInterruptDatabaseClose");
+        }
+    }
+
+    private void testEngineCloseWait() throws Exception {
+        Method waitForDatabaseClose = Engine.class.getDeclaredMethod("waitForDatabaseClose");
+        waitForDatabaseClose.setAccessible(true);
+        assertInterruptedFailure(() -> invoke(waitForDatabaseClose, null),
+                ErrorCode.DATABASE_CALLED_AT_SHUTDOWN);
+    }
+
     private void assertInterruptedCancellation(InterruptedOperation operation) throws InterruptedException {
+        assertInterruptedFailure(operation, ErrorCode.STATEMENT_WAS_CANCELED);
+    }
+
+    private void assertInterruptedFailure(InterruptedOperation operation, int errorCode) throws InterruptedException {
         AtomicBoolean interruptRestored = new AtomicBoolean();
         AtomicReference<Throwable> failure = new AtomicReference<>();
         Thread waiter = new Thread(() -> {
@@ -106,7 +174,7 @@ public class TestSessionInterruption extends TestDb {
                 operation.run();
                 failure.set(new AssertionError("interrupted operation should be canceled"));
             } catch (DbException e) {
-                if (e.getErrorCode() != ErrorCode.STATEMENT_WAS_CANCELED) {
+                if (e.getErrorCode() != errorCode) {
                     failure.set(e);
                 }
             } catch (Throwable e) {
@@ -121,6 +189,31 @@ public class TestSessionInterruption extends TestDb {
         assertFalse(waiter.isAlive());
         assertNull(failure.get());
         assertTrue(interruptRestored.get());
+    }
+
+    private void waitForState(SessionLocal session, SessionLocal.State state) throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (session.getState() != state && System.nanoTime() < deadline) {
+            Thread.sleep(1);
+        }
+        assertEquals(state, session.getState());
+    }
+
+    private static Object invoke(Method method, Object target, Object... arguments) {
+        try {
+            return method.invoke(target, arguments);
+        } catch (InvocationTargetException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof RuntimeException) {
+                throw (RuntimeException) cause;
+            }
+            if (cause instanceof Error) {
+                throw (Error) cause;
+            }
+            throw new RuntimeException(cause);
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private static SessionLocal getSession(Connection connection) {

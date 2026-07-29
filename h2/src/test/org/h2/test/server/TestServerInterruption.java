@@ -5,9 +5,11 @@
  */
 package org.h2.test.server;
 
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.net.Socket;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -20,6 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.h2.server.TcpServer;
+import org.h2.server.pg.PgServer;
 import org.h2.server.web.WebServer;
 import org.h2.test.TestBase;
 
@@ -41,6 +44,7 @@ public class TestServerInterruption extends TestBase {
     public void test() throws Exception {
         testTcpServerStop();
         testWebServerStop();
+        testPgServerStop();
         testTranslateThreadStop();
     }
 
@@ -52,6 +56,38 @@ public class TestServerInterruption extends TestBase {
     private void testWebServerStop() throws Exception {
         WebServer server = new WebServer();
         assertListenerStopWaits(server, WebServer.class.getDeclaredField("listenerThread"), server::stop);
+    }
+
+    private void testPgServerStop() throws Exception {
+        PgServer server = new PgServer();
+        Class<?> serverThreadClass = Class.forName("org.h2.server.pg.PgServerThread");
+        Constructor<?> constructor = serverThreadClass.getDeclaredConstructor(Socket.class, PgServer.class);
+        Method setThread = serverThreadClass.getDeclaredMethod("setThread", Thread.class);
+        Field running = PgServer.class.getDeclaredField("running");
+        constructor.setAccessible(true);
+        setThread.setAccessible(true);
+        running.setAccessible(true);
+        Object serverThread = constructor.newInstance(new Socket(), server);
+        CountDownLatch workerStarted = new CountDownLatch(1);
+        CountDownLatch releaseWorker = new CountDownLatch(1);
+        Thread worker = new Thread(() -> {
+            workerStarted.countDown();
+            awaitUninterruptibly(releaseWorker);
+        }, "H2-test-pg-worker");
+        worker.setDaemon(true);
+        setThread.invoke(serverThread, worker);
+        addRunningServerThread(running, server, serverThread);
+        worker.start();
+        try {
+            assertTrue(workerStarted.await(5, TimeUnit.SECONDS));
+            assertBoundedCompletionBarrier(releaseWorker, server::stop);
+            worker.join(5_000);
+            assertFalse(worker.isAlive());
+        } finally {
+            releaseWorker.countDown();
+            worker.interrupt();
+            worker.join(5_000);
+        }
     }
 
     private void assertListenerStopWaits(Object server, Field listenerThread, Runnable stop) throws Exception {
@@ -115,6 +151,15 @@ public class TestServerInterruption extends TestBase {
     }
 
     private void assertCompletionBarrier(CountDownLatch releaseWorker, Runnable barrier) throws Exception {
+        assertCompletionBarrier(releaseWorker, barrier, 100);
+    }
+
+    private void assertBoundedCompletionBarrier(CountDownLatch releaseWorker, Runnable barrier) throws Exception {
+        assertCompletionBarrier(releaseWorker, barrier, 20);
+    }
+
+    private void assertCompletionBarrier(CountDownLatch releaseWorker, Runnable barrier, long waitMillis)
+            throws Exception {
         CountDownLatch barrierStarted = new CountDownLatch(1);
         CountDownLatch barrierReturned = new CountDownLatch(1);
         AtomicBoolean interruptRestored = new AtomicBoolean();
@@ -135,7 +180,7 @@ public class TestServerInterruption extends TestBase {
         try {
             waiter.start();
             assertTrue(barrierStarted.await(5, TimeUnit.SECONDS));
-            assertFalse(barrierReturned.await(100, TimeUnit.MILLISECONDS));
+            assertFalse(barrierReturned.await(waitMillis, TimeUnit.MILLISECONDS));
             releaseWorker.countDown();
             assertTrue(barrierReturned.await(5, TimeUnit.SECONDS));
             waiter.join(5_000);
@@ -147,6 +192,12 @@ public class TestServerInterruption extends TestBase {
             waiter.interrupt();
             waiter.join(5_000);
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void addRunningServerThread(Field running, PgServer server, Object serverThread)
+            throws IllegalAccessException {
+        ((Set<Object>) running.get(server)).add(serverThread);
     }
 
     private static void stopTranslateThread(Object thread) {

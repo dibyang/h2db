@@ -1239,40 +1239,50 @@ public final class Database implements DataHandler, CastDataProvider {
                 s.suspend();
             }
         }
+        waitForSessionsToClose(all, except);
+    }
 
+    private synchronized void waitForSessionsToClose(SessionLocal[] all, SessionLocal except) {
         int timeout = 2 * getLockTimeout();
         long start = System.currentTimeMillis();
         // 'sleep' should be strictly greater than zero, otherwise real time is not taken into consideration
         // and the thread simply waits until notified
         long sleep = Math.max(timeout / 20, 1);
         boolean done = false;
-        while (!done) {
-            try {
-                // although nobody going to notify us
-                // it is vital to give up lock on a database
-                wait(sleep);
-            } catch (InterruptedException e1) {
-                // ignore
-            }
-            if (System.currentTimeMillis() - start > timeout) {
-                for (SessionLocal s : all) {
-                    if (s != except && !s.isClosed()) {
-                        try {
-                            // this will rollback outstanding transaction
-                            s.close();
-                        } catch (Throwable e) {
-                            trace.error(e, "disconnecting session #{0}", s.getId());
+        boolean interrupted = false;
+        try {
+            while (!done) {
+                try {
+                    // although nobody going to notify us
+                    // it is vital to give up lock on a database
+                    wait(sleep);
+                } catch (InterruptedException e) {
+                    interrupted = true;
+                }
+                if (System.currentTimeMillis() - start > timeout) {
+                    for (SessionLocal s : all) {
+                        if (s != except && !s.isClosed()) {
+                            try {
+                                // this will rollback outstanding transaction
+                                s.close();
+                            } catch (Throwable e) {
+                                trace.error(e, "disconnecting session #{0}", s.getId());
+                            }
                         }
                     }
-                }
-                break;
-            }
-            done = true;
-            for (SessionLocal s : all) {
-                if (s != except && !s.isClosed()) {
-                    done = false;
                     break;
                 }
+                done = true;
+                for (SessionLocal s : all) {
+                    if (s != except && !s.isClosed()) {
+                        done = false;
+                        break;
+                    }
+                }
+            }
+        } finally {
+            if (interrupted) {
+                Thread.currentThread().interrupt();
             }
         }
     }

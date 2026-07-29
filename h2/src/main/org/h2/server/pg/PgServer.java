@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.h2.api.ErrorCode;
 import org.h2.message.DbException;
@@ -231,11 +232,34 @@ public class PgServer implements Service {
             try {
                 Thread t = c.getThread();
                 if (t != null) {
-                    t.join(100);
+                    joinThread(t, 100);
                 }
             } catch (Exception e) {
                 // TODO log exception
                 e.printStackTrace();
+            }
+        }
+    }
+
+    private static void joinThread(Thread thread, long timeoutMillis) {
+        long timeoutNanos = TimeUnit.MILLISECONDS.toNanos(timeoutMillis);
+        long deadline = System.nanoTime() + timeoutNanos;
+        boolean interrupted = false;
+        try {
+            while (thread.isAlive()) {
+                long remaining = deadline - System.nanoTime();
+                if (remaining <= 0) {
+                    break;
+                }
+                try {
+                    TimeUnit.NANOSECONDS.timedJoin(thread, remaining);
+                } catch (InterruptedException e) {
+                    interrupted = true;
+                }
+            }
+        } finally {
+            if (interrupted) {
+                Thread.currentThread().interrupt();
             }
         }
     }

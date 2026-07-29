@@ -180,30 +180,6 @@ public class CommandContainer extends Command {
         return result;
     }
 
-    @Override
-    public long[] executeBatchUpdate(ArrayList<Value[]> batchParameters, Object generatedKeysRequest) {
-        recompileIfRequired();
-        if (generatedKeysRequest != null && !Boolean.FALSE.equals(generatedKeysRequest)
-                || !(prepared instanceof Insert)) {
-            return null;
-        }
-        Insert insert = (Insert) prepared;
-        if (!insert.canExecuteBatchDmlFastPath(batchParameters)) {
-            return null;
-        }
-        Database database = getDatabase();
-        setProgress(database, DatabaseEventListener.STATE_STATEMENT_START);
-        start();
-        long[] result = insert.updateBatch(batchParameters);
-        long updateCount = 0L;
-        for (long count : result) {
-            updateCount += count;
-        }
-        prepared.trace(database, startTimeNanos, updateCount);
-        setProgress(database, DatabaseEventListener.STATE_STATEMENT_END);
-        return result;
-    }
-
     private ResultWithGeneratedKeys executeUpdateWithGeneratedKeys(DataChangeStatement statement,
             Object generatedKeysRequest) {
         Insert generatedKeysInsert = statement instanceof Insert ? (Insert) statement : null;

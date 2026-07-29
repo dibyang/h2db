@@ -5,11 +5,8 @@
  */
 package org.h2.engine.backup;
 
-import java.io.FilterOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
-import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.file.AccessDeniedException;
 import java.nio.file.AtomicMoveNotSupportedException;
@@ -25,14 +22,10 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
-import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.TreeSet;
 
 import org.h2.api.MaterializedParticipantArtifact;
-import org.h2.api.ParticipantArtifactTarget;
 import org.h2.engine.Constants;
 import org.h2.engine.backup.OnlineBackupManifest.Artifact;
 import org.h2.engine.backup.OnlineBackupManifest.Participant;
@@ -107,6 +100,7 @@ final class OnlineBackupBundlePublisher {
         if (faultInjector == null) {
             throw new IllegalArgumentException("faultInjector is required");
         }
+        session.checkMaterializationAllowed();
         Path parent = finalDirectory.getParent();
         if (parent == null) {
             throw new IllegalArgumentException(
@@ -124,6 +118,7 @@ final class OnlineBackupBundlePublisher {
             OnlineBackupManifest existing = readPublishedManifest(
                     finalDirectory);
             requireSameCut(session, existing);
+            session.checkMaterializationAllowed();
             DirectoryFsync parentFsync = forceDirectory(parent, faultInjector,
                     PublishStep.PARENT_DIRECTORY_FSYNC);
             writeAudit(auditFile, session, "PUBLISHED", true,
@@ -152,14 +147,19 @@ final class OnlineBackupBundlePublisher {
                     staging.resolve("participants"));
             String h2RelativePath = "h2/database.mv.db";
             Path h2File = staging.resolve(h2RelativePath);
+            session.checkMaterializationAllowed();
             session.getH2Snapshot().materialize(h2File.toString());
+            session.checkMaterializationAllowed();
             Artifact h2Artifact = checksum(staging, h2File, faultInjector);
 
             ArrayList<Participant> participantManifests = new ArrayList<>();
             for (OnlineBackupSession.ParticipantMaterializer materializer
                     : session.getParticipantMaterializers()) {
-                participantManifests.add(materializeParticipant(staging,
-                        participantDirectory, materializer, faultInjector));
+                session.checkMaterializationAllowed();
+                participantManifests.add(materializeParticipant(session,
+                        staging, participantDirectory, materializer,
+                        faultInjector));
+                session.checkMaterializationAllowed();
             }
             OnlineBackupManifest manifest = new OnlineBackupManifest(
                     OnlineBackupManifest.FORMAT_VERSION,
@@ -179,6 +179,7 @@ final class OnlineBackupBundlePublisher {
             DirectoryFsync stagingFsync = forceDirectory(staging,
                     faultInjector, PublishStep.STAGING_DIRECTORY_FSYNC);
             try {
+                session.checkMaterializationAllowed();
                 faultInjector.before(PublishStep.ATOMIC_MOVE, finalDirectory);
                 Files.move(staging, finalDirectory,
                         java.nio.file.StandardCopyOption.ATOMIC_MOVE);
@@ -189,6 +190,7 @@ final class OnlineBackupBundlePublisher {
                 OnlineBackupManifest existing = readPublishedManifest(
                         finalDirectory);
                 requireSameCut(session, existing);
+                session.checkMaterializationAllowed();
                 deleteTree(staging);
                 DirectoryFsync parentFsync = forceDirectory(parent,
                         faultInjector, PublishStep.PARENT_DIRECTORY_FSYNC);
@@ -233,8 +235,8 @@ final class OnlineBackupBundlePublisher {
         }
     }
 
-    private static Participant materializeParticipant(Path staging,
-            Path participantDirectory,
+    private static Participant materializeParticipant(
+            OnlineBackupSession session, Path staging, Path participantDirectory,
             OnlineBackupSession.ParticipantMaterializer materializer,
             PublishFaultInjector faultInjector)
             throws Exception {
@@ -245,7 +247,8 @@ final class OnlineBackupBundlePublisher {
                         .getBytes(java.nio.charset.StandardCharsets.UTF_8));
         Path root = Files.createDirectory(participantDirectory.resolve(
                 rootName));
-        RestrictedArtifactTarget target = new RestrictedArtifactTarget(root);
+        RestrictedParticipantArtifactTarget target =
+                new RestrictedParticipantArtifactTarget(root, session);
         MaterializedParticipantArtifact materialized = null;
         Throwable failure = null;
         try {
@@ -274,7 +277,8 @@ final class OnlineBackupBundlePublisher {
         }
         TreeSet<String> reported = new TreeSet<>();
         for (String path : materialized.getRelativePaths()) {
-            if (!reported.add(RestrictedArtifactTarget.normalize(path))) {
+            if (!reported.add(
+                    RestrictedParticipantArtifactTarget.normalize(path))) {
                 throw new IllegalStateException(
                         "Duplicate participant artifact: " + path);
             }
@@ -452,7 +456,10 @@ final class OnlineBackupBundlePublisher {
         if (Files.size(manifest) > MAX_MANIFEST_BYTES) {
             throw new IOException("Published manifest is too large");
         }
-        return OnlineBackupManifestCodec.decode(Files.readAllBytes(manifest));
+        OnlineBackupManifest decoded = OnlineBackupManifestCodec.decode(
+                Files.readAllBytes(manifest));
+        OnlineBackupBundleVerifier.verify(bundle, decoded);
+        return decoded;
     }
 
     private static Path stagingPath(Path finalDirectory, String backupId) {
@@ -561,198 +568,4 @@ final class OnlineBackupBundlePublisher {
         throw (Error) failure;
     }
 
-    private static final class RestrictedArtifactTarget
-            implements ParticipantArtifactTarget {
-
-        private final Path root;
-        private final TreeSet<String> createdPaths = new TreeSet<>();
-        private final Set<TrackedOutputStream> openStreams = new HashSet<>();
-
-        RestrictedArtifactTarget(Path root) {
-            this.root = root;
-        }
-
-        @Override
-        public synchronized OutputStream create(String relativePath)
-                throws IOException {
-            String normalized = normalize(relativePath);
-            if (!createdPaths.add(normalized)) {
-                throw new FileAlreadyExistsException(normalized);
-            }
-            Path file = root.resolve(normalized.replace('/',
-                    java.io.File.separatorChar)).normalize();
-            if (!file.startsWith(root)) {
-                throw new IOException("Participant artifact escapes root");
-            }
-            Path parent = file.getParent();
-            Files.createDirectories(parent);
-            ensureNoSymlink(root, parent);
-            FileChannel channel = FileChannel.open(file,
-                    StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
-            TrackedOutputStream stream = new TrackedOutputStream(this,
-                    channel);
-            openStreams.add(stream);
-            return stream;
-        }
-
-        synchronized void finish() throws IOException {
-            if (openStreams.isEmpty()) {
-                return;
-            }
-            IOException failure = new IOException(
-                    "Participant left artifact streams open");
-            ArrayList<TrackedOutputStream> copy =
-                    new ArrayList<>(openStreams);
-            for (TrackedOutputStream stream : copy) {
-                try {
-                    stream.close();
-                } catch (IOException e) {
-                    failure.addSuppressed(e);
-                }
-            }
-            throw failure;
-        }
-
-        synchronized void closed(TrackedOutputStream stream) {
-            openStreams.remove(stream);
-        }
-
-        synchronized Set<String> getCreatedPaths() {
-            return Collections.unmodifiableSet(
-                    new TreeSet<>(createdPaths));
-        }
-
-        void verifyTree() throws IOException {
-            final TreeSet<String> actual = new TreeSet<>();
-            Files.walkFileTree(root, new SimpleFileVisitor<Path>() {
-                @Override
-                public FileVisitResult preVisitDirectory(Path directory,
-                        BasicFileAttributes attributes) throws IOException {
-                    if (Files.isSymbolicLink(directory)) {
-                        throw new IOException(
-                                "Symbolic link in participant artifact tree");
-                    }
-                    return FileVisitResult.CONTINUE;
-                }
-
-                @Override
-                public FileVisitResult visitFile(Path file,
-                        BasicFileAttributes attributes) throws IOException {
-                    if (!attributes.isRegularFile()
-                            || Files.isSymbolicLink(file)) {
-                        throw new IOException(
-                                "Non-regular participant artifact");
-                    }
-                    actual.add(root.relativize(file).toString()
-                            .replace(java.io.File.separatorChar, '/'));
-                    return FileVisitResult.CONTINUE;
-                }
-            });
-            if (!actual.equals(getCreatedPaths())) {
-                throw new IOException(
-                        "Participant created untracked artifact files");
-            }
-        }
-
-        static String normalize(String relativePath) {
-            if (relativePath == null || relativePath.trim().isEmpty()
-                    || relativePath.indexOf('\0') >= 0) {
-                throw new IllegalArgumentException(
-                        "Artifact path must not be empty");
-            }
-            String slashPath = relativePath.replace('\\', '/');
-            if (slashPath.startsWith("/") || slashPath.endsWith("/")
-                    || slashPath.matches("^[A-Za-z]:.*")) {
-                throw new IllegalArgumentException(
-                        "Artifact path must be relative: " + relativePath);
-            }
-            String[] elements = slashPath.split("/", -1);
-            StringBuilder normalized = new StringBuilder();
-            for (String element : elements) {
-                if (element.isEmpty() || ".".equals(element)
-                        || "..".equals(element) || isUnsafeElement(element)) {
-                    throw new IllegalArgumentException(
-                            "Unsafe artifact path: " + relativePath);
-                }
-                if (normalized.length() > 0) {
-                    normalized.append('/');
-                }
-                normalized.append(element);
-            }
-            return normalized.toString();
-        }
-
-        private static boolean isUnsafeElement(String element) {
-            if (element.endsWith(".")
-                    || Character.isWhitespace(
-                            element.charAt(element.length() - 1))) {
-                return true;
-            }
-            for (int i = 0; i < element.length(); i++) {
-                char c = element.charAt(i);
-                if (c < ' ' || c == ':' || c == '*' || c == '?'
-                        || c == '"' || c == '<' || c == '>' || c == '|') {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        private static void ensureNoSymlink(Path root, Path directory)
-                throws IOException {
-            Path current = root;
-            Path relative = root.relativize(directory);
-            for (Path element : relative) {
-                current = current.resolve(element);
-                if (Files.isSymbolicLink(current)) {
-                    throw new IOException(
-                            "Symbolic link in participant artifact path");
-                }
-            }
-        }
-    }
-
-    private static final class TrackedOutputStream
-            extends FilterOutputStream {
-
-        private final RestrictedArtifactTarget owner;
-        private final FileChannel channel;
-        private boolean closed;
-
-        TrackedOutputStream(RestrictedArtifactTarget owner,
-                FileChannel channel) {
-            super(Channels.newOutputStream(channel));
-            this.owner = owner;
-            this.channel = channel;
-        }
-
-        @Override
-        public void close() throws IOException {
-            if (closed) {
-                return;
-            }
-            closed = true;
-            IOException failure = null;
-            try {
-                flush();
-                channel.force(true);
-            } catch (IOException e) {
-                failure = e;
-            }
-            try {
-                super.close();
-            } catch (IOException e) {
-                if (failure == null) {
-                    failure = e;
-                } else {
-                    failure.addSuppressed(e);
-                }
-            } finally {
-                owner.closed(this);
-            }
-            if (failure != null) {
-                throw failure;
-            }
-        }
-    }
 }

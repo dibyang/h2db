@@ -29,6 +29,13 @@ Conclusion: ADB-side optimization around the public JDBC boundary may recover th
 | Observable and reversible | Unsupported SQL, missing capability, or provider failure must be diagnosable and must fall back or fail clearly. |
 | Measurable performance | Track staged overhead reduction and try to reach a stable 3x target over native H2 full JDBC. |
 
+Whole-batch provider dispatch is paused during the current correctness
+convergence phase. `executeBatch()` enters the standard command lifecycle
+element by element while the single-row fast path remains enabled. Batch
+parameter views and the capability remain experimental SPI until Batch SPI V2
+can represent partial failures, `updateCounts`, rollback, and generated-key
+semantics completely.
+
 ## Non-Goals
 
 - Do not rewrite the H2 SQL parser or optimizer.
@@ -101,7 +108,7 @@ Suggested capabilities:
 | P1 Design Freeze | Confirm SPI package, capability names, fallback, and V1 SQL scope. | RFC update, interface draft, compatibility matrix, risk register. | Review complete; V1 limited to simple INSERT VALUES / JDBC batch. |
 | P2 Prepare Match Hook | Identify takeover-capable `Insert` plans without changing execution. | Provider registration, plan matching prototype, diagnostics, tests. | Plugin can identify target INSERT; unrelated SQL is unaffected. |
 | P3 Parameter View | Expose read-only single-row bound parameters during execution. | `BoundParameterView`, index/type/NULL tests, read-only checks. | Plugin can read `executeUpdate()` parameters; normal PreparedStatement behavior is unchanged. |
-| P4 Batch Parameter View | Expose JDBC batch parameters as a read-only batch view. | `BoundParameterBatchView`, empty/partial-failure/clearBatch tests. | `executeBatch()` can provide all batch parameters in order. |
+| P4 Batch Parameter View | Retain the read-only JDBC batch view SPI while whole-batch provider dispatch waits for a V2 failure contract. | `BoundParameterBatchView`, empty/partial-failure/clearBatch tests. | `executeBatch()` enters the standard command lifecycle element by element and preserves native failure semantics. |
 | P5 Table Bulk Insert | Add an optional plugin-table bulk insert hook. | `BulkInsertTable` prototype, plugin-table tests, fallback path. | Plugin table receives batch data and returns update count; normal tables unaffected. |
 | P6 Transaction and Errors | Complete autoCommit, rollback, unique constraint, conversion, and read-only gates. | Compatibility tests, error mapping, rollback tests. | Fast path and native path match the scoped semantic matrix. |
 | P7 Performance Long Run | Run ADB through the new hook with full JDBC `insert_batch100`. | Performance report, sampling data, bottleneck list. | First target is above native H2 1.5x; otherwise report remaining bottlenecks. |

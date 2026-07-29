@@ -13,11 +13,19 @@ P0 baseline: [dml-fast-path-p0-baseline.md](../perf/dml-fast-path-p0-baseline.md
 | Goal | Decision |
 | --- | --- |
 | SPI package | Put the first DML fast-path SPI in `org.h2.api`, documented as experimental. |
-| V1 SQL scope | Only simple `INSERT ... VALUES` and `PreparedStatement` batch. |
+| V1 SQL scope | The single-row fast path only covers simple `INSERT ... VALUES`; `PreparedStatement` batches currently enter the standard command lifecycle element by element. |
 | Parameter view | Expose read-only `Value` views; prefer cursor/view over copying large arrays. |
 | Bulk table entrypoint | Plugin tables may optionally implement a bulk insert capability. Normal tables are unaffected. |
 | Fallback | If provider declines or capability is missing, continue through native H2 `Insert`. |
 | Transaction boundary | H2 `SessionLocal` / transaction lifecycle still owns commit and rollback. |
+
+> Current correctness-convergence status: batch parameter views and the
+> capability remain available as experimental SPI, but `executeBatch()` does not
+> currently hand the whole batch to a provider in one invocation. H2 executes
+> each element through the standard command lifecycle and may still use the
+> supported single-row fast path. Whole-batch dispatch will only be restored
+> after a Batch SPI can represent partial failures, `updateCounts`, rollback, and
+> generated-key semantics completely.
 
 ## Non-Goals
 
@@ -47,6 +55,8 @@ Rules:
 - `prepareDml()` only matches plans and checks lightweight metadata. It must not write data.
 - Unsupported plans return `DmlExecutionPlan.none()` or an equivalent empty plan.
 - Providers must not cache request-scoped mutable objects such as `SessionLocal`, `Command`, or `Parameter`.
+- H2 evaluates candidates in stable provider-ID order. Zero matches fall back, one match takes over, and multiple matches fail as an ambiguous configuration instead of depending on registry map iteration.
+- `getTableEngineProviderId()` returns the table-engine provider selected when the table was created; providers should use it to narrow ownership first.
 
 ### `DmlExecutionPlan`
 
@@ -174,7 +184,7 @@ These capabilities should be added to `PluginCapability`. Callers must check cap
 | --- | --- |
 | `INSERT INTO T VALUES (?, ?)` | May take over. |
 | `INSERT INTO T(C1, C2) VALUES (?, ?)` | May take over. |
-| `PreparedStatement#addBatch()` + `executeBatch()` | May take over. |
+| `PreparedStatement#addBatch()` + `executeBatch()` | Currently executes element by element; whole-batch dispatch awaits Batch SPI V2. |
 | Mixed multi-values constants and parameters | P2 may identify; P3/P4 decide based on parameter-view capability. |
 | `INSERT SELECT` | fallback. |
 | `MERGE` | fallback. |

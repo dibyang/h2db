@@ -21,4 +21,14 @@ public interface ParticipantArtifactTarget {
      * @throws IOException if creation fails
      */
     OutputStream create(String relativePath) throws IOException;
+
+    /**
+     * 判断所属备份会话是否请求协作取消。
+     * 长时间运行的 provider 应在有界工作单元之间轮询此标记。
+     *
+     * @return 是否应停止物化
+     */
+    default boolean isCancellationRequested() {
+        return false;
+    }
 }

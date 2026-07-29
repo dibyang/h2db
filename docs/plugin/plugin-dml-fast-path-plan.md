@@ -27,6 +27,11 @@
 | 可观测与可回退 | 插件未接管、SQL 不满足、能力缺失、运行失败时可回退或明确失败，并有诊断信息。 |
 | 可验收性能 | 在固定长测下分阶段观察开销下降，最终尝试达到 H2 原生完整 JDBC 的 3x 级别。 |
 
+当前正确性收敛阶段暂停整批 provider 调度：`executeBatch()`按元素进入标准
+command lifecycle，单条 fast path 保持启用。批量参数视图和 capability
+继续保留为 experimental SPI，待 Batch SPI V2 能完整表达部分失败、
+`updateCounts`、回滚和 generated keys 后再恢复整批接管。
+
 ## 非目标
 
 - 不重写 H2 SQL parser / optimizer。
@@ -99,7 +104,7 @@
 | P1 设计冻结 | 确认 SPI 包位置、能力名、回退策略和第一轮 SQL 范围。 | RFC 更新、接口草案、兼容矩阵、风险登记。 | 评审通过；明确 V1 只覆盖简单 INSERT VALUES / JDBC batch。 |
 | P2 prepare 识别入口 | 在 prepare/command 层识别可接管的 `Insert` 计划，但不改变执行行为。 | `DmlExecutionProvider` 注册与 plan match 原型、诊断日志、测试。 | 插件能识别目标 INSERT，非目标 SQL 不受影响。 |
 | P3 参数视图 | 在执行时向 provider 暴露只读单行参数视图，避免外部 proxy setter。 | `BoundParameterView`、参数索引/类型/NULL 测试、只读约束。 | 插件可读取 `executeUpdate()` 已绑定参数；普通 PreparedStatement 行为不变。 |
-| P4 batch 参数视图 | 将 JDBC batch 参数集合以只读批量视图暴露给 provider。 | `BoundParameterBatchView`、batch empty/partial failure/clearBatch 测试。 | `executeBatch()` 可一次传入 batch 参数；原生 batch 失败语义保持。 |
+| P4 batch 参数视图 | 保留 JDBC batch 只读参数视图 SPI，整批 provider 调度暂停并等待 V2 失败契约。 | `BoundParameterBatchView`、batch empty/partial failure/clearBatch 测试。 | `executeBatch()`按元素进入标准 command lifecycle；原生 batch 失败语义保持。 |
 | P5 表级 bulk insert | 为插件表增加可选 bulk insert hook，打通 provider 到 table 的批量写入口。 | `BulkInsertTable` 原型、插件表测试、回退到逐行路径。 | 插件表能收到批量参数并返回 update count；非插件表仍走原生路径。 |
 | P6 事务与异常兼容 | 补齐 autoCommit、rollback、唯一约束、类型转换、只读表等语义门禁。 | 兼容测试矩阵、错误映射、事务回滚测试。 | 快路径与原生路径在指定场景下结果一致。 |
 | P7 性能长测 | 用 ADB 新 hook 路径跑完整 JDBC `insert_batch100` 长测。 | 性能报告、火焰图/采样、瓶颈清单。 | 目标先超过 H2 原生 1.5x；若未达到，输出剩余瓶颈。 |

@@ -42,15 +42,14 @@ public interface DmlExecutionPlan {
     long execute(DmlExecutionContext context);
 
     /**
-     * Execute the plan for a JDBC batch.
+     * 为后续 JDBC batch 契约保留的执行入口。
      * <p>
-     * Providers that do not support batch execution return {@code null}, so H2
-     * can continue with the native per-row batch path before any plugin write
-     * has happened.
+     * 当前 H2 按元素执行 JDBC batch，使提交、回滚、部分失败 update count 和
+     * generated key 行为继续受标准 command lifecycle 管理。该实验性方法仅为
+     * 源码和二进制兼容保留，当前不会由 H2 调用。
      *
-     * @param context execution context with batch parameters
-     * @return per-row update counts, or {@code null} when batch fast path is
-     *         not supported
+     * @param context 包含 batch 参数的执行上下文
+     * @return 逐元素 update count，或 {@code null}
      */
     default long[] executeBatch(DmlExecutionContext context) {
         return null;

@@ -106,6 +106,12 @@ public final class PluginCapability {
             "onlineBackup.prepare";
 
     /**
+     * Participant 支持 barrier 外 arm、barrier 内 capture 的分阶段准备。
+     */
+    public static final String ONLINE_BACKUP_PHASED_PREPARE =
+            "onlineBackup.phasedPrepare";
+
+    /**
      * Provider 可在无普通 lifecycle 和外部副作用的模式下参与只读数据库打开。
      */
     public static final String VALIDATION_OPEN = "validation.open";
@@ -135,6 +141,7 @@ public final class PluginCapability {
             STORAGE_PUBLISH_CRASH_SAFE,
             STORAGE_TRUNCATE_SAFE,
             ONLINE_BACKUP_PREPARE,
+            ONLINE_BACKUP_PHASED_PREPARE,
             VALIDATION_OPEN,
             ONLINE_BACKUP_VALIDATE));
 

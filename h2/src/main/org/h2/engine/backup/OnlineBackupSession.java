@@ -5,22 +5,17 @@
  */
 package org.h2.engine.backup;
 
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import org.h2.api.ErrorCode;
 import org.h2.api.OnlineBackupContext;
 import org.h2.api.OnlineBackupOptions;
-import org.h2.api.OnlineBackupParticipantProvider;
-import org.h2.api.PluginCapability;
-import org.h2.api.PluginProvider;
 import org.h2.api.PreparedBackupParticipant;
 import org.h2.api.PreparedParticipantMetadata;
 import org.h2.api.StorageEngineProvider;
@@ -50,19 +45,27 @@ public final class OnlineBackupSession implements AutoCloseable {
 
     private final OnlineBackupContext context;
     private final Database database;
-    private final ArrayList<ParticipantHandle> participants =
-            new ArrayList<>();
+    private final OnlineBackupParticipantCoordinator participantCoordinator;
 
     private MVStorePreparedSnapshot h2Snapshot;
     private State state = State.PREPARING;
     private long preparePauseMillis;
     private Path publishedTarget;
     private OnlineBackupPublishResult publishedResult;
+    private boolean preparationActive = true;
+    private boolean materializationActive;
+    private boolean cancellationRequested;
+    private boolean cancellationSignalActive;
+    private boolean cleanupActive;
+    private Throwable cancellationFailure;
+    private Throwable terminalFailure;
 
     private OnlineBackupSession(Database database,
-            OnlineBackupContext context) {
+            OnlineBackupContext context,
+            OnlineBackupParticipantCoordinator participantCoordinator) {
         this.database = database;
         this.context = context;
+        this.participantCoordinator = participantCoordinator;
     }
 
     /**
@@ -93,61 +96,59 @@ public final class OnlineBackupSession implements AutoCloseable {
                 UUID.randomUUID(),
                 identity.getDatabaseId(), identity.getGenerationId(),
                 identity.getSchemaEpoch(), deadlineNanos);
-        ArrayList<ResolvedParticipant> resolved =
-                resolveParticipants(database, options.getParticipantIds());
+        OnlineBackupParticipantCoordinator participantCoordinator =
+                OnlineBackupParticipantCoordinator.resolve(database,
+                        options.getParticipantIds());
         OnlineBackupSession session =
-                new OnlineBackupSession(database, context);
+                new OnlineBackupSession(database, context,
+                        participantCoordinator);
         database.claimOnlineBackupSession(session);
-        synchronized (session) {
-            Throwable failure = null;
-            try {
-                long barrierStartedNanos = System.nanoTime();
-                long barrierTimeout = requireRemaining(context,
-                        "online backup barrier");
-                try (DatabaseOperationGate.BackupBarrier ignored =
-                        database.getOperationGate()
-                                .beginBackupBarrier(barrierTimeout)) {
-                    requireRemaining(context, "H2 snapshot prepare");
-                    database.getStore().flush();
-                    session.h2Snapshot = database.getStore().getMvStore()
-                            .prepareSnapshot(
-                                    options.getSnapshotLeaseMillis());
-                    requireRemaining(context, "H2 snapshot prepare");
-                    session.requireH2SnapshotActive();
-                    for (ResolvedParticipant participant : resolved) {
-                        requireRemaining(context,
-                                "participant " + participant.id);
-                        PreparedBackupParticipant prepared =
-                                participant.provider.prepare(context);
-                        if (prepared == null) {
-                            throw new IllegalStateException(
-                                    "Participant returned null: "
-                                            + participant.id);
-                        }
-                        ParticipantHandle handle = new ParticipantHandle(
-                                participant, prepared);
-                        session.participants.add(handle);
-                        handle.validateMetadata();
-                        requireRemaining(context,
-                                "participant " + participant.id);
-                    }
-                    session.requireH2SnapshotActive();
-                } finally {
-                    session.preparePauseMillis = TimeUnit.NANOSECONDS.toMillis(
-                            System.nanoTime() - barrierStartedNanos);
+        Throwable failure = null;
+        try {
+            participantCoordinator.arm(context, session);
+            long barrierStartedNanos = System.nanoTime();
+            long barrierTimeout = requireRemaining(context,
+                    "online backup barrier");
+            try (DatabaseOperationGate.BackupBarrier ignored =
+                    database.getOperationGate()
+                            .beginBackupBarrier(barrierTimeout)) {
+                session.checkPreparationAllowed("H2 snapshot prepare");
+                database.getStore().flush();
+                MVStorePreparedSnapshot snapshot =
+                        database.getStore().getMvStore().prepareSnapshot(
+                                options.getSnapshotLeaseMillis());
+                synchronized (session) {
+                    session.h2Snapshot = snapshot;
                 }
-                session.state = State.PREPARED;
-                return session;
-            } catch (Throwable e) {
-                failure = e;
-                session.abortAfterPrepareFailure(e);
-                throw e;
+                session.checkPreparationAllowed("H2 snapshot prepare");
+                session.requireH2SnapshotActive();
+                participantCoordinator.capture(context, session);
+                session.requireH2SnapshotActive();
             } finally {
-                if (failure != null) {
-                    session.state = State.ABORTED;
-                    database.releaseOnlineBackupSession(session);
-                }
+                session.preparePauseMillis = TimeUnit.NANOSECONDS.toMillis(
+                        System.nanoTime() - barrierStartedNanos);
             }
+            synchronized (session) {
+                session.checkPreparationAllowed("online backup prepare");
+                session.preparationActive = false;
+                session.state = State.PREPARED;
+                session.notifyAll();
+            }
+            return session;
+        } catch (Throwable e) {
+            failure = e;
+            synchronized (session) {
+                session.preparationActive = false;
+                session.awaitCancellationSignalUninterruptibly();
+                failure = addFailure(failure, session.cancellationFailure);
+                session.cancellationFailure = null;
+                session.cleanupActive = true;
+                session.state = State.ABORTING;
+                session.notifyAll();
+            }
+            failure = session.finishCleanup(State.ABORTED, failure);
+            rethrow(failure);
+            throw new AssertionError();
         }
     }
 
@@ -178,12 +179,7 @@ public final class OnlineBackupSession implements AutoCloseable {
     public synchronized List<PreparedParticipantMetadata>
             getParticipantMetadata() {
         requirePrepared();
-        ArrayList<PreparedParticipantMetadata> metadata =
-                new ArrayList<>(participants.size());
-        for (ParticipantHandle participant : participants) {
-            metadata.add(participant.metadata);
-        }
-        return Collections.unmodifiableList(metadata);
+        return participantCoordinator.getMetadata();
     }
 
     /**
@@ -193,16 +189,7 @@ public final class OnlineBackupSession implements AutoCloseable {
      */
     public synchronized List<ParticipantSnapshot> getParticipants() {
         requirePrepared();
-        ArrayList<ParticipantSnapshot> snapshots =
-                new ArrayList<>(participants.size());
-        for (ParticipantHandle participant : participants) {
-            snapshots.add(new ParticipantSnapshot(
-                    participant.resolved.id,
-                    participant.resolved.pluginId,
-                    participant.resolved.pluginVersion,
-                    participant.metadata));
-        }
-        return Collections.unmodifiableList(snapshots);
+        return participantCoordinator.getSnapshots();
     }
 
     /**
@@ -221,33 +208,66 @@ public final class OnlineBackupSession implements AutoCloseable {
      * @return publish result
      * @throws Exception if materialization or publication fails
      */
-    public synchronized OnlineBackupPublishResult publish(
+    public OnlineBackupPublishResult publish(
             Path finalDirectory) throws Exception {
         if (finalDirectory == null) {
             throw new IllegalArgumentException(
                     "finalDirectory must not be null");
         }
         Path target = finalDirectory.toAbsolutePath().normalize();
-        if (publishedResult != null) {
-            if (!publishedTarget.equals(target)) {
-                throw new IllegalStateException(
-                        "Session was already published to another target");
+        synchronized (this) {
+            if (publishedResult != null) {
+                if (!publishedTarget.equals(target)) {
+                    throw new IllegalStateException(
+                            "Session was already published to another target");
+                }
+                return publishedResult;
             }
-            return publishedResult;
+            if (state != State.PREPARED || materializationActive
+                    || cleanupActive) {
+                throw new IllegalStateException(
+                        "Online backup session cannot publish: " + state);
+            }
+            cancellationRequested = false;
+            cancellationFailure = null;
+            materializationActive = true;
+            state = State.MATERIALIZING;
         }
-        requirePrepared();
-        state = State.MATERIALIZING;
+        OnlineBackupPublishResult result = null;
+        Throwable failure = null;
         try {
-            publishedResult = OnlineBackupBundlePublisher.publish(this,
-                    target);
-            publishedTarget = target;
-            state = State.PREPARED;
-            return publishedResult;
+            result = OnlineBackupBundlePublisher.publish(this, target);
         } catch (Throwable e) {
-            state = State.PREPARED;
-            rethrow(e);
-            throw new AssertionError();
+            failure = e;
         }
+        boolean canceled;
+        synchronized (this) {
+            materializationActive = false;
+            canceled = cancellationRequested;
+            if (canceled) {
+                awaitCancellationSignalUninterruptibly();
+                failure = addFailure(failure, cancellationFailure);
+                cancellationFailure = null;
+                cleanupActive = true;
+                state = State.ABORTING;
+            } else {
+                if (failure == null) {
+                    publishedResult = result;
+                    publishedTarget = target;
+                }
+                state = State.PREPARED;
+            }
+            notifyAll();
+        }
+        if (canceled) {
+            if (failure == null && result == null) {
+                failure = new IOException(
+                        "Online backup materialization was canceled");
+            }
+            failure = finishCleanup(State.ABORTED, failure);
+        }
+        rethrow(failure);
+        return result;
     }
 
     /**
@@ -255,54 +275,17 @@ public final class OnlineBackupSession implements AutoCloseable {
      *
      * @throws Exception if cleanup fails
      */
-    public synchronized void abort() throws Exception {
-        if (state == State.ABORTED || state == State.CLOSED) {
-            return;
-        }
-        state = State.ABORTING;
-        Throwable failure;
-        try {
-            failure = cleanup(null);
-            state = State.ABORTED;
-        } finally {
-            database.releaseOnlineBackupSession(this);
-        }
-        rethrow(failure);
+    public void abort() throws Exception {
+        rethrow(terminate(false));
     }
 
     @Override
-    public synchronized void close() throws Exception {
-        if (state == State.CLOSED) {
-            return;
-        }
-        Throwable failure = null;
-        try {
-            if (state != State.ABORTED) {
-                state = State.ABORTING;
-                failure = cleanup(null);
-                state = State.ABORTED;
-            }
-        } finally {
-            state = State.CLOSED;
-            database.releaseOnlineBackupSession(this);
-        }
-        rethrow(failure);
-    }
-
-    private void abortAfterPrepareFailure(Throwable failure) {
-        state = State.ABORTING;
-        cleanup(failure);
+    public void close() throws Exception {
+        rethrow(terminate(true));
     }
 
     private Throwable cleanup(Throwable failure) {
-        for (int i = participants.size() - 1; i >= 0; i--) {
-            try {
-                participants.get(i).prepared.abort();
-            } catch (Throwable cleanupFailure) {
-                failure = addFailure(failure, cleanupFailure);
-            }
-        }
-        participants.clear();
+        failure = participantCoordinator.cleanup(failure);
         if (h2Snapshot != null) {
             try {
                 h2Snapshot.close();
@@ -313,6 +296,140 @@ public final class OnlineBackupSession implements AutoCloseable {
             }
         }
         return failure;
+    }
+
+    private Throwable terminate(boolean closing) throws Exception {
+        boolean cleanupOwner = false;
+        boolean cancellationOwner = false;
+        synchronized (this) {
+            if (state == State.CLOSED
+                    || !closing && state == State.ABORTED) {
+                return null;
+            }
+            if (materializationActive || preparationActive) {
+                cancellationRequested = true;
+                state = State.ABORTING;
+                if (!cancellationSignalActive) {
+                    cancellationSignalActive = true;
+                    cancellationOwner = true;
+                }
+            } else if (cleanupActive || state == State.ABORTING) {
+                // Another thread owns cleanup.
+            } else if (state == State.ABORTED) {
+                state = State.CLOSED;
+                database.releaseOnlineBackupSession(this);
+                return null;
+            } else {
+                state = State.ABORTING;
+                cleanupActive = true;
+                cleanupOwner = true;
+            }
+        }
+        if (cancellationOwner) {
+            Throwable signalFailure = requestH2MaterializationCancellation();
+            synchronized (this) {
+                cancellationFailure = addFailure(cancellationFailure,
+                        signalFailure);
+                cancellationSignalActive = false;
+                notifyAll();
+            }
+        }
+        Throwable failure;
+        if (cleanupOwner) {
+            failure = finishCleanup(closing ? State.CLOSED : State.ABORTED,
+                    null);
+        } else {
+            synchronized (this) {
+                while (preparationActive || materializationActive
+                        || cleanupActive
+                        || cancellationSignalActive) {
+                    wait();
+                }
+                failure = terminalFailure;
+                if (closing && state != State.CLOSED) {
+                    state = State.CLOSED;
+                }
+            }
+            database.releaseOnlineBackupSession(this);
+        }
+        return failure;
+    }
+
+    private Throwable requestH2MaterializationCancellation() {
+        MVStorePreparedSnapshot snapshot;
+        synchronized (this) {
+            snapshot = h2Snapshot;
+        }
+        if (snapshot == null) {
+            return null;
+        }
+        try {
+            snapshot.abort();
+            return null;
+        } catch (Throwable failure) {
+            return failure;
+        }
+    }
+
+    private Throwable finishCleanup(State terminalState, Throwable failure) {
+        Throwable cleanupFailure;
+        if (failure == null) {
+            cleanupFailure = cleanup(null);
+            failure = cleanupFailure;
+        } else {
+            int previousSuppressed = failure.getSuppressed().length;
+            failure = cleanup(failure);
+            cleanupFailure = null;
+            Throwable[] suppressed = failure.getSuppressed();
+            for (int i = previousSuppressed; i < suppressed.length; i++) {
+                cleanupFailure = addFailure(cleanupFailure, suppressed[i]);
+            }
+        }
+        synchronized (this) {
+            terminalFailure = cleanupFailure;
+            cleanupActive = false;
+            state = terminalState;
+            notifyAll();
+        }
+        database.releaseOnlineBackupSession(this);
+        return failure;
+    }
+
+    private void awaitCancellationSignalUninterruptibly() {
+        boolean interrupted = false;
+        while (cancellationSignalActive) {
+            try {
+                wait();
+            } catch (InterruptedException e) {
+                interrupted = true;
+            }
+        }
+        if (interrupted) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    boolean isMaterializationCancellationRequested() {
+        synchronized (this) {
+            return cancellationRequested;
+        }
+    }
+
+    void checkMaterializationAllowed() throws IOException {
+        if (isMaterializationCancellationRequested()) {
+            throw new IOException(
+                    "Online backup materialization was canceled");
+        }
+    }
+
+    void checkPreparationAllowed(String operation)
+            throws IOException {
+        synchronized (this) {
+            if (cancellationRequested) {
+                throw new IOException("Online backup prepare was canceled");
+            }
+        }
+        requireRemaining(context, operation);
     }
 
     private void requirePrepared() {
@@ -364,17 +481,7 @@ public final class OnlineBackupSession implements AutoCloseable {
     }
 
     List<ParticipantMaterializer> getParticipantMaterializers() {
-        ArrayList<ParticipantMaterializer> result =
-                new ArrayList<>(participants.size());
-        for (ParticipantHandle participant : participants) {
-            result.add(new ParticipantMaterializer(
-                    new ParticipantSnapshot(participant.resolved.id,
-                            participant.resolved.pluginId,
-                            participant.resolved.pluginVersion,
-                            participant.metadata),
-                    participant.prepared));
-        }
-        return result;
+        return participantCoordinator.getMaterializers();
     }
 
     private void requireH2SnapshotActive() {
@@ -383,44 +490,6 @@ public final class OnlineBackupSession implements AutoCloseable {
             throw new IllegalStateException(
                     "H2 prepared snapshot lease expired during prepare");
         }
-    }
-
-    private static ArrayList<ResolvedParticipant> resolveParticipants(
-            Database database, List<String> selectedIds) {
-        Map<String, RegisteredProvider> registered =
-                database.getPluginRegistry().getProviders(
-                        OnlineBackupParticipantProvider.TYPE);
-        HashSet<String> unique = new HashSet<>();
-        ArrayList<ResolvedParticipant> resolved = new ArrayList<>();
-        for (String selectedId : selectedIds) {
-            if (selectedId == null || selectedId.trim().isEmpty()) {
-                throw new IllegalArgumentException(
-                        "Participant id must not be empty");
-            }
-            if (!unique.add(selectedId)) {
-                throw new IllegalArgumentException(
-                        "Duplicate participant id: " + selectedId);
-            }
-            RegisteredProvider registration = registered.get(selectedId);
-            if (registration == null) {
-                throw new IllegalArgumentException(
-                        "Unknown participant id: " + selectedId);
-            }
-            PluginProvider provider = registration.getProvider();
-            if (!(provider instanceof OnlineBackupParticipantProvider)
-                    || !provider.supports(
-                            PluginCapability.ONLINE_BACKUP_PREPARE)) {
-                throw new IllegalArgumentException(
-                        "Participant does not support coordinated backup: "
-                                + selectedId);
-            }
-            resolved.add(new ResolvedParticipant(selectedId,
-                    registration.getPluginId(),
-                    registration.getPluginVersion(),
-                    (OnlineBackupParticipantProvider) provider));
-        }
-        resolved.sort(Comparator.comparing(participant -> participant.id));
-        return resolved;
     }
 
     private static long deadline(long timeoutMillis) {
@@ -441,6 +510,9 @@ public final class OnlineBackupSession implements AutoCloseable {
 
     private static Throwable addFailure(Throwable failure,
             Throwable cleanupFailure) {
+        if (cleanupFailure == null) {
+            return failure;
+        }
         if (failure == null) {
             return cleanupFailure;
         }
@@ -458,45 +530,6 @@ public final class OnlineBackupSession implements AutoCloseable {
             throw (Exception) failure;
         }
         throw (Error) failure;
-    }
-
-    private static final class ResolvedParticipant {
-
-        final String id;
-        final String pluginId;
-        final String pluginVersion;
-        final OnlineBackupParticipantProvider provider;
-
-        ResolvedParticipant(String id, String pluginId, String pluginVersion,
-                OnlineBackupParticipantProvider provider) {
-            this.id = id;
-            this.pluginId = pluginId;
-            this.pluginVersion = pluginVersion;
-            this.provider = provider;
-        }
-    }
-
-    private static final class ParticipantHandle {
-
-        final ResolvedParticipant resolved;
-        final PreparedBackupParticipant prepared;
-        PreparedParticipantMetadata metadata;
-
-        ParticipantHandle(ResolvedParticipant resolved,
-                PreparedBackupParticipant prepared) {
-            this.resolved = resolved;
-            this.prepared = prepared;
-        }
-
-        void validateMetadata() {
-            metadata = prepared.getPreparedMetadata();
-            if (metadata == null
-                    || !resolved.id.equals(metadata.getParticipantId())) {
-                throw new IllegalStateException(
-                        "Participant metadata id mismatch: expected "
-                                + resolved.id);
-            }
-        }
     }
 
     /**

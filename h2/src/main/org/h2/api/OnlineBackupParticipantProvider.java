@@ -16,14 +16,38 @@ public interface OnlineBackupParticipantProvider extends PluginProvider {
     String TYPE = "online_backup_participant";
 
     /**
-     * Prepare a participant snapshot at the coordinated cut.
+     * 在数据库 barrier 外完成不冻结切点的耗时准备。
+     * <p>
+     * 只有显式声明
+     * {@link PluginCapability#ONLINE_BACKUP_PHASED_PREPARE}的 provider 才会
+     * 调用此方法。默认返回 {@code null}，旧 provider 继续使用
+     * {@link #prepare(OnlineBackupContext)}。
      *
-     * @param context immutable backup context
-     * @return prepared participant
-     * @throws Exception if prepare fails
+     * @param context 不可变备份上下文
+     * @return armed participant
+     * @throws Exception arm 失败
      */
-    PreparedBackupParticipant prepare(OnlineBackupContext context)
-            throws Exception;
+    default ArmedBackupParticipant arm(OnlineBackupContext context)
+            throws Exception {
+        return null;
+    }
+
+    /**
+     * 在协调切点准备旧式 participant snapshot。
+     * <p>
+     * 未声明分阶段准备能力的旧 provider 继续覆盖此方法。默认实现
+     * fail-closed，使仅实现 {@link #arm(OnlineBackupContext)} 的新 provider
+     * 可以保持源码和二进制兼容。
+     *
+     * @param context 不可变备份上下文
+     * @return 已准备的 participant
+     * @throws Exception prepare 失败
+     */
+    default PreparedBackupParticipant prepare(OnlineBackupContext context)
+            throws Exception {
+        throw new UnsupportedOperationException(
+                "Participant does not implement legacy prepare");
+    }
 
     /**
      * 以无业务副作用的 validation mode 校验已恢复 artifact。

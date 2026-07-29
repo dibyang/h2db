@@ -10,6 +10,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Path;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 
 import org.h2.mvstore.MVStorePreparedSnapshot.MaterializationReader;
@@ -83,6 +86,39 @@ public class MVStorePreparedSnapshotLeaseTest {
         store.close();
         assertEquals(State.CLOSED, snapshot.getState());
         assertTrue(store.isClosed());
+    }
+
+    /**
+     * A zero-length lease may expire immediately, but prepare must not invert
+     * the store lock and snapshot monitor lock order.
+     */
+    @Test
+    public void zeroLeasePrepareAndExpiryDoNotDeadlock() throws Exception {
+        ExecutorService executor = Executors.newSingleThreadExecutor(
+                new ThreadFactory() {
+                    @Override
+                    public Thread newThread(Runnable runnable) {
+                        Thread thread = new Thread(runnable,
+                                "zero-lease-regression");
+                        thread.setDaemon(true);
+                        return thread;
+                    }
+                });
+        try {
+            assertTrue(executor.submit(() -> {
+                for (int i = 0; i < 64; i++) {
+                    try (MVStore store = openStore("zero-lease-" + i)) {
+                        MVStorePreparedSnapshot snapshot =
+                                store.prepareSnapshot(0L);
+                        awaitState(snapshot, State.CLOSED);
+                        assertTrue(store.isSpaceReused());
+                    }
+                }
+                return true;
+            }).get(10L, TimeUnit.SECONDS));
+        } finally {
+            executor.shutdownNow();
+        }
     }
 
     private MVStore openStore(String name) {

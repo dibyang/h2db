@@ -6,6 +6,7 @@
 package org.h2.command.dml;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map.Entry;
@@ -24,6 +25,7 @@ import org.h2.command.Command;
 import org.h2.command.CommandInterface;
 import org.h2.command.query.Query;
 import org.h2.engine.DbObject;
+import org.h2.engine.PluginRegistry.RegisteredProvider;
 import org.h2.engine.Right;
 import org.h2.engine.SessionLocal;
 import org.h2.expression.Expression;
@@ -36,6 +38,7 @@ import org.h2.expression.condition.ConditionAndOr;
 import org.h2.index.Index;
 import org.h2.message.DbException;
 import org.h2.mvstore.db.MVPrimaryIndex;
+import org.h2.mvstore.db.MVStoreTableEngineProvider;
 import org.h2.result.ResultInterface;
 import org.h2.result.ResultTarget;
 import org.h2.result.Row;
@@ -43,6 +46,7 @@ import org.h2.table.Column;
 import org.h2.table.DataChangeDeltaTable;
 import org.h2.table.DataChangeDeltaTable.ResultOption;
 import org.h2.table.Table;
+import org.h2.table.TableBase;
 import org.h2.util.HasSQL;
 import org.h2.value.Value;
 
@@ -344,20 +348,41 @@ public final class Insert extends CommandWithValues implements ResultTarget {
             return;
         }
         DmlPrepareContext context = new InsertDmlPrepareContext();
-        for (org.h2.engine.PluginRegistry.RegisteredProvider registered
-                : session.getDatabase().getPluginRegistry().getProviders(DmlExecutionProvider.TYPE).values()) {
+        ArrayList<RegisteredProvider> candidates =
+                new ArrayList<>(session.getDatabase().getPluginRegistry()
+                        .getProviders(DmlExecutionProvider.TYPE).values());
+        candidates.sort(Comparator.comparing(
+                candidate -> candidate.getProvider().getId()));
+        String matchedProviderId = null;
+        DmlExecutionProvider matchedProvider = null;
+        DmlExecutionPlan matchedPlan = DmlExecutionPlan.NONE;
+        for (RegisteredProvider registered : candidates) {
             PluginProvider provider = registered.getProvider();
             if (provider instanceof DmlExecutionProvider
-                    && provider.supports(PluginCapability.DML_INSERT_VALUES_FAST_PATH)) {
-                DmlExecutionPlan plan = ((DmlExecutionProvider) provider).prepareDml(context);
+                    && provider.supports(
+                            PluginCapability.DML_INSERT_VALUES_FAST_PATH)) {
+                DmlExecutionPlan plan =
+                        ((DmlExecutionProvider) provider).prepareDml(context);
                 if (plan != null && plan.isSupported()) {
-                    dmlExecutionProvider = (DmlExecutionProvider) provider;
-                    dmlExecutionPlan = plan;
-                    session.getTrace().info("DML fast path candidate matched: provider={0}, table={1}",
-                            provider.getId(), table.getName());
-                    return;
+                    if (matchedProvider != null) {
+                        throw new IllegalStateException(
+                                "Ambiguous DML fast path providers for table "
+                                        + table.getName() + ": "
+                                        + matchedProviderId + ", "
+                                        + provider.getId());
+                    }
+                    matchedProviderId = provider.getId();
+                    matchedProvider = (DmlExecutionProvider) provider;
+                    matchedPlan = plan;
                 }
             }
+        }
+        if (matchedProvider != null) {
+            dmlExecutionProvider = matchedProvider;
+            dmlExecutionPlan = matchedPlan;
+            session.getTrace().info(
+                    "DML fast path candidate matched: provider={0}, table={1}",
+                    matchedProviderId, table.getName());
         }
     }
 
@@ -379,57 +404,6 @@ public final class Insert extends CommandWithValues implements ResultTarget {
      */
     public void setGeneratedKeysRequested(boolean generatedKeysRequested) {
         this.generatedKeysRequested = generatedKeysRequested;
-    }
-
-    /**
-     * Check whether the current INSERT can execute a JDBC batch through the
-     * provider. This guard is intentionally side-effect free because JDBC needs
-     * to fall back to the legacy per-row batch loop when any condition is not
-     * supported.
-     *
-     * @param batchParameters batch parameter snapshots
-     * @return true if the fast path can execute the whole batch
-     */
-    public boolean canExecuteBatchDmlFastPath(ArrayList<Value[]> batchParameters) {
-        return isCommonDmlFastPathEligible()
-                && dmlExecutionProvider.supports(PluginCapability.DML_INSERT_BATCH_FAST_PATH)
-                && batchParameters != null && !batchParameters.isEmpty() && isBatchShapeCompatible(batchParameters);
-    }
-
-    /**
-     * Execute a JDBC batch through the accepted provider plan.
-     *
-     * @param batchParameters batch parameter snapshots
-     * @return per-row update counts
-     */
-    public long[] updateBatch(ArrayList<Value[]> batchParameters) {
-        if (!canExecuteBatchDmlFastPath(batchParameters)) {
-            return null;
-        }
-        session.getUser().checkTableRight(table, Right.INSERT);
-        setCurrentRowNumber(0);
-        table.fire(session, Trigger.INSERT, true);
-        boolean completed = false;
-        try {
-            table.lock(session, Table.WRITE_LOCK);
-            long[] result = dmlExecutionPlan.executeBatch(new BatchDmlExecutionContext(batchParameters));
-            if (result == null) {
-                throw DbException.getInternalError("DML fast path batch provider returned no update counts");
-            }
-            if (result.length != batchParameters.size()) {
-                throw DbException.getInternalError("Invalid DML fast path batch update count");
-            }
-            rowNumber = 0;
-            for (long count : result) {
-                rowNumber += count;
-            }
-            completed = true;
-            return result;
-        } finally {
-            if (completed) {
-                table.fire(session, Trigger.INSERT, false);
-            }
-        }
     }
 
     /**
@@ -505,16 +479,6 @@ public final class Insert extends CommandWithValues implements ResultTarget {
         for (int i = 0; i < row.length; i++) {
             Parameter parameter = parameters.get(i);
             if (row[i] != parameter || !parameter.isValueSet()) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private boolean isBatchShapeCompatible(ArrayList<Value[]> batchParameters) {
-        int parameterCount = parameters.size();
-        for (Value[] row : batchParameters) {
-            if (row == null || row.length != parameterCount) {
                 return false;
             }
         }
@@ -674,7 +638,12 @@ public final class Insert extends CommandWithValues implements ResultTarget {
 
         @Override
         public String getTableEngineProviderId() {
-            return null;
+            if (!(table instanceof TableBase)) {
+                return null;
+            }
+            String tableEngine = ((TableBase) table).getTableEngine();
+            return tableEngine != null ? tableEngine
+                    : MVStoreTableEngineProvider.ID;
         }
 
         @Override
@@ -730,45 +699,6 @@ public final class Insert extends CommandWithValues implements ResultTarget {
         }
     }
 
-    private final class BatchDmlExecutionContext implements DmlExecutionContext {
-
-        private final BoundParameterBatchView batchParameters;
-
-        BatchDmlExecutionContext(ArrayList<Value[]> batchParameters) {
-            this.batchParameters = new ArrayBoundParameterBatchView(batchParameters);
-        }
-
-        @Override
-        public Object getSession() {
-            return session;
-        }
-
-        @Override
-        public Object getTable() {
-            return table;
-        }
-
-        @Override
-        public BoundParameterView getParameters() {
-            return EmptyBoundParameterView.INSTANCE;
-        }
-
-        @Override
-        public BoundParameterBatchView getBatchParameters() {
-            return batchParameters;
-        }
-
-        @Override
-        public boolean isBatch() {
-            return true;
-        }
-
-        @Override
-        public boolean isAutoCommit() {
-            return session.getAutoCommit();
-        }
-    }
-
     private final class SingleRowBoundParameterView implements BoundParameterView {
 
         @Override
@@ -779,59 +709,6 @@ public final class Insert extends CommandWithValues implements ResultTarget {
         @Override
         public Value getValue(int index) {
             return parameters.get(index).getValue(session);
-        }
-    }
-
-    private static final class ArrayBoundParameterBatchView implements BoundParameterBatchView {
-
-        private final ArrayList<Value[]> rows;
-
-        ArrayBoundParameterBatchView(ArrayList<Value[]> rows) {
-            this.rows = rows;
-        }
-
-        @Override
-        public int size() {
-            return rows.size();
-        }
-
-        @Override
-        public BoundParameterView get(int rowIndex) {
-            return new ArrayBoundParameterView(rows.get(rowIndex));
-        }
-    }
-
-    private static final class ArrayBoundParameterView implements BoundParameterView {
-
-        private final Value[] values;
-
-        ArrayBoundParameterView(Value[] values) {
-            this.values = values;
-        }
-
-        @Override
-        public int size() {
-            return values.length;
-        }
-
-        @Override
-        public Value getValue(int index) {
-            return values[index];
-        }
-    }
-
-    private static final class EmptyBoundParameterView implements BoundParameterView {
-
-        private static final EmptyBoundParameterView INSTANCE = new EmptyBoundParameterView();
-
-        @Override
-        public int size() {
-            return 0;
-        }
-
-        @Override
-        public Value getValue(int index) {
-            throw new IndexOutOfBoundsException("No single-row parameter: " + index);
         }
     }
 

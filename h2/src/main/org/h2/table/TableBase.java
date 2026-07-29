@@ -73,6 +73,16 @@ public abstract class TableBase extends Table {
         setColumns(data.columns.toArray(new Column[0]));
     }
 
+    /**
+     * 获取建表时选定的 table engine。内置默认引擎继续以 {@code null} 表示，
+     * 以保持既有 DDL 序列化行为。
+     *
+     * @return table-engine provider ID，或 {@code null}
+     */
+    public String getTableEngine() {
+        return tableEngine;
+    }
+
     @Override
     public String getDropSQL() {
         StringBuilder builder = new StringBuilder("DROP TABLE IF EXISTS ");

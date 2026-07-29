@@ -1024,6 +1024,7 @@ public class MVStore implements AutoCloseable {
     public MVStorePreparedSnapshot prepareSnapshot(long leaseMillis) {
         DataUtils.checkArgument(leaseMillis >= 0L,
                 "Snapshot lease must not be negative");
+        MVStorePreparedSnapshot snapshot;
         storeLock.lock();
         try {
             checkOpen();
@@ -1053,13 +1054,10 @@ public class MVStore implements AutoCloseable {
                 long snapshotVersion = currentVersion;
                 String fingerprint = snapshotFingerprint(headerBlocks,
                         copyLength, snapshotVersion);
-                MVStorePreparedSnapshot snapshot =
-                        new MVStorePreparedSnapshot(this, source,
+                snapshot = new MVStorePreparedSnapshot(this, source,
                         headerBlocks, copyLength, snapshotVersion, fingerprint,
                         leaseMillis, previousReuseSpace);
                 preparedSnapshot = snapshot;
-                snapshot.startLease();
-                return snapshot;
             } catch (RuntimeException | Error e) {
                 preparedSnapshot = null;
                 source.setReuseSpace(previousReuseSpace);
@@ -1067,6 +1065,17 @@ public class MVStore implements AutoCloseable {
             }
         } finally {
             storeLock.unlock();
+        }
+        try {
+            snapshot.startLease();
+            return snapshot;
+        } catch (RuntimeException | Error e) {
+            try {
+                snapshot.abort();
+            } catch (Throwable cleanupFailure) {
+                e.addSuppressed(cleanupFailure);
+            }
+            throw e;
         }
     }
 

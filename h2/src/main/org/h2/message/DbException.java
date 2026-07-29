@@ -582,6 +582,11 @@ public class DbException extends RuntimeException {
         case LOB_CLOSED_ON_TIMEOUT_1:
         case ONLINE_BACKUP_ACTIVATION_TIMEOUT_1:
             return new JdbcSQLTimeoutException(message, sql, state, errorCode, cause, stackTrace);
+        case ONLINE_BACKUP_IDENTITY_REQUIRED:
+        case ONLINE_BACKUP_GENERATION_MISMATCH_2:
+        case UNVALIDATABLE_PROVIDER_1:
+            return new JdbcSQLNonTransientException(message, sql, state,
+                    errorCode, cause, stackTrace);
         case ONLINE_BACKUP_QUIESCING_1:
             return new JdbcSQLTransactionRollbackException(message, sql, state,
                     errorCode, cause, stackTrace);

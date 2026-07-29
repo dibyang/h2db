@@ -186,13 +186,14 @@ public class MVStorePreparedSnapshotTest {
             statement.execute(
                     "CREATE TABLE GROWTH(ID BIGINT, PAYLOAD VARBINARY)");
             Database database = database(connection);
-            long before = Files.size(databaseFile(name));
             MVStorePreparedSnapshot snapshot =
                     database.prepareOnlineBackupSnapshot(5_000L, 30_000L);
+            long sizeAtCut = Files.size(databaseFile(name));
             try {
                 statement.execute("INSERT INTO GROWTH SELECT X, "
                         + "SECURE_RAND(2048) FROM SYSTEM_RANGE(1, 16384)");
-                assertTrue(Files.size(databaseFile(name)) > before);
+                database.getStore().flush();
+                assertTrue(Files.size(databaseFile(name)) > sizeAtCut);
                 assertTrue(snapshot.getSourceGrowthBytes() > 0L);
                 assertFalse(database.getStore().getMvStore().isSpaceReused());
             } finally {

@@ -12,6 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -25,6 +26,7 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
@@ -252,6 +254,72 @@ public class OnlineBackupBundlePublisherTest {
         }
     }
 
+    /**
+     * Session lifecycle methods remain available while provider materialization
+     * runs, and abort publishes cooperative cancellation before cleanup.
+     */
+    @Test
+    public void abortCanCancelMaterializationOutsideSessionMonitor()
+            throws Exception {
+        Path bundle = directory.resolve("bundle-cancel");
+        CountDownLatch entered = new CountDownLatch(1);
+        CancellableProvider provider =
+                new CancellableProvider("cancel", entered);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try (Connection connection = connect("cancel")) {
+            Database database = database(connection);
+            register(database, provider);
+            OnlineBackupSession session = OnlineBackupSession.prepare(database,
+                    options(UUID.randomUUID(), "cancel"));
+            try {
+                Future<OnlineBackupPublishResult> publish = executor.submit(
+                        () -> session.publish(bundle));
+                assertTrue(entered.await(5L, TimeUnit.SECONDS));
+                assertEquals(OnlineBackupSession.State.MATERIALIZING,
+                        session.getState());
+                Future<?> abort = executor.submit(() -> {
+                    session.abort();
+                    return null;
+                });
+                abort.get(5L, TimeUnit.SECONDS);
+                ExecutionException failure = assertThrows(
+                        ExecutionException.class,
+                        () -> publish.get(5L, TimeUnit.SECONDS));
+                assertTrue(failure.getCause().getMessage().contains(
+                        "canceled"));
+                assertEquals(OnlineBackupSession.State.ABORTED,
+                        session.getState());
+                assertTrue(provider.aborted);
+                assertFalse(Files.exists(bundle));
+            } finally {
+                session.close();
+            }
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    /**
+     * A provider cannot retain a target and create files after its callback.
+     */
+    @Test
+    public void participantTargetIsSealedAfterMaterialization()
+            throws Exception {
+        Path bundle = directory.resolve("bundle-sealed-target");
+        RetainingProvider provider = new RetainingProvider("retained");
+        try (Connection connection = connect("sealed-target")) {
+            Database database = database(connection);
+            register(database, provider);
+            try (OnlineBackupSession session = OnlineBackupSession.prepare(
+                    database, options(UUID.randomUUID(), "retained"))) {
+                session.publish(bundle);
+                IOException failure = assertThrows(IOException.class,
+                        () -> provider.target.create("late.bin"));
+                assertTrue(failure.getMessage().contains("already finished"));
+            }
+        }
+    }
+
     private OnlineBackupOptions options(UUID backupId,
             String... participantIds) {
         return new OnlineBackupOptions(backupId,
@@ -437,6 +505,84 @@ public class OnlineBackupBundlePublisherTest {
                     target.create("leaked.bin").write(1);
                     return new MaterializedParticipantArtifact(getId(),
                             Collections.singletonList("leaked.bin"));
+                }
+
+                @Override
+                public void abort() {
+                }
+            };
+        }
+    }
+
+    private static final class CancellableProvider extends BaseProvider {
+
+        private final CountDownLatch entered;
+        private volatile boolean aborted;
+
+        CancellableProvider(String id, CountDownLatch entered) {
+            super(id);
+            this.entered = entered;
+        }
+
+        @Override
+        public PreparedBackupParticipant prepare(OnlineBackupContext context) {
+            return new PreparedBackupParticipant() {
+                @Override
+                public PreparedParticipantMetadata getPreparedMetadata() {
+                    return metadata();
+                }
+
+                @Override
+                public MaterializedParticipantArtifact materialize(
+                        ParticipantArtifactTarget target) throws Exception {
+                    entered.countDown();
+                    long deadline = System.nanoTime()
+                            + TimeUnit.SECONDS.toNanos(5L);
+                    while (!target.isCancellationRequested()
+                            && System.nanoTime() - deadline < 0L) {
+                        Thread.yield();
+                    }
+                    if (!target.isCancellationRequested()) {
+                        throw new IOException("cancellation timeout");
+                    }
+                    throw new IOException("participant materialization canceled");
+                }
+
+                @Override
+                public void abort() {
+                    aborted = true;
+                }
+            };
+        }
+    }
+
+    private static final class RetainingProvider extends BaseProvider {
+
+        private volatile ParticipantArtifactTarget target;
+
+        RetainingProvider(String id) {
+            super(id);
+        }
+
+        @Override
+        public PreparedBackupParticipant prepare(OnlineBackupContext context) {
+            return new PreparedBackupParticipant() {
+                @Override
+                public PreparedParticipantMetadata getPreparedMetadata() {
+                    return metadata();
+                }
+
+                @Override
+                public MaterializedParticipantArtifact materialize(
+                        ParticipantArtifactTarget artifactTarget)
+                        throws Exception {
+                    target = artifactTarget;
+                    try (OutputStream output = artifactTarget.create(
+                            "artifact.bin")) {
+                        output.write(1);
+                    }
+                    return new MaterializedParticipantArtifact(getId(),
+                            Collections.singletonList("artifact.bin"));
                 }
 
                 @Override

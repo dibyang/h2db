@@ -16,12 +16,15 @@ import java.io.File;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
+import org.h2.api.ArmedBackupParticipant;
 import org.h2.api.MaterializedParticipantArtifact;
 import org.h2.api.OnlineBackupContext;
 import org.h2.api.OnlineBackupOptions;
@@ -228,12 +231,67 @@ public class OnlineBackupSessionTest {
         assertEquals(Arrays.asList("prepare:a", "abort:a"), events);
     }
 
+    /**
+     * A phased participant arms before the backup barrier and captures the cut
+     * inside it without changing legacy provider behavior.
+     */
+    @Test
+    public void phasedParticipantArmsOutsideBarrier() throws Exception {
+        List<String> events = new ArrayList<>();
+        try (Connection connection = connect("phased");
+                Statement statement = connection.createStatement()) {
+            statement.execute("CREATE TABLE ARM_EVENT(ID INT)");
+            Database database = database(connection);
+            register(database, new PhasedProvider("phased", connection,
+                    events, false));
+
+            try (OnlineBackupSession session = OnlineBackupSession.prepare(
+                    database, options("phased"))) {
+                assertEquals(Arrays.asList("arm:phased", "capture:phased"),
+                        events);
+                try (ResultSet result = statement.executeQuery(
+                        "SELECT COUNT(*) FROM ARM_EVENT")) {
+                    assertTrue(result.next());
+                    assertEquals(1, result.getInt(1));
+                }
+            }
+            assertEquals(Arrays.asList("arm:phased", "capture:phased",
+                    "abort-prepared:phased"), events);
+        }
+    }
+
+    /**
+     * Arm failure aborts earlier armed resources in reverse stable order.
+     */
+    @Test
+    public void phasedArmFailureCleansEarlierArmedResources()
+            throws Exception {
+        List<String> events = new ArrayList<>();
+        try (Connection connection = connect("phased-failure");
+                Statement statement = connection.createStatement()) {
+            statement.execute("CREATE TABLE ARM_EVENT(ID INT)");
+            Database database = database(connection);
+            register(database, new PhasedProvider("a", connection, events,
+                    false));
+            register(database, new PhasedProvider("b", connection, events,
+                    true));
+
+            Exception failure = assertThrows(Exception.class,
+                    () -> OnlineBackupSession.prepare(database,
+                            options("b", "a")));
+            assertEquals("arm-b", failure.getMessage());
+            assertEquals(Arrays.asList("arm:a", "arm:b", "abort-armed:a"),
+                    events);
+        }
+    }
+
     private OnlineBackupOptions options(String... participantIds) {
         return new OnlineBackupOptions(Arrays.asList(participantIds),
                 5_000L, 30_000L);
     }
 
-    private static void register(Database database, FakeProvider provider) {
+    private static void register(Database database,
+            OnlineBackupParticipantProvider provider) {
         database.getPluginRegistry().registerProvider(
                 "test." + provider.getId(), "1", provider,
                 PluginSource.CONFIGURED_CLASS);
@@ -334,7 +392,7 @@ public class OnlineBackupSessionTest {
         }
     }
 
-    private static final class FakePrepared
+    private static class FakePrepared
             implements PreparedBackupParticipant {
 
         private final String id;
@@ -370,6 +428,74 @@ public class OnlineBackupSessionTest {
                     throw new Exception(abortFailure);
                 }
             }
+        }
+    }
+
+    private static final class PhasedProvider
+            implements OnlineBackupParticipantProvider {
+
+        private final String id;
+        private final Connection connection;
+        private final List<String> events;
+        private final boolean failArm;
+
+        PhasedProvider(String id, Connection connection, List<String> events,
+                boolean failArm) {
+            this.id = id;
+            this.connection = connection;
+            this.events = events;
+            this.failArm = failArm;
+        }
+
+        @Override
+        public String getType() {
+            return TYPE;
+        }
+
+        @Override
+        public String getId() {
+            return id;
+        }
+
+        @Override
+        public boolean supports(String capability) {
+            return PluginCapability.ONLINE_BACKUP_PHASED_PREPARE.equals(
+                    capability);
+        }
+
+        @Override
+        public ArmedBackupParticipant arm(OnlineBackupContext context)
+                throws Exception {
+            events.add("arm:" + id);
+            if (failArm) {
+                throw new Exception("arm-" + id);
+            }
+            try (Statement statement = connection.createStatement()) {
+                statement.executeUpdate("INSERT INTO ARM_EVENT VALUES(1)");
+            }
+            return new ArmedBackupParticipant() {
+                private boolean aborted;
+
+                @Override
+                public PreparedBackupParticipant capture(
+                        OnlineBackupContext captureContext) {
+                    events.add("capture:" + id);
+                    return new FakePrepared(id, events, null) {
+                        @Override
+                        public void abort() {
+                            events.add("abort-prepared:" + id);
+                        }
+                    };
+                }
+
+                @Override
+                public void abort() {
+                    if (!aborted) {
+                        aborted = true;
+                        events.add("abort-armed:" + id);
+                    }
+                }
+            };
         }
     }
 }

@@ -95,6 +95,8 @@
 25. 缺少 `h2.onlineBackup.meta`的只读旧库不得生成临时、派生或调用方指定的 identity 来执行组合备份；只能继续使用旧备份工具，或通过显式 onboarding 建立新的备份链。
 26. snapshot lease 到期不得跨线程强制关闭 active materializer，也不得在 active reader 非零时解除 reuse-space pin；卡死 reader 场景宁可熔断新 snapshot/maintenance，也不能不安全回收。
 27. 新能力只在当前 2.4.x 开发线实现，不回移到已发布 2.3.x；2.3.0 作为兼容性输入基线，不作为新 API、bundle reader 或 TCP v21 的运行目标。
+28. final bundle 的幂等复用必须先校验 manifest 中全部 artifact 的规范路径、文件类型、长度和 SHA-256，并拒绝缺失、损坏或包含未登记文件的 bundle。
+29. session monitor 只保护状态迁移，不得包裹 participant callback、snapshot materialize、checksum、文件 I/O 或资源清理；materialize 取消通过 session 标记、H2 snapshot cancel 和受限 artifact target 协作完成。
 
 ## 推荐设计基线
 
@@ -242,14 +244,26 @@ h2.onlineBackup.meta
 
 ```java
 public interface OnlineBackupParticipantProvider extends PluginProvider {
-    PreparedBackupParticipant prepare(
-            OnlineBackupContext context) throws Exception;
+    default ArmedBackupParticipant arm(
+            OnlineBackupContext context) throws Exception {
+        return null;
+    }
+
+    default PreparedBackupParticipant prepare(
+            OnlineBackupContext context) throws Exception {
+        throw new UnsupportedOperationException(
+                "Participant does not implement legacy prepare");
+    }
 }
 ```
 
 `OnlineBackupOptions`显式提供 participant ID 列表。接口、状态机和 manifest 从第一版起使用集合模型，不提供只能容纳单 participant 的特殊字段或旁路。
 
-协调器在进入 barrier 前完成 participant ID 去重、provider 解析、capability 和 allowlist 检查；进入 barrier 后按 participant ID 的稳定顺序依次调用 prepare，任一失败时按实际完成顺序逆序 abort。第一阶段不并行执行 provider 回调，以保持锁顺序、失败归因和清理行为可预测。
+协调器在进入 barrier 前完成 participant ID 去重、provider 解析、capability 和 allowlist 检查。声明 `onlineBackup.phasedPrepare`的 provider 先在 barrier 外执行`arm()`，再在 barrier 内按 participant ID 的稳定顺序调用`capture()`冻结切点；旧 provider 继续在 barrier 内调用`prepare()`。任一失败时按实际完成顺序逆序 abort。第一阶段不并行执行 provider 回调，以保持锁顺序、失败归因和清理行为可预测。
+
+`ArmedBackupParticipant.capture()`成功返回后，armed 资源所有权转移给
+`PreparedBackupParticipant`；成功路径不再调用 armed `abort()`。capture
+失败或尚未进入 capture 就取消时，协调器必须逆序 abort 已 armed 资源。
 
 所有 participant 与 H2 snapshot 共享同一个 prepare 总 deadline。每次调用只能使用剩余预算；不能为每个 participant 分别提供完整的 1 秒窗口。participant 数量增加造成的 barrier 延迟必须通过 P9 性能门禁评估。
 
@@ -267,6 +281,11 @@ public interface PreparedBackupParticipant extends AutoCloseable {
 ```
 
 `materialize()`返回最终相对路径、长度、SHA-256 和 participant 自身版本信息，避免在 prepare 阶段计算全量 checksum。
+
+`ParticipantArtifactTarget.isCancellationRequested()`暴露只读协作取消信号。
+provider 应在有界复制、压缩或上传单元之间轮询；H2 不跨线程调用
+participant `abort()`，避免与仍在执行的 `materialize()`并发破坏插件内部状态。
+target 在回调结束后永久封闭，provider 不得保留引用并迟到创建或写入 artifact。
 
 ### 组合备份 bundle
 
@@ -916,6 +935,7 @@ java -cp "build/classes/java/legacyTest;build/classes/java/main;build/resources/
 - copyLength 使用“可选加密头 + `freeSpace.afterLastBlock`”，不使用可能包含预分配空洞的 `FileChannel.size()`；物化时首部使用 capture 时的 raw bytes，其余区域只读固定高水位。
 - 同一 MVStore 同时只允许一个 prepared snapshot。reuse-space pin 同时阻止 compact、reclamation 和第二个 snapshot；所有释放路径在最后一个 reader 退出后线性化。
 - watchdog 使用惰性初始化的单 daemon scheduler；功能关闭且从未 prepare 时不创建线程。过期不 interrupt reader，只把状态转为 `CANCEL_REQUESTED`。
+- lease task 只能在释放 MVStore `storeLock`后启动，禁止形成 `storeLock -> snapshot monitor`与过期清理`snapshot monitor -> storeLock`的反向锁序。
 - 加密、只读 identity-present 数据库均可物化；加密目标可用原密码重开，只读源文件在 prepare/materialize/close 前后逐字节一致。
 
 验证命令：
@@ -1539,6 +1559,18 @@ P99 由 ADB 或专项性能工具对逐操作 report 聚合，不在 H2 core 内
 - H2：`runOnlineBackupCheck --rerun-tasks` 82/82；`runPluginArchitectureCheck --rerun-tasks` 140/140；`javadoc`通过；`TestBackup`、`TestOpenClose`和`TestMVStoreConcurrent`通过。
 - ADB：全量 `test`和`javadoc`通过；持续 DML 吞吐在 1,012 ms 内达到基线 90%以上；混合 DML/DDL/长事务/高脏页门禁通过。
 - LDB：全量 `:test --rerun-tasks`和`:javadoc`通过。
+
+2026-07-29 正确性加固复核：
+
+- H2：`runOnlineBackupCheck --rerun-tasks` 89/89；
+  `runPluginArchitectureCheck --rerun-tasks` 141/141；
+  `runH2LegacySmoke --rerun-tasks`和`javadoc --rerun-tasks`通过。
+- `pinnedSnapshotAllowsObservableFileGrowth`在补齐显式 flush 前提后连续复跑 5 次通过，
+  用于排除后台刷盘时序对文件增长断言的影响。
+- `runH2TestAllCi --rerun-tasks`首次完整运行发现 90158-90160 未映射为
+  H2 JDBC 自定义异常；补齐为`JdbcSQLNonTransientException`后，
+  `TestDbException`和完整`memory` phase 通过。首次全量运行的其余 phase
+  已继续执行完毕，日志中没有第二个测试失败。
 
 ## 完成定义
 

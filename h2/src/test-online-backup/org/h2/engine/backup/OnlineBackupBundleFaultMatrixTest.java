@@ -108,6 +108,65 @@ public class OnlineBackupBundleFaultMatrixTest {
     }
 
     /**
+     * 已发布 artifact 被篡改后不得仅凭 manifest identity 返回幂等成功。
+     */
+    @Test
+    public void corruptedPublishedArtifactRejectsIdempotentReuse()
+            throws Exception {
+        Path bundle = directory.resolve("bundle-corrupt-reuse");
+        try (Connection connection = connect("corrupt-reuse");
+                OnlineBackupSession session =
+                        OnlineBackupSession.prepare(database(connection),
+                                options())) {
+            assertThrows(IOException.class,
+                    () -> OnlineBackupBundlePublisher.publish(session, bundle,
+                            failingAt(PublishStep.PARENT_DIRECTORY_FSYNC)));
+            Path artifact = bundle.resolve("h2/database.mv.db");
+            byte[] bytes = Files.readAllBytes(artifact);
+            bytes[bytes.length - 1] ^= 1;
+            Files.write(artifact, bytes);
+
+            IOException failure = assertThrows(IOException.class,
+                    () -> OnlineBackupBundlePublisher.publish(session, bundle));
+            assertTrue(failure.getMessage().contains("checksum mismatch"));
+
+            Files.write(artifact, new byte[] { 1 });
+            failure = assertThrows(IOException.class,
+                    () -> OnlineBackupBundlePublisher.publish(session, bundle));
+            assertTrue(failure.getMessage().contains("length mismatch"));
+
+            Files.delete(artifact);
+            failure = assertThrows(IOException.class,
+                    () -> OnlineBackupBundlePublisher.publish(session, bundle));
+            assertTrue(failure.getMessage().contains("artifacts are missing"));
+            assertTrue(Files.isDirectory(bundle));
+        }
+    }
+
+    /**
+     * final bundle 中出现 manifest 未登记文件时不得复用。
+     */
+    @Test
+    public void unregisteredPublishedFileRejectsIdempotentReuse()
+            throws Exception {
+        Path bundle = directory.resolve("bundle-extra-file");
+        try (Connection connection = connect("extra-file");
+                OnlineBackupSession session =
+                        OnlineBackupSession.prepare(database(connection),
+                                options())) {
+            assertThrows(IOException.class,
+                    () -> OnlineBackupBundlePublisher.publish(session, bundle,
+                            failingAt(PublishStep.PARENT_DIRECTORY_FSYNC)));
+            Files.write(bundle.resolve("unexpected.bin"), new byte[] { 1 });
+
+            IOException failure = assertThrows(IOException.class,
+                    () -> OnlineBackupBundlePublisher.publish(session, bundle));
+            assertTrue(failure.getMessage().contains("Unregistered file"));
+            assertTrue(Files.isDirectory(bundle));
+        }
+    }
+
+    /**
      * participant materialize 失败必须走与文件发布失败相同的清理路径。
      */
     @Test

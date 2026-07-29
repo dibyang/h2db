@@ -35,7 +35,10 @@ import org.h2.api.TableEngineContext;
 import org.h2.api.TableEngineProvider;
 import org.h2.api.TableProviderSupport;
 import org.h2.command.ddl.CreateTableData;
+import org.h2.engine.Database;
+import org.h2.engine.PluginSource;
 import org.h2.engine.SessionLocal;
+import org.h2.jdbc.JdbcConnection;
 import org.h2.mvstore.db.MVStoreBackedStorageEngine;
 import org.h2.mvstore.db.MVTable;
 import org.h2.mvstore.db.Store;
@@ -67,6 +70,8 @@ public class DmlExecutionProviderTest {
                 assertEquals(1, RecordingDmlProvider.prepareCalls);
                 assertEquals(DmlPrepareContext.INSERT_VALUES, RecordingDmlProvider.statementType);
                 assertEquals("TEST_TARGET", RecordingDmlProvider.tableName);
+                assertEquals("mvstore",
+                        RecordingDmlProvider.tableEngineProviderId);
                 assertEquals(2, RecordingDmlProvider.columnCount);
                 assertTrue(RecordingDmlProvider.batchCapable);
                 assertFalse(RecordingDmlProvider.generatedKeys);
@@ -112,11 +117,36 @@ public class DmlExecutionProviderTest {
     }
 
     /**
-     * T-DML-HOOK-BATCH-01.
-     * T-DML-HOOK-BULK-FALLBACK-01.
+     * Multiple accepting providers fail deterministically instead of depending
+     * on registry map iteration order.
      */
     @Test
-    public void executeBatchExposesBatchParameterView() throws Exception {
+    public void ambiguousProvidersAreRejectedInStableOrder()
+            throws Exception {
+        RecordingDmlProvider.reset();
+        try (Connection conn = DriverManager.getConnection(
+                "jdbc:h2:mem:dmlAmbiguous;DB_CLOSE_DELAY=-1", "sa", "");
+                Statement stat = conn.createStatement()) {
+            stat.execute("create table test_target(id int, name varchar)");
+            Database database = ((SessionLocal) ((JdbcConnection) conn)
+                    .getSession()).getDatabase();
+            database.getPluginRegistry().registerProvider("test.ambiguous",
+                    "1", new AmbiguousDmlProvider(),
+                    PluginSource.CONFIGURED_CLASS);
+
+            SQLException failure = assertThrows(SQLException.class,
+                    () -> conn.prepareStatement(
+                            "insert into test_target(id, name) values (?, ?)"));
+            assertTrue(failure.getMessage().contains(
+                    "ambiguous-dml, recording-dml"));
+        }
+    }
+
+    /**
+     * T-DML-HOOK-BATCH-LIFECYCLE-01.
+     */
+    @Test
+    public void executeBatchUsesPerElementCommandLifecycle() throws Exception {
         RecordingDmlProvider.reset();
         BulkRecordingTable.reset();
 
@@ -135,9 +165,19 @@ public class DmlExecutionProviderTest {
                 prep.addBatch();
                 assertEquals(1, RecordingDmlProvider.prepareCalls);
                 assertEquals("[1, 1]", RecordingDmlProvider.describe(prep.executeLargeBatch()));
-                assertEquals(1, RecordingDmlProvider.batchExecuteCalls);
-                assertEquals(2, RecordingDmlProvider.batchRowCount);
+                assertEquals(0, RecordingDmlProvider.batchExecuteCalls);
+                assertEquals(0, RecordingDmlProvider.batchRowCount);
+                assertEquals(2, RecordingDmlProvider.executeCalls);
                 assertEquals(0, BulkRecordingTable.addRowsCalls);
+            }
+
+            try (Connection observer = DriverManager.getConnection(
+                    "jdbc:h2:mem:dmlBatchHook", "sa", "");
+                    Statement observerStatement = observer.createStatement();
+                    ResultSet rs = observerStatement.executeQuery(
+                            "select count(*) from test_target")) {
+                assertTrue(rs.next());
+                assertEquals(2, rs.getInt(1));
             }
 
             try (ResultSet rs = stat.executeQuery("select id, name from test_target order by id")) {
@@ -202,6 +242,7 @@ public class DmlExecutionProviderTest {
                 assertEquals(1, counts[0]);
                 assertEquals(Statement.EXECUTE_FAILED, counts[1]);
                 assertEquals(0, RecordingDmlProvider.batchExecuteCalls);
+                assertEquals(0, RecordingDmlProvider.executeCalls);
             }
 
             try (ResultSet rs = stat.executeQuery("select count(*) from test_target")) {
@@ -212,10 +253,10 @@ public class DmlExecutionProviderTest {
     }
 
     /**
-     * T-DML-HOOK-BULK-TABLE-01.
+     * T-DML-HOOK-BULK-FALLBACK-01.
      */
     @Test
-    public void batchFastPathCanDelegateToBulkInsertTable() throws Exception {
+    public void batchLifecycleDoesNotInvokeReservedBulkHook() throws Exception {
         RecordingDmlProvider.reset();
         BulkRecordingTable.reset();
         String url = "jdbc:h2:mem:dmlBulkTable;DEFAULT_TABLE_ENGINE=" + BulkRecordingTableProvider.ID;
@@ -227,6 +268,8 @@ public class DmlExecutionProviderTest {
 
             try (PreparedStatement prep = conn.prepareStatement(
                     "insert into bulk_target(id, name) values (?, ?)")) {
+                assertEquals(BulkRecordingTableProvider.ID,
+                        RecordingDmlProvider.tableEngineProviderId);
                 prep.setInt(1, 10);
                 prep.setString(2, "ten");
                 prep.addBatch();
@@ -236,10 +279,16 @@ public class DmlExecutionProviderTest {
                 assertEquals("[1, 1]", RecordingDmlProvider.describe(prep.executeLargeBatch()));
             }
 
-            assertEquals(1, RecordingDmlProvider.batchExecuteCalls);
-            assertEquals(1, BulkRecordingTable.addRowsCalls);
-            assertEquals(2, BulkRecordingTable.rowCount);
-            assertEquals("[10:ten, 20:twenty]", BulkRecordingTable.rows.toString());
+            assertEquals(0, RecordingDmlProvider.batchExecuteCalls);
+            assertEquals(2, RecordingDmlProvider.executeCalls);
+            assertEquals(0, BulkRecordingTable.addRowsCalls);
+            assertEquals(0, BulkRecordingTable.rowCount);
+            assertEquals("[]", BulkRecordingTable.rows.toString());
+            try (ResultSet rs = stat.executeQuery(
+                    "select count(*) from bulk_target")) {
+                assertTrue(rs.next());
+                assertEquals(2, rs.getInt(1));
+            }
         }
     }
 
@@ -402,6 +451,7 @@ public class DmlExecutionProviderTest {
         private static boolean supportedPlan;
         private static String statementType;
         private static String tableName;
+        private static String tableEngineProviderId;
         private static int columnCount;
         private static boolean batchCapable;
         private static boolean generatedKeys;
@@ -415,6 +465,7 @@ public class DmlExecutionProviderTest {
             supportedPlan = false;
             statementType = null;
             tableName = null;
+            tableEngineProviderId = null;
             columnCount = 0;
             batchCapable = false;
             generatedKeys = false;
@@ -455,11 +506,37 @@ public class DmlExecutionProviderTest {
             prepareCalls++;
             statementType = context.getStatementType();
             tableName = context.getTableName();
+            tableEngineProviderId = context.getTableEngineProviderId();
             columnCount = context.getColumnCount();
             batchCapable = context.isBatchCapable();
             generatedKeys = context.requestsGeneratedKeys();
             supportedPlan = DmlPrepareContext.INSERT_VALUES.equals(statementType);
             return supportedPlan ? SupportedPlan.INSTANCE : DmlExecutionPlan.NONE;
+        }
+    }
+
+    private static final class AmbiguousDmlProvider
+            implements DmlExecutionProvider {
+
+        @Override
+        public String getType() {
+            return TYPE;
+        }
+
+        @Override
+        public String getId() {
+            return "ambiguous-dml";
+        }
+
+        @Override
+        public boolean supports(String capability) {
+            return PluginCapability.DML_INSERT_VALUES_FAST_PATH.equals(
+                    capability);
+        }
+
+        @Override
+        public DmlExecutionPlan prepareDml(DmlPrepareContext context) {
+            return SupportedPlan.INSTANCE;
         }
     }
 

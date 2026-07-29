@@ -5,19 +5,28 @@
  */
 package org.h2.test.store;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.ReentrantLock;
 
 import org.h2.mvstore.FileStore;
+import org.h2.mvstore.MVMap;
+import org.h2.mvstore.MVStore;
+import org.h2.mvstore.RootReference;
+import org.h2.mvstore.tx.Transaction;
+import org.h2.mvstore.tx.TransactionStore;
+import org.h2.store.fs.FileUtils;
 import org.h2.test.TestBase;
 import org.h2.util.Utils;
 
 /**
- * 测试等待线程被中断时执行器完成屏障的行为。
+ * 测试 MVStore 前台等待与执行器完成屏障的中断行为。
  */
 public class TestExecutorInterruption extends TestBase {
 
@@ -35,6 +44,9 @@ public class TestExecutorInterruption extends TestBase {
         testExecutorBarrier(Utils::flushExecutor);
         testExecutorBarrier(Utils::shutdownExecutor);
         testSynchronousFileStoreWait();
+        testTransactionWait();
+        testFileStoreCompact();
+        testMVMapContentionWait();
     }
 
     private void testExecutorBarrier(ExecutorBarrier barrier) throws Exception {
@@ -120,6 +132,130 @@ public class TestExecutorInterruption extends TestBase {
             executor.shutdownNow();
             waiter.join(5_000);
         }
+    }
+
+    private void testTransactionWait() throws Exception {
+        try (MVStore store = MVStore.open(null)) {
+            TransactionStore transactionStore = new TransactionStore(store);
+            transactionStore.init();
+            Transaction blocking = transactionStore.begin();
+            Transaction waiting = transactionStore.begin();
+            CountDownLatch waitStarted = new CountDownLatch(1);
+            AtomicReference<Boolean> result = new AtomicReference<>();
+            AtomicBoolean interruptRestored = new AtomicBoolean();
+            AtomicReference<Throwable> failure = new AtomicReference<>();
+            Thread waiter = new Thread(() -> {
+                waitStarted.countDown();
+                try {
+                    result.set(waiting.waitFor(blocking, "test", 1, 5_000));
+                    interruptRestored.set(Thread.currentThread().isInterrupted());
+                } catch (Throwable e) {
+                    failure.set(e);
+                }
+            }, "H2-test-transaction-waiter");
+            try {
+                waiter.start();
+                assertTrue(waitStarted.await(5, TimeUnit.SECONDS));
+                waiter.interrupt();
+                waiter.join(5_000);
+                assertFalse(waiter.isAlive());
+                assertNull(failure.get());
+                assertEquals(Boolean.FALSE, result.get());
+                assertTrue(interruptRestored.get());
+            } finally {
+                blocking.rollback();
+                waiting.rollback();
+                waiter.interrupt();
+                waiter.join(5_000);
+            }
+        }
+    }
+
+    private void testFileStoreCompact() throws Exception {
+        FileUtils.createDirectories(getBaseDir());
+        String fileName = getBaseDir() + "/interruptCompact.mv.db";
+        FileUtils.delete(fileName);
+        try (MVStore store = new MVStore.Builder().fileName(fileName).open()) {
+            store.<Integer, Integer>openMap("data").put(1, 1);
+            store.commit();
+            FileStore<?> fileStore = store.getFileStore();
+            Field storeLockField = MVStore.class.getDeclaredField("storeLock");
+            storeLockField.setAccessible(true);
+            ReentrantLock storeLock = (ReentrantLock) storeLockField.get(store);
+            AtomicBoolean interruptRestored = new AtomicBoolean();
+            AtomicReference<Throwable> failure = new AtomicReference<>();
+            Thread compactor = new Thread(() -> {
+                Thread.currentThread().interrupt();
+                try {
+                    fileStore.compact(101, 1);
+                    failure.set(new AssertionError("interrupted compaction should fail"));
+                } catch (RuntimeException e) {
+                    if (!(e.getCause() instanceof InterruptedException)) {
+                        failure.set(e);
+                    }
+                } finally {
+                    interruptRestored.set(Thread.currentThread().isInterrupted());
+                }
+            }, "H2-test-file-store-compactor");
+            storeLock.lock();
+            try {
+                compactor.start();
+                compactor.join(5_000);
+                assertFalse(compactor.isAlive());
+                assertNull(failure.get());
+                assertTrue(interruptRestored.get());
+            } finally {
+                storeLock.unlock();
+            }
+        } finally {
+            FileUtils.delete(fileName);
+        }
+    }
+
+    private void testMVMapContentionWait() throws Exception {
+        try (MVStore store = MVStore.open(null)) {
+            MVMap<Integer, Integer> map = store.openMap("interruptMap");
+            Method lockRoot = MVMap.class.getDeclaredMethod("lockRoot", RootReference.class, int.class);
+            Method unlockRoot = MVMap.class.getDeclaredMethod("unlockRoot");
+            lockRoot.setAccessible(true);
+            unlockRoot.setAccessible(true);
+            RootReference<?, ?> lockedRoot = (RootReference<?, ?>) lockRoot.invoke(map, map.getRoot(), 1);
+            try {
+                assertInterruptedTryLock(map, lockedRoot, 13);
+                assertInterruptedTryLock(map, lockedRoot, 100);
+            } finally {
+                unlockRoot.invoke(map);
+            }
+        }
+    }
+
+    private void assertInterruptedTryLock(MVMap<?, ?> map, RootReference<?, ?> lockedRoot, int attempt)
+            throws InterruptedException, NoSuchMethodException {
+        Method tryLock = MVMap.class.getDeclaredMethod("tryLock", RootReference.class, int.class);
+        tryLock.setAccessible(true);
+        AtomicBoolean interruptRestored = new AtomicBoolean();
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        Thread waiter = new Thread(() -> {
+            Thread.currentThread().interrupt();
+            try {
+                tryLock.invoke(map, lockedRoot, attempt);
+                failure.set(new AssertionError("interrupted root lock should fail"));
+            } catch (InvocationTargetException e) {
+                Throwable cause = e.getCause();
+                if (!(cause instanceof RuntimeException) || !(cause.getCause() instanceof InterruptedException)) {
+                    failure.set(cause);
+                }
+            } catch (Throwable e) {
+                failure.set(e);
+            } finally {
+                interruptRestored.set(Thread.currentThread().isInterrupted());
+            }
+        }, "H2-test-map-lock-waiter");
+        waiter.start();
+        waiter.join(5_000);
+        assertFalse(waiter.isAlive());
+        assertNull(failure.get());
+        assertTrue(interruptRestored.get());
     }
 
     private static void awaitUninterruptibly(CountDownLatch latch) {

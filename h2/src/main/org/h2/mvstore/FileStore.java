@@ -890,6 +890,7 @@ public abstract class FileStore<C extends Chunk<C>>
                                     : rewriteChunks(write, 100));
                     return result != null && result;
                 } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
                     throw new RuntimeException(e);
                 }
             }

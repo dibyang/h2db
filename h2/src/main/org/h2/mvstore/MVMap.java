@@ -1922,6 +1922,7 @@ public class MVMap<K, V> extends AbstractMap<K, V> implements ConcurrentMap<K, V
                 try {
                     Thread.sleep(contention);
                 } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
                     throw new RuntimeException(ex);
                 }
             } else {
@@ -1929,7 +1930,9 @@ public class MVMap<K, V> extends AbstractMap<K, V> implements ConcurrentMap<K, V
                     notificationRequested = true;
                     try {
                         lock.wait(5);
-                    } catch (InterruptedException ignore) {
+                    } catch (InterruptedException ex) {
+                        Thread.currentThread().interrupt();
+                        throw new RuntimeException(ex);
                     }
                 }
             }

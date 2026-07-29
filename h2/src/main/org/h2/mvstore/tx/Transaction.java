@@ -745,6 +745,7 @@ public final class Transaction {
             try {
                 wait(dur);
             } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
                 return false;
             }
         }

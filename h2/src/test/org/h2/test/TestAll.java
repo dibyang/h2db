@@ -127,6 +127,7 @@ import org.h2.test.server.TestAutoServer;
 import org.h2.test.server.TestInit;
 import org.h2.test.server.TestJakartaWeb;
 import org.h2.test.server.TestNestedLoop;
+import org.h2.test.server.TestServerInterruption;
 import org.h2.test.server.TestWeb;
 import org.h2.test.store.TestCacheConcurrentLIRS;
 import org.h2.test.store.TestCacheLIRS;
@@ -866,6 +867,7 @@ kill -9 `jps -l | grep "org.h2.test." | cut -d " " -f 1`
             // server
             addTest(new TestAutoServer());
             addTest(new TestNestedLoop());
+            addTest(new TestServerInterruption());
 
             // mvcc & row level locking
             addTest(new TestMvcc1());

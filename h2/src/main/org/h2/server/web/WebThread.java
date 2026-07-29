@@ -61,10 +61,9 @@ class WebThread extends WebApp implements Runnable {
      * Wait until the thread is stopped.
      *
      * @param millis the maximum number of milliseconds to wait
-     * @throws InterruptedException if interrupted
      */
-    void join(int millis) throws InterruptedException {
-        thread.join(millis);
+    void join(int millis) {
+        WebServer.joinThread(thread, millis);
     }
 
     /**

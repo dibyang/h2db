@@ -29,6 +29,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 import org.h2.engine.Constants;
 import org.h2.engine.SysProperties;
@@ -458,11 +459,7 @@ public class WebServer implements Service {
             serverSocket = null;
         }
         if (listenerThread != null) {
-            try {
-                listenerThread.join(1000);
-            } catch (InterruptedException e) {
-                DbException.traceThrowable(e);
-            }
+            joinThread(listenerThread, 1000);
         }
         // TODO server: using a boolean 'now' argument? a timeout?
         for (WebSession session : new ArrayList<>(sessions.values())) {
@@ -474,6 +471,44 @@ public class WebServer implements Service {
                 c.join(100);
             } catch (Exception e) {
                 traceError(e);
+            }
+        }
+    }
+
+    /**
+     * 在原总超时内等待线程结束，并在返回前恢复调用线程的中断标记。
+     * 超时为 0 时等待线程真正结束。
+     *
+     * @param thread 待回收线程
+     * @param timeoutMillis 总超时，单位毫秒；0 表示不设超时
+     */
+    static void joinThread(Thread thread, long timeoutMillis) {
+        boolean interrupted = false;
+        try {
+            if (timeoutMillis == 0) {
+                for (;;) {
+                    try {
+                        thread.join();
+                        break;
+                    } catch (InterruptedException e) {
+                        interrupted = true;
+                    }
+                }
+            } else {
+                long remainingNanos = TimeUnit.MILLISECONDS.toNanos(timeoutMillis);
+                long deadline = System.nanoTime() + remainingNanos;
+                while (thread.isAlive() && remainingNanos > 0) {
+                    try {
+                        TimeUnit.NANOSECONDS.timedJoin(thread, remainingNanos);
+                    } catch (InterruptedException e) {
+                        interrupted = true;
+                    }
+                    remainingNanos = deadline - System.nanoTime();
+                }
+            }
+        } finally {
+            if (interrupted) {
+                Thread.currentThread().interrupt();
             }
         }
     }
@@ -858,11 +893,7 @@ public class WebServer implements Service {
 
         public void stopNow() {
             this.stopNow = true;
-            try {
-                join();
-            } catch (InterruptedException e) {
-                // ignore
-            }
+            joinThread(this, 0);
         }
 
         @Override

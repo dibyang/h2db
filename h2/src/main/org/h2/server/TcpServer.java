@@ -23,6 +23,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
 import org.h2.api.ErrorCode;
@@ -364,11 +365,7 @@ public class TcpServer implements Service {
                 serverSocket = null;
             }
             if (listenerThread != null) {
-                try {
-                    listenerThread.join(1000);
-                } catch (InterruptedException e) {
-                    DbException.traceThrowable(e);
-                }
+                joinThread(listenerThread, 1000);
             }
         }
         // TODO server: using a boolean 'now' argument? a timeout?
@@ -376,10 +373,36 @@ public class TcpServer implements Service {
             if (c != null) {
                 c.close();
                 try {
-                    c.getThread().join(100);
+                    joinThread(c.getThread(), 100);
                 } catch (Exception e) {
                     DbException.traceThrowable(e);
                 }
+            }
+        }
+    }
+
+    /**
+     * 在原总超时内等待线程结束，并在返回前恢复调用线程的中断标记。
+     *
+     * @param thread 待回收线程
+     * @param timeoutMillis 总超时，单位毫秒
+     */
+    private static void joinThread(Thread thread, long timeoutMillis) {
+        boolean interrupted = false;
+        long remainingNanos = TimeUnit.MILLISECONDS.toNanos(timeoutMillis);
+        long deadline = System.nanoTime() + remainingNanos;
+        try {
+            while (thread.isAlive() && remainingNanos > 0) {
+                try {
+                    TimeUnit.NANOSECONDS.timedJoin(thread, remainingNanos);
+                } catch (InterruptedException e) {
+                    interrupted = true;
+                }
+                remainingNanos = deadline - System.nanoTime();
+            }
+        } finally {
+            if (interrupted) {
+                Thread.currentThread().interrupt();
             }
         }
     }

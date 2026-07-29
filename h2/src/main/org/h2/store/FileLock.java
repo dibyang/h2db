@@ -151,11 +151,7 @@ public class FileLock implements Runnable {
             serverSocket = null;
         }
         try {
-            if (watchdog != null) {
-                watchdog.join();
-            }
-        } catch (Exception e) {
-            trace.debug(e, "unlock");
+            joinThread(watchdog);
         } finally {
             watchdog = null;
         }
@@ -283,20 +279,12 @@ public class FileLock implements Runnable {
             if (dist < -TIME_GRANULARITY) {
                 // lock file modified in the future -
                 // wait for a bit longer than usual
-                try {
-                    Thread.sleep(2 * (long) sleep);
-                } catch (Exception e) {
-                    trace.debug(e, "sleep");
-                }
+                sleep(2 * (long) sleep);
                 return;
             } else if (dist > TIME_GRANULARITY) {
                 return;
             }
-            try {
-                Thread.sleep(SLEEP_GAP);
-            } catch (Exception e) {
-                trace.debug(e, "sleep");
-            }
+            sleep(SLEEP_GAP);
         }
         throw getExceptionFatal("Lock file recently modified", null);
     }
@@ -417,11 +405,34 @@ public class FileLock implements Runnable {
         watchdog.start();
     }
 
-    private static void sleep(int time) {
+    private static void sleep(long time) {
         try {
             Thread.sleep(time);
         } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
             throw getExceptionFatal("Sleep interrupted", e);
+        }
+    }
+
+    private static void joinThread(Thread thread) {
+        if (thread == null) {
+            return;
+        }
+        boolean interrupted = false;
+        try {
+            // 文件锁释放是完成屏障，不能让 watchdog 在 unlock() 返回后继续运行。
+            for (;;) {
+                try {
+                    thread.join();
+                    break;
+                } catch (InterruptedException e) {
+                    interrupted = true;
+                }
+            }
+        } finally {
+            if (interrupted) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 

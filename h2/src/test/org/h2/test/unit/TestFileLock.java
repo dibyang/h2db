@@ -6,9 +6,16 @@
 package org.h2.test.unit;
 
 import java.io.File;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.sql.Connection;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import org.h2.api.ErrorCode;
 import org.h2.engine.Constants;
+import org.h2.message.DbException;
 import org.h2.message.TraceSystem;
 import org.h2.store.FileLock;
 import org.h2.store.FileLockMethod;
@@ -60,6 +67,8 @@ public class TestFileLock extends TestDb implements Runnable {
     @Override
     public void test() throws Exception {
         testFsFileLock();
+        testInterruptedSleep();
+        testInterruptedWatchdogJoin();
         testFutureModificationDate();
         testSimple();
         test(false);
@@ -73,6 +82,94 @@ public class TestFileLock extends TestDb implements Runnable {
         Connection conn = getConnection(url);
         assertThrows(ErrorCode.DATABASE_ALREADY_OPEN_1, () -> getConnection(url));
         conn.close();
+    }
+
+    private void testInterruptedSleep() throws Exception {
+        Method sleep = FileLock.class.getDeclaredMethod("sleep", long.class);
+        sleep.setAccessible(true);
+        AtomicBoolean interruptRestored = new AtomicBoolean();
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        Thread waiter = new Thread(() -> {
+            Thread.currentThread().interrupt();
+            try {
+                invoke(sleep, null, 1_000L);
+                failure.set(new AssertionError("interrupted lock wait should fail"));
+            } catch (DbException e) {
+                if (e.getErrorCode() != ErrorCode.ERROR_OPENING_DATABASE_1) {
+                    failure.set(e);
+                }
+            } catch (Throwable e) {
+                failure.set(e);
+            } finally {
+                interruptRestored.set(Thread.currentThread().isInterrupted());
+            }
+        }, "H2-test-file-lock-sleep-interruption");
+        waiter.setDaemon(true);
+        waiter.start();
+        waiter.join(5_000);
+        assertFalse(waiter.isAlive());
+        assertNull(failure.get());
+        assertTrue(interruptRestored.get());
+    }
+
+    private void testInterruptedWatchdogJoin() throws Exception {
+        Method joinThread = FileLock.class.getDeclaredMethod("joinThread", Thread.class);
+        joinThread.setAccessible(true);
+        CountDownLatch workerStarted = new CountDownLatch(1);
+        CountDownLatch releaseWorker = new CountDownLatch(1);
+        Thread worker = new Thread(() -> {
+            workerStarted.countDown();
+            try {
+                releaseWorker.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }, "H2-test-file-lock-watchdog");
+        worker.setDaemon(true);
+        worker.start();
+        try {
+            assertTrue(workerStarted.await(5, TimeUnit.SECONDS));
+            assertCompletionBarrier(joinThread, worker, releaseWorker);
+            worker.join(5_000);
+            assertFalse(worker.isAlive());
+        } finally {
+            releaseWorker.countDown();
+            worker.interrupt();
+            worker.join(5_000);
+        }
+    }
+
+    private void assertCompletionBarrier(Method joinThread, Thread worker, CountDownLatch releaseWorker)
+            throws Exception {
+        CountDownLatch waiterReturned = new CountDownLatch(1);
+        AtomicBoolean interruptRestored = new AtomicBoolean();
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        Thread waiter = new Thread(() -> {
+            Thread.currentThread().interrupt();
+            try {
+                invoke(joinThread, null, worker);
+                interruptRestored.set(Thread.currentThread().isInterrupted());
+            } catch (Throwable e) {
+                failure.set(e);
+            } finally {
+                waiterReturned.countDown();
+            }
+        }, "H2-test-file-lock-join-interruption");
+        waiter.setDaemon(true);
+        try {
+            waiter.start();
+            assertFalse(waiterReturned.await(100, TimeUnit.MILLISECONDS));
+            releaseWorker.countDown();
+            assertTrue(waiterReturned.await(5, TimeUnit.SECONDS));
+            waiter.join(5_000);
+            assertFalse(waiter.isAlive());
+            assertNull(failure.get());
+            assertTrue(interruptRestored.get());
+        } finally {
+            releaseWorker.countDown();
+            waiter.interrupt();
+            waiter.join(5_000);
+        }
     }
 
     private void testFutureModificationDate() throws Exception {
@@ -90,6 +187,23 @@ public class TestFileLock extends TestDb implements Runnable {
         String fileName = getFile();
         testSimple(fileName);
         testSimple("async:" + fileName);
+    }
+
+    private static Object invoke(Method method, Object target, Object... arguments) {
+        try {
+            return method.invoke(target, arguments);
+        } catch (InvocationTargetException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof RuntimeException) {
+                throw (RuntimeException) cause;
+            }
+            if (cause instanceof Error) {
+                throw (Error) cause;
+            }
+            throw new RuntimeException(cause);
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private void testSimple(String fileName) {

@@ -161,23 +161,30 @@ public class FilePathDisk extends FilePath {
             throw DbException.get(ErrorCode.FILE_RENAME_FAILED_2, name, newName + " (exists)");
         } catch (IOException ex) {
             cause = ex;
-            for (int i = 0; i < SysProperties.MAX_FILE_RETRY; i++) {
-                IOUtils.trace("rename", name + " >" + newName, null);
-                try {
-                    Files.move(oldFile, newFile, copyOptions);
-                    return;
-                } catch (FileAlreadyExistsException ex2) {
-                    throw DbException.get(ErrorCode.FILE_RENAME_FAILED_2, name, newName + " (exists)");
-                } catch (IOException ex2) {
-                    cause = ex;
+            boolean interrupted = false;
+            try {
+                for (int i = 0; i < SysProperties.MAX_FILE_RETRY; i++) {
+                    IOUtils.trace("rename", name + " >" + newName, null);
+                    try {
+                        Files.move(oldFile, newFile, copyOptions);
+                        return;
+                    } catch (FileAlreadyExistsException ex2) {
+                        throw DbException.get(ErrorCode.FILE_RENAME_FAILED_2, name, newName + " (exists)");
+                    } catch (IOException ex2) {
+                        cause = ex;
+                    }
+                    if (wait(i)) {
+                        interrupted = true;
+                    }
                 }
-                wait(i);
+                throw DbException.get(ErrorCode.FILE_RENAME_FAILED_2, cause, name, newName.name);
+            } finally {
+                restoreInterrupt(interrupted);
             }
-            throw DbException.get(ErrorCode.FILE_RENAME_FAILED_2, cause, name, newName.name);
         }
     }
 
-    private static void wait(int i) {
+    private static boolean wait(int i) {
         if (i == 8) {
             System.gc();
         }
@@ -185,26 +192,41 @@ public class FilePathDisk extends FilePath {
             // sleep at most 256 ms
             long sleep = Math.min(256, i * i);
             Thread.sleep(sleep);
+            return false;
         } catch (InterruptedException e) {
-            // ignore
+            // 文件重试保持原次数和退避，由公开操作在结束时交还中断。
+            return true;
+        }
+    }
+
+    private static void restoreInterrupt(boolean interrupted) {
+        if (interrupted) {
+            Thread.currentThread().interrupt();
         }
     }
 
     @Override
     public boolean createFile() {
         Path file = Paths.get(name);
-        for (int i = 0; i < SysProperties.MAX_FILE_RETRY; i++) {
-            try {
-                Files.createFile(file);
-                return true;
-            } catch (FileAlreadyExistsException e) {
-                return false;
-            } catch (IOException e) {
-                // 'access denied' is really a concurrent access problem
-                wait(i);
+        boolean interrupted = false;
+        try {
+            for (int i = 0; i < SysProperties.MAX_FILE_RETRY; i++) {
+                try {
+                    Files.createFile(file);
+                    return true;
+                } catch (FileAlreadyExistsException e) {
+                    return false;
+                } catch (IOException e) {
+                    // 'access denied' is really a concurrent access problem
+                    if (wait(i)) {
+                        interrupted = true;
+                    }
+                }
             }
+            return false;
+        } finally {
+            restoreInterrupt(interrupted);
         }
-        return false;
     }
 
     @Override
@@ -216,32 +238,39 @@ public class FilePathDisk extends FilePath {
     public void delete() {
         Path file = Paths.get(name);
         IOException cause = null;
-        for (int i = 0; i < SysProperties.MAX_FILE_RETRY; i++) {
-            IOUtils.trace("delete", name, null);
-            try {
-                Files.deleteIfExists(file);
-                return;
-            } catch (DirectoryNotEmptyException e) {
-                throw DbException.get(ErrorCode.FILE_DELETE_FAILED_1, e, name);
-            } catch (AccessDeniedException e) {
-                // On Windows file systems, delete a readonly file can cause AccessDeniedException,
-                // we should change readonly attribute to false and then delete file
+        boolean interrupted = false;
+        try {
+            for (int i = 0; i < SysProperties.MAX_FILE_RETRY; i++) {
+                IOUtils.trace("delete", name, null);
                 try {
-                    FileStore fileStore = Files.getFileStore(file);
-                    if (!fileStore.supportsFileAttributeView(PosixFileAttributeView.class)
-                        && fileStore.supportsFileAttributeView(DosFileAttributeView.class)) {
-                        Files.setAttribute(file, "dos:readonly", false);
-                        Files.delete(file);
+                    Files.deleteIfExists(file);
+                    return;
+                } catch (DirectoryNotEmptyException e) {
+                    throw DbException.get(ErrorCode.FILE_DELETE_FAILED_1, e, name);
+                } catch (AccessDeniedException e) {
+                    // On Windows file systems, delete a readonly file can cause AccessDeniedException,
+                    // we should change readonly attribute to false and then delete file
+                    try {
+                        FileStore fileStore = Files.getFileStore(file);
+                        if (!fileStore.supportsFileAttributeView(PosixFileAttributeView.class)
+                            && fileStore.supportsFileAttributeView(DosFileAttributeView.class)) {
+                            Files.setAttribute(file, "dos:readonly", false);
+                            Files.delete(file);
+                        }
+                    } catch (IOException ioe) {
+                        cause = ioe;
                     }
-                } catch (IOException ioe) {
-                    cause = ioe;
+                } catch (IOException e) {
+                    cause = e;
                 }
-            } catch (IOException e) {
-                cause = e;
+                if (wait(i)) {
+                    interrupted = true;
+                }
             }
-            wait(i);
+            throw DbException.get(ErrorCode.FILE_DELETE_FAILED_1, cause, name);
+        } finally {
+            restoreInterrupt(interrupted);
         }
-        throw DbException.get(ErrorCode.FILE_DELETE_FAILED_1, cause, name);
     }
 
     @Override
@@ -374,21 +403,28 @@ public class FilePathDisk extends FilePath {
             throw DbException.get(ErrorCode.FILE_CREATION_FAILED_1, name + " (a file with this name already exists)");
         } catch (IOException e) {
             IOException cause = e;
-            for (int i = 0; i < SysProperties.MAX_FILE_RETRY; i++) {
-                if (Files.isDirectory(dir)) {
-                    return;
+            boolean interrupted = false;
+            try {
+                for (int i = 0; i < SysProperties.MAX_FILE_RETRY; i++) {
+                    if (Files.isDirectory(dir)) {
+                        return;
+                    }
+                    try {
+                        Files.createDirectory(dir);
+                    } catch (FileAlreadyExistsException ex) {
+                        throw DbException.get(ErrorCode.FILE_CREATION_FAILED_1,
+                                name + " (a file with this name already exists)");
+                    } catch (IOException ex) {
+                        cause = ex;
+                    }
+                    if (wait(i)) {
+                        interrupted = true;
+                    }
                 }
-                try {
-                    Files.createDirectory(dir);
-                } catch (FileAlreadyExistsException ex) {
-                    throw DbException.get(ErrorCode.FILE_CREATION_FAILED_1,
-                            name + " (a file with this name already exists)");
-                } catch (IOException ex) {
-                    cause = ex;
-                }
-                wait(i);
+                throw DbException.get(ErrorCode.FILE_CREATION_FAILED_1, cause, name);
+            } finally {
+                restoreInterrupt(interrupted);
             }
-            throw DbException.get(ErrorCode.FILE_CREATION_FAILED_1, cause, name);
         }
     }
 

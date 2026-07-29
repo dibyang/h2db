@@ -21,7 +21,9 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicIntegerArray;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 import org.h2.dev.fs.FilePathZip2;
@@ -62,6 +64,7 @@ public class TestFileSystem extends TestBase {
         testAbsoluteRelative();
         testDirectories(getBaseDir());
         testMoveTo(getBaseDir());
+        testDiskRetryInterruption();
         FilePathZip2.register();
         FilePath.register(new FilePathCache());
         FilePathRec.register();
@@ -104,6 +107,52 @@ public class TestFileSystem extends TestBase {
             throw e;
         } finally {
             FileUtils.delete(getBaseDir() + "/fs");
+        }
+    }
+
+    private void testDiskRetryInterruption() throws Exception {
+        String base = getBaseDir() + "/filePathDiskInterruption";
+        String missingParent = base + "/missing";
+        FileUtils.deleteRecursive(base, false);
+        try {
+            assertInterruptRestored(
+                    () -> assertFalse(FilePath.get(missingParent + "/file").createFile()));
+            assertInterruptRestored(() -> assertThrows(DbException.class,
+                    () -> FilePath.get(missingParent + "/directory").createDirectory()));
+
+            FileUtils.createDirectories(base);
+            FilePath source = FilePath.get(base + "/source");
+            assertTrue(source.createFile());
+            assertInterruptRestored(() -> assertThrows(DbException.class,
+                    () -> source.moveTo(FilePath.get(missingParent + "/target"), false)));
+        } finally {
+            FileUtils.deleteRecursive(base, false);
+        }
+    }
+
+    private void assertInterruptRestored(Runnable operation) throws InterruptedException {
+        AtomicBoolean interruptRestored = new AtomicBoolean();
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        Thread thread = new Thread(() -> {
+            Thread.currentThread().interrupt();
+            try {
+                operation.run();
+            } catch (Throwable e) {
+                failure.set(e);
+            } finally {
+                interruptRestored.set(Thread.currentThread().isInterrupted());
+            }
+        }, "H2-test-file-retry-interruption");
+        thread.setDaemon(true);
+        try {
+            thread.start();
+            thread.join(10_000);
+            assertFalse(thread.isAlive());
+            assertNull(failure.get());
+            assertTrue(interruptRestored.get());
+        } finally {
+            thread.interrupt();
+            thread.join(5_000);
         }
     }
 

@@ -95,12 +95,7 @@ public class MathUtils {
                 t.setDaemon(true);
                 t.start();
                 Thread.yield();
-                try {
-                    // normally, generateSeed takes less than 200 ms
-                    t.join(400);
-                } catch (InterruptedException e) {
-                    warn("InterruptedException", e);
-                }
+                joinSeedGenerator(t);
                 if (!seeded) {
                     byte[] seed = generateAlternativeSeed();
                     // this never reduces randomness
@@ -120,6 +115,17 @@ public class MathUtils {
             secureRandom = new SecureRandom();
         }
         return secureRandom;
+    }
+
+    private static void joinSeedGenerator(Thread thread) {
+        try {
+            // normally, generateSeed takes less than 200 ms
+            thread.join(400);
+        } catch (InterruptedException e) {
+            // 备用种子流程继续执行，但调用方的取消信号不能丢失。
+            Thread.currentThread().interrupt();
+            warn("InterruptedException", e);
+        }
     }
 
     /**

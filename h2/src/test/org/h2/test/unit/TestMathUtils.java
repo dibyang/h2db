@@ -5,6 +5,12 @@
  */
 package org.h2.test.unit;
 
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+import java.lang.reflect.Method;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+
 import org.h2.test.TestBase;
 import org.h2.util.MathUtils;
 
@@ -23,9 +29,56 @@ public class TestMathUtils extends TestBase {
     }
 
     @Override
-    public void test() {
+    public void test() throws Exception {
+        testSeedInterruption();
         testRandom();
         testNextPowerOf2Int();
+    }
+
+    private void testSeedInterruption() throws Exception {
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        Thread seedGenerator = new Thread(() -> {
+            started.countDown();
+            try {
+                release.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }, "H2-test-seed-generator");
+        seedGenerator.setDaemon(true);
+        seedGenerator.start();
+        assertTrue(started.await(5, TimeUnit.SECONDS));
+
+        Method method = MathUtils.class.getDeclaredMethod("joinSeedGenerator", Thread.class);
+        method.setAccessible(true);
+        ByteArrayOutputStream warning = new ByteArrayOutputStream();
+        PrintStream capture = new PrintStream(warning, false, "UTF-8");
+        PrintStream systemOut = System.out;
+        PrintStream systemErr = System.err;
+        try {
+            System.setOut(capture);
+            System.setErr(capture);
+            Thread.currentThread().interrupt();
+            try {
+                method.invoke(null, seedGenerator);
+                assertTrue(Thread.interrupted());
+            } finally {
+                Thread.interrupted();
+                System.setOut(systemOut);
+                System.setErr(systemErr);
+                capture.close();
+            }
+            assertContains(warning.toString("UTF-8"), "Warning: InterruptedException");
+        } finally {
+            Thread.interrupted();
+            System.setOut(systemOut);
+            System.setErr(systemErr);
+            release.countDown();
+            seedGenerator.interrupt();
+            seedGenerator.join(5_000);
+        }
+        assertFalse(seedGenerator.isAlive());
     }
 
     private void testRandom() {

@@ -20,6 +20,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -773,23 +774,54 @@ public class Utils {
      */
     public static void flushExecutor(ThreadPoolExecutor executor) {
         if (executor != null) {
+            boolean interrupted = false;
             try {
-                executor.submit(() -> {}).get();
-            } catch (InterruptedException ignore) {/**/
+                Future<?> future = executor.submit(() -> {});
+                for (;;) {
+                    try {
+                        future.get();
+                        break;
+                    } catch (InterruptedException e) {
+                        interrupted = true;
+                    }
+                }
             } catch (RejectedExecutionException ex) {
                 shutdownExecutor(executor);
             } catch (ExecutionException e) {
                 throw new RuntimeException(e);
+            } finally {
+                if (interrupted) {
+                    Thread.currentThread().interrupt();
+                }
             }
         }
     }
 
+    /**
+     * 关闭执行器并在既有的一天等待上限内等待任务完成。等待期间收到的中断会在返回前恢复。
+     *
+     * @param executor 要关闭的执行器
+     */
     public static void shutdownExecutor(ThreadPoolExecutor executor) {
         if (executor != null) {
             executor.shutdown();
+            boolean interrupted = false;
+            long remainingNanos = TimeUnit.DAYS.toNanos(1);
+            long deadline = System.nanoTime() + remainingNanos;
             try {
-                executor.awaitTermination(1, TimeUnit.DAYS);
-            } catch (InterruptedException ignore) {/**/}
+                while (!executor.isTerminated() && remainingNanos > 0) {
+                    try {
+                        executor.awaitTermination(remainingNanos, TimeUnit.NANOSECONDS);
+                    } catch (InterruptedException e) {
+                        interrupted = true;
+                    }
+                    remainingNanos = deadline - System.nanoTime();
+                }
+            } finally {
+                if (interrupted) {
+                    Thread.currentThread().interrupt();
+                }
+            }
         }
     }
 

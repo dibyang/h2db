@@ -132,6 +132,7 @@ import org.h2.test.store.TestCacheLIRS;
 import org.h2.test.store.TestCacheLongKeyLIRS;
 import org.h2.test.store.TestDataUtils;
 import org.h2.test.store.TestDefrag;
+import org.h2.test.store.TestExecutorInterruption;
 import org.h2.test.store.TestFreeSpace;
 import org.h2.test.store.TestKillProcessWhileWriting;
 import org.h2.test.store.TestMVRTree;
@@ -968,6 +969,7 @@ kill -9 `jps -l | grep "org.h2.test." | cut -d " " -f 1`
         addTest(new TestCacheLIRS());
         addTest(new TestCacheLongKeyLIRS());
         addTest(new TestDataUtils());
+        addTest(new TestExecutorInterruption());
         addTest(new TestFreeSpace());
         addTest(new TestKillProcessWhileWriting());
         addTest(new TestMVRTree());

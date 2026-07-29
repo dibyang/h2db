@@ -1439,9 +1439,22 @@ public abstract class FileStore<C extends Chunk<C>>
 //                    System.err.println(executor + " HWM: " + hwm);
                 }
                 if (syncRun || size > threshold) {
+                    boolean interrupted = false;
                     try {
-                        future.get();
-                    } catch (InterruptedException ignore) {/**/}
+                        for (;;) {
+                            try {
+                                future.get();
+                                break;
+                            } catch (InterruptedException e) {
+                                interrupted = true;
+                            }
+                        }
+                    } finally {
+                        // 同步写必须等序列化完成，中断状态在完成屏障之后再交还调用方。
+                        if (interrupted) {
+                            Thread.currentThread().interrupt();
+                        }
+                    }
                 }
                 return hwm;
             } catch (RejectedExecutionException ex) {

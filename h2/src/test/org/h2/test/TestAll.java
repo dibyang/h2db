@@ -110,6 +110,7 @@ import org.h2.test.jdbc.TestUpdatableResultSet;
 import org.h2.test.jdbc.TestUrlJavaObjectSerializer;
 import org.h2.test.jdbc.TestZloty;
 import org.h2.test.jdbcx.TestConnectionPool;
+import org.h2.test.jdbcx.TestConnectionPoolInterruption;
 import org.h2.test.jdbcx.TestDataSource;
 import org.h2.test.jdbcx.TestXA;
 import org.h2.test.jdbcx.TestXASimple;
@@ -860,6 +861,7 @@ kill -9 `jps -l | grep "org.h2.test." | cut -d " " -f 1`
 
             // jdbcx
             addTest(new TestConnectionPool());
+            addTest(new TestConnectionPoolInterruption());
             addTest(new TestDataSource());
             addTest(new TestXA());
             addTest(new TestXASimple());

@@ -8,6 +8,7 @@ package org.h2.engine;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 import org.h2.api.ErrorCode;
 import org.h2.command.CommandInterface;
 import org.h2.command.dml.SetTypes;
@@ -383,11 +384,7 @@ public final class Engine {
                     // delay up to the last delay
                     // an attacker can't know how long it will be
                     delay = MathUtils.secureRandomInt((int) delay);
-                    try {
-                        Thread.sleep(delay);
-                    } catch (InterruptedException e) {
-                        // ignore
-                    }
+                    delayWrongPassword(delay);
                     WRONG_PASSWORD_DELAY = min;
                 }
             }
@@ -407,13 +404,30 @@ public final class Engine {
                 if (min > 0) {
                     // a bit more to protect against timing attacks
                     delay += Math.abs(MathUtils.secureRandomLong() % 100);
-                    try {
-                        Thread.sleep(delay);
-                    } catch (InterruptedException e) {
-                        // ignore
-                    }
+                    delayWrongPassword(delay);
                 }
                 throw DbException.get(ErrorCode.WRONG_USER_OR_PASSWORD);
+            }
+        }
+    }
+
+    private static void delayWrongPassword(long delayMillis) {
+        long remainingNanos = TimeUnit.MILLISECONDS.toNanos(delayMillis);
+        long deadline = System.nanoTime() + remainingNanos;
+        boolean interrupted = false;
+        try {
+            // 安全延迟不能因调用线程中断而缩短，只在原截止点交还中断状态。
+            while (remainingNanos > 0) {
+                try {
+                    TimeUnit.NANOSECONDS.sleep(remainingNanos);
+                } catch (InterruptedException e) {
+                    interrupted = true;
+                }
+                remainingNanos = deadline - System.nanoTime();
+            }
+        } finally {
+            if (interrupted) {
+                Thread.currentThread().interrupt();
             }
         }
     }

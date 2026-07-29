@@ -12,6 +12,7 @@ import java.sql.Statement;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.h2.api.ErrorCode;
@@ -26,7 +27,7 @@ import org.h2.test.TestBase;
 import org.h2.test.TestDb;
 
 /**
- * 测试前台会话等待被中断时的取消、状态恢复与锁清理行为。
+ * 测试前台会话与引擎等待被中断时的取消、完成屏障及状态恢复行为。
  */
 public class TestSessionInterruption extends TestDb {
 
@@ -49,6 +50,7 @@ public class TestSessionInterruption extends TestDb {
         testTableLockWait();
         testDatabaseCloseWait();
         testEngineCloseWait();
+        testWrongPasswordDelay();
     }
 
     private void testThrottle() throws Exception {
@@ -159,6 +161,33 @@ public class TestSessionInterruption extends TestDb {
         waitForDatabaseClose.setAccessible(true);
         assertInterruptedFailure(() -> invoke(waitForDatabaseClose, null),
                 ErrorCode.DATABASE_CALLED_AT_SHUTDOWN);
+    }
+
+    private void testWrongPasswordDelay() throws Exception {
+        Method delayWrongPassword = Engine.class.getDeclaredMethod("delayWrongPassword", long.class);
+        delayWrongPassword.setAccessible(true);
+        long delayMillis = 50;
+        AtomicBoolean interruptRestored = new AtomicBoolean();
+        AtomicLong elapsedNanos = new AtomicLong();
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        Thread waiter = new Thread(() -> {
+            Thread.currentThread().interrupt();
+            long start = System.nanoTime();
+            try {
+                invoke(delayWrongPassword, null, delayMillis);
+                elapsedNanos.set(System.nanoTime() - start);
+                interruptRestored.set(Thread.currentThread().isInterrupted());
+            } catch (Throwable e) {
+                failure.set(e);
+            }
+        }, "H2-test-wrong-password-delay-interruption");
+        waiter.setDaemon(true);
+        waiter.start();
+        waiter.join(5_000);
+        assertFalse(waiter.isAlive());
+        assertNull(failure.get());
+        assertTrue(elapsedNanos.get() >= TimeUnit.MILLISECONDS.toNanos(delayMillis));
+        assertTrue(interruptRestored.get());
     }
 
     private void assertInterruptedCancellation(InterruptedOperation operation) throws InterruptedException {

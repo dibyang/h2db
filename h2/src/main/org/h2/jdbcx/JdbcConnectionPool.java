@@ -192,28 +192,36 @@ public final class JdbcConnectionPool
     public Connection getConnection() throws SQLException {
         long max = System.nanoTime() + timeout * 1_000_000_000L;
         int spin = 0;
-        do {
-            if (activeConnections.incrementAndGet() <= maxConnections) {
-                try {
-                    return getConnectionNow();
-                } catch (Throwable t) {
+        boolean interrupted = false;
+        try {
+            // 容量等待保持原有超时语义，立即恢复中断会让后续短暂休眠持续空转。
+            do {
+                if (activeConnections.incrementAndGet() <= maxConnections) {
+                    try {
+                        return getConnectionNow();
+                    } catch (Throwable t) {
+                        activeConnections.decrementAndGet();
+                        throw t;
+                    }
+                } else {
                     activeConnections.decrementAndGet();
-                    throw t;
                 }
-            } else {
-                activeConnections.decrementAndGet();
-            }
-            if (--spin >= 0) {
-                continue;
-            }
-            try {
-                spin = 3;
-                Thread.sleep(1);
-            } catch (InterruptedException e) {
+                if (--spin >= 0) {
+                    continue;
+                }
+                try {
+                    spin = 3;
+                    Thread.sleep(1);
+                } catch (InterruptedException e) {
+                    interrupted = true;
+                }
+            } while (System.nanoTime() - max <= 0);
+            throw new SQLException("Login timeout", "08001", 8001);
+        } finally {
+            if (interrupted) {
                 Thread.currentThread().interrupt();
             }
-        } while (System.nanoTime() - max <= 0);
-        throw new SQLException("Login timeout", "08001", 8001);
+        }
     }
 
     /**

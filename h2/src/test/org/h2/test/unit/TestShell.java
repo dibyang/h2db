@@ -5,15 +5,22 @@
  */
 package org.h2.test.unit;
 
+import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.LineNumberReader;
+import java.io.OutputStream;
 import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
 import java.io.PrintStream;
+import java.io.StringReader;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import org.h2.test.TestBase;
 import org.h2.tools.Shell;
 import org.h2.util.Task;
@@ -66,8 +73,107 @@ public class TestShell extends TestBase {
         assertContains(s,
                 "Interactive command line tool to access a database using JDBC.");
 
+        testPasswordHiderCleanup();
+        testPasswordHiderInterruption();
         test(true);
         test(false);
+    }
+
+    private void testPasswordHiderCleanup() throws Exception {
+        Shell shell = new Shell();
+        shell.setOut(new PrintStream(new ByteArrayOutputStream(), false, "UTF-8"));
+        shell.setInReader(new BufferedReader(new StringReader("")) {
+            @Override
+            public String readLine() throws IOException {
+                throw new IOException("password input failed");
+            }
+        });
+        try {
+            invokeReadPassword(shell);
+            fail("IOException expected");
+        } catch (InvocationTargetException e) {
+            assertTrue(e.getCause() instanceof IOException);
+        }
+        assertFalse(hasPasswordHiderThread());
+    }
+
+    private void testPasswordHiderInterruption() throws Exception {
+        BlockingHiderPrintStream out = new BlockingHiderPrintStream();
+        Shell shell = new Shell();
+        shell.setOut(out);
+        shell.setInReader(new BufferedReader(new StringReader("")) {
+            @Override
+            public String readLine() throws IOException {
+                try {
+                    assertTrue(out.hiderBlocked.await(5, TimeUnit.SECONDS));
+                } catch (InterruptedException e) {
+                    throw new IOException(e);
+                }
+                Thread.currentThread().interrupt();
+                return "secret";
+            }
+        });
+        try {
+            assertEquals("secret", invokeReadPassword(shell));
+            assertTrue(Thread.interrupted());
+            assertFalse(hasPasswordHiderThread());
+        } finally {
+            Thread.interrupted();
+            out.releaseHider.countDown();
+            interruptPasswordHiderThreads();
+        }
+    }
+
+    private static String invokeReadPassword(Shell shell) throws Exception {
+        Method method = Shell.class.getDeclaredMethod("readPassword");
+        method.setAccessible(true);
+        return (String) method.invoke(shell);
+    }
+
+    private static boolean hasPasswordHiderThread() {
+        for (Thread thread : Thread.getAllStackTraces().keySet()) {
+            if ("Password hider".equals(thread.getName()) && thread.isAlive()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void interruptPasswordHiderThreads() throws InterruptedException {
+        for (Thread thread : Thread.getAllStackTraces().keySet()) {
+            if ("Password hider".equals(thread.getName()) && thread.isAlive()) {
+                thread.interrupt();
+                thread.join(5_000);
+            }
+        }
+    }
+
+    private static final class BlockingHiderPrintStream extends PrintStream {
+
+        private final CountDownLatch hiderBlocked = new CountDownLatch(1);
+        private final CountDownLatch releaseHider = new CountDownLatch(1);
+
+        BlockingHiderPrintStream() throws IOException {
+            super(new OutputStream() {
+                @Override
+                public void write(int b) {
+                }
+            }, false, "UTF-8");
+        }
+
+        @Override
+        public void print(String s) {
+            if ("Password hider".equals(Thread.currentThread().getName())) {
+                hiderBlocked.countDown();
+                try {
+                    releaseHider.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            } else {
+                super.print(s);
+            }
+        }
     }
 
     private void test(final boolean commandLineArgs) throws IOException {

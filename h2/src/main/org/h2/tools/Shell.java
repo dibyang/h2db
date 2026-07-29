@@ -48,7 +48,7 @@ public class Shell extends Tool implements Runnable {
     private boolean listMode;
     private int maxColumnSize = 100;
     private final ArrayList<String> history = new ArrayList<>();
-    private boolean stopHide;
+    private volatile boolean stopHide;
     private String serverPropertiesDir = Constants.SERVER_PROPERTIES_DIR;
 
     /**
@@ -415,18 +415,36 @@ public class Shell extends Tool implements Runnable {
             // ignore, use the default solution
         }
         Thread passwordHider = new Thread(this, "Password hider");
+        passwordHider.setDaemon(true);
         stopHide = false;
         passwordHider.start();
         print("Password  > ");
-        String p = readLine();
-        stopHide = true;
+        String p;
         try {
-            passwordHider.join();
-        } catch (InterruptedException e) {
-            // ignore
+            p = readLine();
+        } finally {
+            stopPasswordHider(passwordHider);
         }
         print("\b\b");
         return p;
+    }
+
+    private void stopPasswordHider(Thread passwordHider) {
+        stopHide = true;
+        boolean interrupted = false;
+        for (;;) {
+            try {
+                passwordHider.join();
+                break;
+            } catch (InterruptedException e) {
+                // 密码读取结束是线程完成屏障，先回收辅助线程，再交还中断。
+                interrupted = true;
+                passwordHider.interrupt();
+            }
+        }
+        if (interrupted) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     /**
@@ -441,7 +459,8 @@ public class Shell extends Tool implements Runnable {
             try {
                 Thread.sleep(10);
             } catch (InterruptedException e) {
-                // ignore
+                Thread.currentThread().interrupt();
+                break;
             }
         }
     }

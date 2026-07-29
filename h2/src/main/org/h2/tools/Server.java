@@ -547,6 +547,7 @@ public class Server extends Tool implements Runnable, ShutdownHandler {
      * @throws SQLException if the server could not be started
      */
     public Server start() throws SQLException {
+        boolean interrupted = false;
         try {
             started = true;
             service.start();
@@ -560,7 +561,9 @@ public class Server extends Tool implements Runnable, ShutdownHandler {
             t.setDaemon(service.isDaemon());
             t.start();
             for (int i = 1; i < 64; i += i) {
-                wait(i);
+                if (waitForStart(i)) {
+                    interrupted = true;
+                }
                 if (isRunning(false)) {
                     return this;
                 }
@@ -573,16 +576,22 @@ public class Server extends Tool implements Runnable, ShutdownHandler {
                     "please check your network configuration, specially the file /etc/hosts");
         } catch (DbException e) {
             throw DbException.toSQLException(e);
+        } finally {
+            if (interrupted) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 
-    private static void wait(int i) {
+    private static boolean waitForStart(int i) {
         try {
             // sleep at most 4096 ms
             long sleep = (long) i * (long) i;
             Thread.sleep(sleep);
+            return false;
         } catch (InterruptedException e) {
-            // ignore
+            // 启动轮询继续遵守原时限，由 start() 在结束时恢复中断。
+            return true;
         }
     }
 

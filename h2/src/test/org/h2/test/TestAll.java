@@ -127,6 +127,7 @@ import org.h2.test.scripts.TestScript;
 import org.h2.test.server.TestAutoServer;
 import org.h2.test.server.TestInit;
 import org.h2.test.server.TestJakartaWeb;
+import org.h2.test.server.TestNetworkInterruption;
 import org.h2.test.server.TestNestedLoop;
 import org.h2.test.server.TestServerInterruption;
 import org.h2.test.server.TestWeb;
@@ -945,6 +946,7 @@ kill -9 `jps -l | grep "org.h2.test." | cut -d " " -f 1`
         addTest(new TestMultiThreadedKernel());
         addTest(new TestPageStoreCoverage());
         addTest(new TestPgServer());
+        addTest(new TestNetworkInterruption());
         addTest(new TestRecovery());
         addTest(new RecoverLobTest());
         addTest(createTest("org.h2.test.unit.TestServlet"));

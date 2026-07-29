@@ -125,33 +125,41 @@ public class NetUtils {
     public static Socket createSocket(InetAddress address, int port, boolean ssl, int networkTimeout)
             throws IOException {
         long start = System.nanoTime();
-        for (int i = 0;; i++) {
-            try {
-                if (ssl) {
-                    return CipherFactory.createSocket(address, port);
-                }
-                Socket socket = new Socket();
-                socket.setSoTimeout(networkTimeout);
-                socket.connect(new InetSocketAddress(address, port),
-                        SysProperties.SOCKET_CONNECT_TIMEOUT);
-                return socket;
-            } catch (IOException e) {
-                if (System.nanoTime() - start >= SysProperties.SOCKET_CONNECT_TIMEOUT * 1_000_000L) {
-                    // either it was a connect timeout,
-                    // or list of different exceptions
-                    throw e;
-                }
-                if (i >= SysProperties.SOCKET_CONNECT_RETRY) {
-                    throw e;
-                }
-                // wait a bit and retry
+        boolean interrupted = false;
+        try {
+            for (int i = 0;; i++) {
                 try {
-                    // sleep at most 256 ms
-                    long sleep = Math.min(256, i * i);
-                    Thread.sleep(sleep);
-                } catch (InterruptedException e2) {
-                    // ignore
+                    if (ssl) {
+                        return CipherFactory.createSocket(address, port);
+                    }
+                    Socket socket = new Socket();
+                    socket.setSoTimeout(networkTimeout);
+                    socket.connect(new InetSocketAddress(address, port),
+                            SysProperties.SOCKET_CONNECT_TIMEOUT);
+                    return socket;
+                } catch (IOException e) {
+                    if (System.nanoTime() - start >= SysProperties.SOCKET_CONNECT_TIMEOUT * 1_000_000L) {
+                        // either it was a connect timeout,
+                        // or list of different exceptions
+                        throw e;
+                    }
+                    if (i >= SysProperties.SOCKET_CONNECT_RETRY) {
+                        throw e;
+                    }
+                    // wait a bit and retry
+                    try {
+                        // sleep at most 256 ms
+                        long sleep = Math.min(256, i * i);
+                        Thread.sleep(sleep);
+                    } catch (InterruptedException e2) {
+                        // 重试保持原截止时间，结束后再把中断交还调用方。
+                        interrupted = true;
+                    }
                 }
+            }
+        } finally {
+            if (interrupted) {
+                Thread.currentThread().interrupt();
             }
         }
     }

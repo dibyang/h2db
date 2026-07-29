@@ -62,6 +62,11 @@ public final class LobStorageMap implements LobStorageInterface
     private final AtomicLong nextLobId = new AtomicLong(0);
     private final ThreadPoolExecutor cleanupExecutor;
 
+    /**
+     * 在 MVStore 被抢占关闭前发布，供已经开始执行的后台清理判断关闭异常。
+     */
+    private volatile boolean closingImmediately;
+
 
     /**
      * The lob metadata map. It contains the mapping from the lob id
@@ -117,13 +122,7 @@ public final class LobStorageMap implements LobStorageInterface
             mvStore.setOldestVersionTracker(oldestVersionToKeep -> {
                 if (needCleanup()) {
                     try {
-                        cleanupExecutor.execute(() -> {
-                            try {
-                                cleanup(oldestVersionToKeep);
-                            } catch (MVStoreException e) {
-                                mvStore.panic(e);
-                            }
-                        });
+                        cleanupExecutor.execute(() -> cleanupAfterVersionChange(oldestVersionToKeep));
                     } catch (RejectedExecutionException ignore) {/**/}
                 }
             });
@@ -431,6 +430,26 @@ public final class LobStorageMap implements LobStorageInterface
             removeAllForTable(LobStorageFrontend.TABLE_ID_SESSION_VARIABLE);
             // remove all dead LOBs, even deleted in current version, before the store closed
             cleanup(mvStore.getCurrentVersion() + 1);
+        }
+    }
+
+    @Override
+    public void closeImmediately() {
+        closingImmediately = true;
+        mvStore.setOldestVersionTracker(null);
+        if (cleanupExecutor != null) {
+            cleanupExecutor.shutdownNow();
+        }
+    }
+
+    private void cleanupAfterVersionChange(long oldestVersionToKeep) {
+        try {
+            cleanup(oldestVersionToKeep);
+        } catch (MVStoreException e) {
+            // 抢占关闭允许放弃未完成的清理，但其它错误仍需要触发 MVStore panic。
+            if (!closingImmediately || e.getErrorCode() != DataUtils.ERROR_CLOSED) {
+                mvStore.panic(e);
+            }
         }
     }
 

@@ -13,6 +13,8 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Reader;
 import java.io.StringReader;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.sql.Blob;
 import java.sql.Clob;
@@ -31,9 +33,14 @@ import java.util.concurrent.TimeUnit;
 
 import org.h2.api.ErrorCode;
 import org.h2.engine.Constants;
+import org.h2.engine.Database;
+import org.h2.engine.SessionLocal;
 import org.h2.engine.SysProperties;
 import org.h2.jdbc.JdbcConnection;
 import org.h2.message.DbException;
+import org.h2.mvstore.DataUtils;
+import org.h2.mvstore.MVStoreException;
+import org.h2.mvstore.db.LobStorageMap;
 import org.h2.store.FileLister;
 import org.h2.store.fs.FileUtils;
 import org.h2.test.TestAll;
@@ -84,6 +91,7 @@ public class TestLob extends TestDb {
 
     @Override
     public void test() throws Exception {
+        testImmediateCloseDuringLobCleanup();
         testConcurrentSelectAndUpdate();
         testReclamationOnInDoubtRollback();
         testRemoveAfterDeleteAndClose();
@@ -134,6 +142,43 @@ public class TestLob extends TestDb {
         // cannot run this on CI, will cause OOM
         // testLimits();
         deleteDb("lob");
+    }
+
+    private void testImmediateCloseDuringLobCleanup() throws Exception {
+        if (config.networked) {
+            return;
+        }
+        String dbName = "lobImmediateCleanup";
+        deleteDb(dbName);
+        Connection conn = getConnection(dbName);
+        try {
+            Database database = ((SessionLocal) ((JdbcConnection) conn).getSession()).getDatabase();
+            LobStorageMap lobStorage = (LobStorageMap) database.getLobStorage();
+            ValueBlob blob = lobStorage.createBlob(new ByteArrayInputStream(new byte[64 * 1024]), -1);
+            // 两个待清理项分别用于证明原始异常和验证后台关闭策略。
+            lobStorage.removeLob(blob);
+            lobStorage.removeLob(blob);
+
+            database.shutdownImmediately();
+
+            Method cleanup = LobStorageMap.class.getDeclaredMethod("cleanup", long.class);
+            cleanup.setAccessible(true);
+            try {
+                cleanup.invoke(lobStorage, Long.MAX_VALUE);
+                fail("cleanup on a closed MVStore should fail");
+            } catch (InvocationTargetException e) {
+                assertTrue(e.getCause() instanceof MVStoreException);
+                assertEquals(DataUtils.ERROR_CLOSED, ((MVStoreException) e.getCause()).getErrorCode());
+            }
+
+            Method cleanupAfterVersionChange =
+                    LobStorageMap.class.getDeclaredMethod("cleanupAfterVersionChange", long.class);
+            cleanupAfterVersionChange.setAccessible(true);
+            cleanupAfterVersionChange.invoke(lobStorage, Long.MAX_VALUE);
+        } finally {
+            JdbcUtils.closeSilently(conn);
+            deleteDb(dbName);
+        }
     }
 
     private void testReclamationOnInDoubtRollback() throws Exception {

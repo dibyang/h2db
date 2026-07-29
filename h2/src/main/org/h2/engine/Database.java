@@ -603,6 +603,9 @@ public final class Database implements DataHandler, CastDataProvider {
             try {
                 powerOffCount = -1;
                 closeOnlineBackupSession();
+                if (lobStorage != null) {
+                    lobStorage.closeImmediately();
+                }
                 store.closeImmediately();
                 if (lock != null) {
                     stopServer();
@@ -1530,6 +1533,9 @@ public final class Database implements DataHandler, CastDataProvider {
 
     private synchronized void closeFiles() {
         try {
+            if (lobStorage != null) {
+                lobStorage.closeImmediately();
+            }
             store.closeImmediately();
         } catch (DbException e) {
             trace.error(e, "close");

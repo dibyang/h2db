@@ -91,4 +91,9 @@ public interface LobStorageInterface {
      * Close LobStorage and release all resources
      */
     default void close() {}
+
+    /**
+     * 立即关闭 LOB 存储，不等待后台清理任务完成。
+     */
+    default void closeImmediately() {}
 }

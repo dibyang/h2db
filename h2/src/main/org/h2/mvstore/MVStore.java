@@ -1360,8 +1360,9 @@ public class MVStore implements AutoCloseable {
         } while (!success);
         assert version <= currentVersion : version + " <= " + currentVersion;
 
-        if (oldestVersionTracker != null) {
-            oldestVersionTracker.accept(version);
+        LongConsumer tracker = oldestVersionTracker;
+        if (tracker != null) {
+            tracker.accept(version);
         }
     }
 

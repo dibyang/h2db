@@ -65,10 +65,17 @@ public class AbbaLockingDetector implements Runnable {
     public AbbaLockingDetector stopCollecting() {
         stop = true;
         if (thread != null) {
-            try {
-                thread.join();
-            } catch (InterruptedException e) {
-                // ignore
+            boolean interrupted = false;
+            for (;;) {
+                try {
+                    thread.join();
+                    break;
+                } catch (InterruptedException e) {
+                    interrupted = true;
+                }
+            }
+            if (interrupted) {
+                Thread.currentThread().interrupt();
             }
             thread = null;
         }

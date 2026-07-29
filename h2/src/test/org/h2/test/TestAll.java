@@ -72,6 +72,7 @@ import org.h2.test.db.TestRunscript;
 import org.h2.test.db.TestSQLInjection;
 import org.h2.test.db.TestSelectTableNotFound;
 import org.h2.test.db.TestSequence;
+import org.h2.test.db.TestSessionInterruption;
 import org.h2.test.db.TestSessionsLocks;
 import org.h2.test.db.TestSetCollation;
 import org.h2.test.db.TestSpaceReuse;
@@ -818,6 +819,7 @@ kill -9 `jps -l | grep "org.h2.test." | cut -d " " -f 1`
             addTest(new TestRights());
             addTest(new TestRunscript());
             addTest(new TestSQLInjection());
+            addTest(new TestSessionInterruption());
             addTest(new TestSessionsLocks());
             addTest(new TestSequence());
             addTest(new TestSpaceReuse());

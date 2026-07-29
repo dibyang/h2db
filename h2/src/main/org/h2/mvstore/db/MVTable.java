@@ -238,7 +238,8 @@ public class MVTable extends TableBase {
                 }
                 wait(sleep);
             } catch (InterruptedException e) {
-                // ignore
+                Thread.currentThread().interrupt();
+                throw DbException.get(ErrorCode.STATEMENT_WAS_CANCELED, e);
             }
         }
     }

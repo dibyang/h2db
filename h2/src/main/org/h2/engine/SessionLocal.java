@@ -1334,7 +1334,9 @@ public final class SessionLocal extends Session implements TransactionStore.Roll
         State prevState = transitionToState(State.THROTTLED, false);
         try {
             Thread.sleep(throttleMs);
-        } catch (InterruptedException ignore) {
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw DbException.get(ErrorCode.STATEMENT_WAS_CANCELED, e);
         } finally {
             transitionToState(prevState, false);
         }
@@ -1618,7 +1620,7 @@ public final class SessionLocal extends Session implements TransactionStore.Roll
      * method returns as soon as the exclusive mode has been disabled.
      */
     public void waitIfExclusiveModeEnabled() {
-        transitionToState(State.RUNNING, true);
+        State previousState = transitionToState(State.RUNNING, true);
         // Even in exclusive mode, we have to let the LOB session proceed, or we
         // will get deadlocks.
         if (getDatabase().getLobSession() == this) {
@@ -1636,7 +1638,10 @@ public final class SessionLocal extends Session implements TransactionStore.Roll
             try {
                 Thread.sleep(100);
             } catch (InterruptedException e) {
-                // ignore
+                Thread.currentThread().interrupt();
+                // 仅回退本方法设置的状态，不能覆盖并发发生的挂起或关闭。
+                state.compareAndSet(State.RUNNING, previousState);
+                throw DbException.get(ErrorCode.STATEMENT_WAS_CANCELED, e);
             }
         }
     }

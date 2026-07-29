@@ -5,12 +5,16 @@
  */
 package org.h2.test.db;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Properties;
+import java.util.concurrent.Future;
+import java.util.concurrent.FutureTask;
 
 import org.h2.api.ErrorCode;
 import org.h2.store.fs.FileUtils;
@@ -45,6 +49,7 @@ public class TestCluster extends TestDb {
 
     @Override
     public void test() throws Exception {
+        testWriterInterruption();
         testClob();
         testRecover();
         testRollback();
@@ -52,6 +57,40 @@ public class TestCluster extends TestDb {
         testClientInfo();
         testCreateClusterAtRuntime();
         testStartStopCluster();
+    }
+
+    private void testWriterInterruption() throws Exception {
+        FutureTask<Void> incomplete = new FutureTask<>(() -> null);
+        Thread.currentThread().interrupt();
+        try {
+            SQLException exception = invokeAwaitWriter(incomplete);
+            assertTrue(exception.getCause() instanceof InterruptedException);
+            assertTrue(Thread.interrupted());
+        } finally {
+            Thread.interrupted();
+        }
+
+        IllegalStateException failure = new IllegalStateException("writer failed");
+        FutureTask<Void> failed = new FutureTask<>(() -> {
+            throw failure;
+        });
+        failed.run();
+        assertSame(failure, invokeAwaitWriter(failed).getCause());
+    }
+
+    private static SQLException invokeAwaitWriter(Future<?> future) throws Exception {
+        Method method = CreateCluster.class.getDeclaredMethod("awaitWriter", Future.class);
+        method.setAccessible(true);
+        try {
+            method.invoke(null, future);
+            throw new AssertionError("SQLException expected");
+        } catch (InvocationTargetException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof SQLException) {
+                return (SQLException) cause;
+            }
+            throw e;
+        }
     }
 
     private void testClob() throws SQLException {

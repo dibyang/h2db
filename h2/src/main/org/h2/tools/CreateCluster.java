@@ -134,19 +134,25 @@ public class CreateCluster extends Tool {
                 RunScript.execute(connTarget, pipeReader);
 
                 // Check if the writer encountered any exception
-                try {
-                    threadFuture.get();
-                } catch (ExecutionException ex) {
-                    throw new SQLException(ex.getCause());
-                } catch (InterruptedException ex) {
-                    throw new SQLException(ex);
-                }
+                awaitWriter(threadFuture);
 
                 // set the cluster to the serverList on both databases
                 statSource.executeUpdate("SET CLUSTER '" + serverList + "'");
                 statTarget.executeUpdate("SET CLUSTER '" + serverList + "'");
             }
         } catch (IOException ex) {
+            throw new SQLException(ex);
+        }
+    }
+
+    static void awaitWriter(Future<?> threadFuture) throws SQLException {
+        try {
+            threadFuture.get();
+        } catch (ExecutionException ex) {
+            throw new SQLException(ex.getCause());
+        } catch (InterruptedException ex) {
+            // 集群复制已进入失败收敛，保留原异常包装并交还取消信号。
+            Thread.currentThread().interrupt();
             throw new SQLException(ex);
         }
     }

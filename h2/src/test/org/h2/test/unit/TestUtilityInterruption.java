@@ -5,6 +5,7 @@
  */
 package org.h2.test.unit;
 
+import java.lang.reflect.Field;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -34,6 +35,7 @@ public class TestUtilityInterruption extends TestBase {
         testTaskJoin();
         testProfilerStop();
         testAbbaDetectorStop();
+        testAbbaDetectorLifecycle();
     }
 
     private void testTaskJoin() throws Exception {
@@ -76,6 +78,36 @@ public class TestUtilityInterruption extends TestBase {
         };
         detector.startCollecting();
         assertCompletionBarrier(workerStarted, releaseWorker, () -> detector.stopCollecting());
+    }
+
+    private void testAbbaDetectorLifecycle() throws Exception {
+        AbbaLockingDetector detector = new AbbaLockingDetector();
+        try {
+            detector.startCollecting();
+            Thread first = getAbbaThread(detector);
+            assertTrue(first.isAlive());
+
+            detector.startCollecting();
+            assertSame(first, getAbbaThread(detector));
+
+            detector.stopCollecting();
+            assertFalse(first.isAlive());
+            assertNull(getAbbaThread(detector));
+
+            detector.startCollecting();
+            Thread second = getAbbaThread(detector);
+            assertFalse(first == second);
+            Thread.sleep(100);
+            assertTrue(second.isAlive());
+        } finally {
+            detector.stopCollecting();
+        }
+    }
+
+    private static Thread getAbbaThread(AbbaLockingDetector detector) throws Exception {
+        Field field = AbbaLockingDetector.class.getDeclaredField("thread");
+        field.setAccessible(true);
+        return (Thread) field.get(detector);
     }
 
     private void assertCompletionBarrier(CountDownLatch workerStarted, CountDownLatch releaseWorker,

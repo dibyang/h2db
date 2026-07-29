@@ -42,7 +42,11 @@ public class AbbaLockingDetector implements Runnable {
      *
      * @return this
      */
-    public AbbaLockingDetector startCollecting() {
+    public synchronized AbbaLockingDetector startCollecting() {
+        if (thread != null) {
+            return this;
+        }
+        stop = false;
         thread = new Thread(this, "AbbaLockingDetector");
         thread.setDaemon(true);
         thread.start();
@@ -62,9 +66,10 @@ public class AbbaLockingDetector implements Runnable {
      *
      * @return this
      */
-    public AbbaLockingDetector stopCollecting() {
+    public synchronized AbbaLockingDetector stopCollecting() {
         stop = true;
         if (thread != null) {
+            thread.interrupt();
             boolean interrupted = false;
             for (;;) {
                 try {
@@ -98,7 +103,8 @@ public class AbbaLockingDetector implements Runnable {
             try {
                 Thread.sleep(tickIntervalMs);
             } catch (InterruptedException ex) {
-                // ignore
+                // 中断只负责唤醒采样线程，循环条件决定继续或退出。
+                return;
             }
         }
 

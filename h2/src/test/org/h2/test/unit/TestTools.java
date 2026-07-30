@@ -176,6 +176,7 @@ public class TestTools extends TestDb {
                 // open the window
                 c.actionPerformed(new ActionEvent(this, 0, "status"));
                 c.actionPerformed(new ActionEvent(this, 0, "exit"));
+                assertFalse(Thread.currentThread().isInterrupted());
 
                 // check if the service was stopped
                 c.runTool("-webPort", "9002");
@@ -202,16 +203,9 @@ public class TestTools extends TestDb {
         }
     }
 
-    private static void shutdownConsole(Console c) {
+    private void shutdownConsole(Console c) {
         c.shutdown();
-        if (Thread.currentThread().isInterrupted()) {
-            // Clear interrupted state so test can continue its work safely
-            try {
-                Thread.sleep(1);
-            } catch (InterruptedException e) {
-                // Ignore
-            }
-        }
+        assertFalse(Thread.currentThread().isInterrupted());
     }
 
     /**

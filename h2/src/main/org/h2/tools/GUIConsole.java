@@ -112,8 +112,6 @@ public class GUIConsole extends Console implements ActionListener, MouseListener
                     }
                 }
             }
-            Thread.currentThread().interrupt();
-            // throw new ThreadDeath();
         }
     }
 

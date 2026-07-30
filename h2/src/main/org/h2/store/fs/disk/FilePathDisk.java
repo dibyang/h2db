@@ -171,7 +171,7 @@ public class FilePathDisk extends FilePath {
                     } catch (FileAlreadyExistsException ex2) {
                         throw DbException.get(ErrorCode.FILE_RENAME_FAILED_2, name, newName + " (exists)");
                     } catch (IOException ex2) {
-                        cause = ex;
+                        cause = ex2;
                     }
                     if (wait(i)) {
                         interrupted = true;
@@ -250,12 +250,14 @@ public class FilePathDisk extends FilePath {
                 } catch (AccessDeniedException e) {
                     // On Windows file systems, delete a readonly file can cause AccessDeniedException,
                     // we should change readonly attribute to false and then delete file
+                    cause = e;
                     try {
                         FileStore fileStore = Files.getFileStore(file);
                         if (!fileStore.supportsFileAttributeView(PosixFileAttributeView.class)
                             && fileStore.supportsFileAttributeView(DosFileAttributeView.class)) {
                             Files.setAttribute(file, "dos:readonly", false);
                             Files.delete(file);
+                            return;
                         }
                     } catch (IOException ioe) {
                         cause = ioe;
@@ -411,6 +413,7 @@ public class FilePathDisk extends FilePath {
                     }
                     try {
                         Files.createDirectory(dir);
+                        return;
                     } catch (FileAlreadyExistsException ex) {
                         throw DbException.get(ErrorCode.FILE_CREATION_FAILED_1,
                                 name + " (a file with this name already exists)");

@@ -302,7 +302,11 @@ public class Profiler implements Runnable {
      *
      * @return this
      */
-    public Profiler startCollecting() {
+    public synchronized Profiler startCollecting() {
+        if (thread != null) {
+            return this;
+        }
+        stop = false;
         thread = new Thread(this, "Profiler");
         thread.setDaemon(true);
         thread.start();
@@ -314,9 +318,10 @@ public class Profiler implements Runnable {
      *
      * @return this
      */
-    public Profiler stopCollecting() {
+    public synchronized Profiler stopCollecting() {
         stop = true;
         if (thread != null) {
+            thread.interrupt();
             boolean interrupted = false;
             for (;;) {
                 try {
@@ -354,6 +359,9 @@ public class Profiler implements Runnable {
             }
             try {
                 Thread.sleep(interval, 0);
+            } catch (InterruptedException e) {
+                // 中断只负责唤醒采样线程，循环条件决定继续或退出。
+                return;
             } catch (Exception e) {
                 // ignore
             }

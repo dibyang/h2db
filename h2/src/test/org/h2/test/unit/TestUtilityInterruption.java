@@ -6,14 +6,21 @@
 package org.h2.test.unit;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
+import org.h2.message.DbException;
 import org.h2.test.TestBase;
 import org.h2.util.AbbaLockingDetector;
 import org.h2.util.Profiler;
+import org.h2.util.SourceCompiler;
 import org.h2.util.Task;
 
 /**
@@ -33,7 +40,10 @@ public class TestUtilityInterruption extends TestBase {
     @Override
     public void test() throws Exception {
         testTaskJoin();
+        testSourceCompilerProcessOutput();
+        testSourceCompilerProcessInterruption();
         testProfilerStop();
+        testProfilerLifecycle();
         testAbbaDetectorStop();
         testAbbaDetectorLifecycle();
     }
@@ -52,6 +62,61 @@ public class TestUtilityInterruption extends TestBase {
         assertCompletionBarrier(workerStarted, releaseWorker, task::join);
     }
 
+    private void testSourceCompilerProcessOutput() throws Exception {
+        try {
+            invokeSourceCompilerExec(javaCommand("output"));
+            fail("Expected compilation failure");
+        } catch (InvocationTargetException e) {
+            Throwable cause = e.getCause();
+            assertTrue(cause instanceof DbException);
+            assertContains(cause.getMessage(), "STDOUT-END");
+            assertContains(cause.getMessage(), "STDERR-END");
+        }
+    }
+
+    private void testSourceCompilerProcessInterruption() throws Exception {
+        Path directory = Paths.get("data",
+                "h2-source-compiler-" + System.nanoTime()).toAbsolutePath();
+        Files.createDirectories(directory);
+        Path marker = directory.resolve("ready");
+        AtomicBoolean interruptRestored = new AtomicBoolean();
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        Thread worker = new Thread(() -> {
+            try {
+                invokeSourceCompilerExec(javaCommand("sleep", marker.toString()));
+                failure.set(new AssertionError("Expected interrupted process wait"));
+            } catch (InvocationTargetException e) {
+                Throwable cause = e.getCause();
+                boolean interrupted = Thread.currentThread().isInterrupted();
+                if (!(cause instanceof DbException) || !interrupted) {
+                    failure.set(cause);
+                }
+                interruptRestored.set(interrupted);
+            } catch (Throwable e) {
+                failure.set(e);
+            }
+        }, "H2-test-source-compiler-process");
+        try {
+            worker.start();
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+            while (!Files.exists(marker) && System.nanoTime() < deadline) {
+                Thread.sleep(10);
+            }
+            assertNull(failure.get());
+            assertTrue(Files.exists(marker));
+            worker.interrupt();
+            worker.join(5_000);
+            assertFalse(worker.isAlive());
+            assertNull(failure.get());
+            assertTrue(interruptRestored.get());
+        } finally {
+            worker.interrupt();
+            worker.join(5_000);
+            Files.deleteIfExists(marker);
+            Files.deleteIfExists(directory);
+        }
+    }
+
     private void testProfilerStop() throws Exception {
         CountDownLatch workerStarted = new CountDownLatch(1);
         CountDownLatch releaseWorker = new CountDownLatch(1);
@@ -64,6 +129,30 @@ public class TestUtilityInterruption extends TestBase {
         };
         profiler.startCollecting();
         assertCompletionBarrier(workerStarted, releaseWorker, () -> profiler.stopCollecting());
+    }
+
+    private void testProfilerLifecycle() throws Exception {
+        Profiler profiler = new Profiler();
+        profiler.interval = 10_000;
+        try {
+            profiler.startCollecting();
+            Thread first = getProfilerThread(profiler);
+            assertTrue(first.isAlive());
+
+            profiler.startCollecting();
+            assertSame(first, getProfilerThread(profiler));
+
+            profiler.stopCollecting();
+            assertFalse(first.isAlive());
+            assertNull(getProfilerThread(profiler));
+
+            profiler.startCollecting();
+            Thread second = getProfilerThread(profiler);
+            assertFalse(first == second);
+            assertTrue(second.isAlive());
+        } finally {
+            profiler.stopCollecting();
+        }
     }
 
     private void testAbbaDetectorStop() throws Exception {
@@ -108,6 +197,28 @@ public class TestUtilityInterruption extends TestBase {
         Field field = AbbaLockingDetector.class.getDeclaredField("thread");
         field.setAccessible(true);
         return (Thread) field.get(detector);
+    }
+
+    private static Thread getProfilerThread(Profiler profiler) throws Exception {
+        Field field = Profiler.class.getDeclaredField("thread");
+        field.setAccessible(true);
+        return (Thread) field.get(profiler);
+    }
+
+    private static Object invokeSourceCompilerExec(String... command) throws Exception {
+        Method method = SourceCompiler.class.getDeclaredMethod("exec", String[].class);
+        method.setAccessible(true);
+        return method.invoke(null, (Object) command);
+    }
+
+    private static String[] javaCommand(String... args) {
+        String[] command = new String[4 + args.length];
+        command[0] = Paths.get(System.getProperty("java.home"), "bin", "java").toString();
+        command[1] = "-cp";
+        command[2] = System.getProperty("java.class.path");
+        command[3] = SourceCompilerProcessOutput.class.getName();
+        System.arraycopy(args, 0, command, 4, args.length);
+        return command;
     }
 
     private void assertCompletionBarrier(CountDownLatch workerStarted, CountDownLatch releaseWorker,

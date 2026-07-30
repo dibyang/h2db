@@ -366,6 +366,8 @@ public class SourceCompiler {
 
     private static int exec(String... args) {
         ByteArrayOutputStream buff = new ByteArrayOutputStream();
+        Process process = null;
+        Task copyTask = null;
         try {
             ProcessBuilder builder = new ProcessBuilder();
             // The javac executable allows some of it's flags
@@ -374,21 +376,31 @@ public class SourceCompiler {
             // to stderr, which messes up our parsing of the output.
             builder.environment().remove("JAVA_TOOL_OPTIONS");
             builder.command(args);
+            builder.redirectErrorStream(true);
 
-            Process p = builder.start();
-            copyInThread(p.getInputStream(), buff);
-            copyInThread(p.getErrorStream(), buff);
-            p.waitFor();
+            process = builder.start();
+            copyTask = copyInThread(process.getInputStream(), buff);
+            int exitValue = process.waitFor();
+            copyTask.get();
             String output = Utils10.byteArrayOutputStreamToString(buff, StandardCharsets.UTF_8);
-            handleSyntaxError(output, p.exitValue());
-            return p.exitValue();
+            handleSyntaxError(output, exitValue);
+            return exitValue;
+        } catch (InterruptedException e) {
+            if (process != null) {
+                process.destroy();
+            }
+            if (copyTask != null) {
+                copyTask.join();
+            }
+            Thread.currentThread().interrupt();
+            throw DbException.convert(e);
         } catch (Exception e) {
             throw DbException.convert(e);
         }
     }
 
-    private static void copyInThread(final InputStream in, final OutputStream out) {
-        new Task() {
+    private static Task copyInThread(final InputStream in, final OutputStream out) {
+        return new Task() {
             @Override
             public void call() throws IOException {
                 IOUtils.copy(in, out);

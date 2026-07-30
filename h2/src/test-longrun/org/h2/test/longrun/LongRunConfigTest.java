@@ -145,6 +145,7 @@ public final class LongRunConfigTest {
         File performanceConfig = new File("src/longrun/resources/performance.properties");
         File comprehensiveConfig = new File("src/longrun/resources/comprehensive.properties");
         File soakConfig = new File("src/longrun/resources/soak-30d.properties");
+        File sqlSoakConfig = new File("src/longrun/resources/soak-30d-sql.properties");
         File faultConfig = new File("src/longrun/resources/fault-injection.properties");
 
         assertTrue(reopenConfig.isFile());
@@ -153,6 +154,7 @@ public final class LongRunConfigTest {
         assertTrue(performanceConfig.isFile());
         assertTrue(comprehensiveConfig.isFile());
         assertTrue(soakConfig.isFile());
+        assertTrue(sqlSoakConfig.isFile());
         assertTrue(faultConfig.isFile());
         LongRunConfig reopen = LongRunConfig.load(CommandLineOptions.parse("--config", reopenConfig.getPath()));
         LongRunConfig crash = LongRunConfig.load(CommandLineOptions.parse("--config", crashConfig.getPath()));
@@ -162,6 +164,7 @@ public final class LongRunConfigTest {
         LongRunConfig comprehensive = LongRunConfig.load(CommandLineOptions.parse("--config",
                 comprehensiveConfig.getPath()));
         LongRunConfig soak = LongRunConfig.load(CommandLineOptions.parse("--config", soakConfig.getPath()));
+        LongRunConfig sqlSoak = LongRunConfig.load(CommandLineOptions.parse("--config", sqlSoakConfig.getPath()));
         LongRunConfig fault = LongRunConfig.load(CommandLineOptions.parse("--config", faultConfig.getPath()));
         assertTrue(reopen.getReopenIntervalMillis() > 0L);
         assertTrue(crash.isCrashEnabled());
@@ -194,11 +197,12 @@ public final class LongRunConfigTest {
         assertEquals("bounded", soak.getLedgerMode());
         assertEquals(10_000L, soak.getReclamationIntervalMillis());
         assertEquals(180, soak.getCrashCycles());
-        assertEquals(true, soak.isBackupEnabled());
-        assertEquals(5L * 60L * 1000L, soak.getBackupIntervalMillis());
-        assertEquals(new File("work/soak-30d/backup").getPath(), soak.getBackupDirectory().getPath());
-        assertEquals(10, soak.getBackupMaxRetained());
-        assertEquals(false, soak.isBackupFailOnError());
+        assertEquals("soak-30d-sql", sqlSoak.getInstanceName());
+        assertEquals(true, sqlSoak.isBackupEnabled());
+        assertEquals(5L * 60L * 1000L, sqlSoak.getBackupIntervalMillis());
+        assertEquals(new File("work/soak-30d-sql/backup").getPath(), sqlSoak.getBackupDirectory().getPath());
+        assertEquals(10, sqlSoak.getBackupMaxRetained());
+        assertEquals(false, sqlSoak.isBackupFailOnError());
         assertTrue(fault.isFaultEnabled());
         assertEquals("fault-injection", fault.getInstanceName());
         assertEquals(120_000L, fault.getFaultIntervalMillis());

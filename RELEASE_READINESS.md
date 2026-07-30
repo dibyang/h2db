@@ -2,13 +2,13 @@
 
 [English](RELEASE_READINESS.en.md)
 
-检查日期：2026-06-02
+检查日期：2026-07-30
 
 ## 结论
 
-h2db 已具备公开 GitHub Release 和 Maven Central 发布所需的基础材料。当前仓库侧已完成以下事项：
+h2db 2.4.0 已具备公开 GitHub Release 和 Maven Central 发布所需的仓库侧材料与本地验证结果：
 
-本轮正式发布版本为 `2.3.0`。当前发布配置已将 `h2/gradle.properties` 中的 `version` 设置为 `2.3.0`。
+本轮正式发布版本为 `2.4.0`。`h2/gradle.properties`、`Constants.VERSION/FULL_VERSION`、发布说明、POM 和制品文件名已统一为正式版本语义，不含 `-SNAPSHOT`。
 
 - 开源材料：`LICENSE.txt`、`NOTICE.txt`、`README.md`、`CHANGELOG.md`、`CONTRIBUTING.md`、`SECURITY.md`、`SUPPORT.md`、`CODE_OF_CONDUCT.md`。
 - 发布指南：`OPEN_SOURCE_RELEASE.md`、`MAVEN_CENTRAL_RELEASE.md`、`GITHUB_RELEASE.md`、`RELEASE_NOTES_TEMPLATE.md`。
@@ -18,6 +18,8 @@ h2db 已具备公开 GitHub Release 和 Maven Central 发布所需的基础材�
 - 许可证随包：main jar、sources jar、javadoc jar 均在 `META-INF/` 下包含 `LICENSE.txt` 和 `NOTICE.txt`。
 - LongRun 发布包：已补齐独立长稳测试发布包、配置、脚本、报告和中英文文档；验收记录见 `docs/longrun/longrun-release-acceptance.md`。
 - 插件化基线：已补齐静态插件自动发现、provider registry、版本/依赖解析、诊断视图、权限边界和发布就绪说明；收口记录见 `docs/plugin/plugin-release-readiness.md`。
+- 在线备份：协调式在线备份与影子恢复 P0-P9、2.3 兼容矩阵、故障矩阵、provider 认证和运维文档已收口。
+- DML 快路径：实验性 V1 边界已固定为简单 `INSERT ... VALUES` 与 JDBC batch；不对 ADB/LDB 集成吞吐倍数作发布承诺。
 - 凭据保护：`signing.properties`、`*.gpg`、`*.asc` 已被 Git 忽略，当前没有发布凭据或签名密钥被 Git 跟踪。
 
 ## 本地验证结果
@@ -31,16 +33,20 @@ h2db 已具备公开 GitHub Release 和 Maven Central 发布所需的基础材�
 .\gradlew.bat runMvStoreRecoveryCheck
 .\gradlew.bat runPluginArchitectureCheck
 .\gradlew.bat runH2LegacySmoke
+.\gradlew.bat runOnlineBackupCheck
 .\gradlew.bat --rerun-tasks runLongRunJUnitCheck
 .\gradlew.bat --rerun-tasks longRunTestDistZip
+.\gradlew.bat runH2TestAllCi
 ```
 
 生成产物：
 
-- `h2/build/libs/h2db-2.3.0.jar`
-- `h2/build/libs/h2db-2.3.0-sources.jar`
-- `h2/build/libs/h2db-2.3.0-javadoc.jar`
+- `h2/build/libs/h2db-2.4.0.jar`
+- `h2/build/libs/h2db-2.4.0-sources.jar`
+- `h2/build/libs/h2db-2.4.0-javadoc.jar`
 - `h2/build/publications/maven/pom-default.xml`
+
+隔离本地 Maven 仓库 `h2/build/test-m2-release-clean/net/xdob/h2db/h2db/2.4.0/` 已生成 main、sources、javadoc、POM 及各自 `.asc` 签名；四个签名均通过 `gpg --verify`。
 
 POM 已包含：
 
@@ -60,22 +66,30 @@ LongRun 发布包相关验证：
 
 - `runLongRunJUnitCheck` 通过。
 - `longRunTestDistZip` 通过。
+- 可靠性配置测试已确认 SQL 30 天 soak 的在线备份断言读取 `soak-30d-sql.properties`，而不是普通 MVStore soak 配置。
 - Linux 真实环境 smoke 10 分钟验收通过：`PASS`，4 次 reopen，0 warnings，0 suspicious log lines。
 - Linux 真实环境 crash/recovery 验收通过：`PASS`，15 个 crash cycle，29 次 recovery check，0 warnings，0 suspicious log lines。
 - Linux 真实环境 fault-injection 验收通过：`PASS`，14 次 fault injection，0 unexpected，0 warnings，0 suspicious log lines。
 
 插件化相关验证：
 
-- `runPluginArchitectureCheck` 通过。
+- `runPluginArchitectureCheck` 通过，140/140。
 - `runH2LegacySmoke` 通过。
 - 插件化当前版本的非目标已写入 `docs/plugin/plugin-release-readiness.md`。
 
+在线备份与完整回归：
+
+- `runOnlineBackupCheck` 通过，82/82。
+- 2.3 数据文件、传统 zip、旧插件和 TCP 双向兼容矩阵通过。
+- `runH2TestAllCi` 通过，耗时 22 分 2 秒；包含 default、lazy、network、network-lazy 和特殊存储/缓存/加密组合。
+- 完整 CI 提示 benchmark、defrag、lazy 大子查询和 large blob 四个重型测试未由该任务执行；它们不是本次任务失败项。
+
 ## 发布者仍需在发布当天确认
 
-- 确认 `h2/gradle.properties` 中的 `version` 为正式版本 `2.3.0`，不能以 `-SNAPSHOT` 发布 release。
+- 确认 `h2/gradle.properties` 中的 `version` 仍为正式版本 `2.4.0`，不能以 `-SNAPSHOT` 发布 release。
 - 确认 `net.xdob` 或实际使用的 Maven Central namespace 已在 Central Portal 验证。
 - 确认 `README.md`、Release Notes 和 POM 中的版本号一致。
-- 用真实 release 版本执行本地 dry run 和签名检查。
+- 如果发布提交之后仍有代码变更，需用正式版本重新执行本地 dry run、完整 CI 和签名检查。
 - 若本次 release 宣传 LongRun 发布包，发布前补跑 `longRunTestDistTar`，并从干净目录解压 zip/tar 包确认脚本权限和布局。
 - 若本次 release 宣传插件化基线，发布说明需引用 `CHANGELOG.md` 的插件化条目和 `docs/plugin/plugin-release-readiness.md` 的非目标边界。
 - 发布窗口允许时，补跑缩短版 nightly 或 comprehensive LongRun，以覆盖更长时间常压组合路径。

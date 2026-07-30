@@ -25,7 +25,7 @@ h2db 发布产物使用以下坐标。请将版本号替换为你要使用的正
 <dependency>
     <groupId>net.xdob.h2db</groupId>
     <artifactId>h2db</artifactId>
-    <version>2.3.0</version>
+    <version>2.4.0</version>
 </dependency>
 ```
 
@@ -39,6 +39,8 @@ h2db 发布产物使用以下坐标。请将版本号替换为你要使用的正
 * [Data types](https://h2database.com/html/datatypes.html)
 * [插件化使用说明](docs/plugin/plugin-usage.md)
 * [插件开发者指南](docs/h2db-plugin-developer-guide.md)
+* [协调式在线备份与影子恢复运维手册](docs/online-backup/operations.md)
+* [2.4.0 发布说明](RELEASE_NOTES_TEMPLATE.md)
 
 ## 构建
 

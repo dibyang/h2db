@@ -4,6 +4,39 @@ This is the English companion of [CHANGELOG.md](CHANGELOG.md). The Chinese docum
 
 This file records public h2db release changes for external users. Keep one section per version.
 
+## 2.4.0 (2026-07-30)
+
+### Added
+
+- Added coordinated online backup and shadow restore. An operation gate, persistent database identity and schema epoch, MVStore prepared snapshots, participant coordination, atomic bundle manifests, shadow validation, and a generation activation fence provide consistent backup and restore across the database and external persistence participants.
+- Added remote online-backup control with TCP protocol v21/v22 compatibility. Older clients can continue to use regular JDBC and legacy backup paths.
+- Added the online-backup participant SPI, provider certification specification, fault matrix, performance report, and bilingual operations guides.
+- Completed experimental DML fast path V1 for simple `INSERT ... VALUES` and JDBC batches, including plan recognition, read-only parameter views, batch parameter views, table bulk-write interfaces, and transaction/error semantic safeguards.
+- Added clearer GitHub issue, contribution, and security intake paths for external bug and vulnerability reports.
+
+### Changed
+
+- Coordinated online backup is disabled by default and fixed when a database is opened; the disabled path preserves existing behavior. Enabling it writes internal database identity metadata.
+- Hardened interruption semantics across Executor, Session, MVStore, Server, authentication, connection pools, file locks, networking, and disk retries to avoid swallowed interrupts, incorrect restoration, and caller-thread contamination.
+- Hardened SourceCompiler concurrent output, immediate LOB close, tool process shutdown, GUI Console shutdown, and FilePathDisk retry convergence.
+
+### Compatibility
+
+- Verified 2.3 database files, legacy zip backups, 2.3 API plugins, and regular JDBC / legacy backup paths in both version directions.
+- After coordinated online backup writes database identity metadata, the database must not be opened for writes by 2.3.x. Legacy databases can continue with legacy backup or use clone onboarding for the new workflow.
+- The DML fast path remains experimental and falls back safely. Generated keys, triggers, constraints, delta tables, `INSERT SELECT`, `MERGE`, `UPDATE`, and `DELETE` continue on the native execution path.
+
+### Verification
+
+- Online-backup acceptance passed 82/82 checks, and plugin architecture acceptance passed 140/140 checks.
+- The 2.3 compatibility matrix, online-backup fault matrix, shadow restore, and generation activation fence checks passed.
+- In online-backup performance acceptance, prepare latency p99/max was 2ms/2ms under continuous DML and 21ms/21ms under mixed DML, DDL, and long transactions.
+
+### Known Limitations
+
+- The first production rollout certifies one real `adb_ldb` participant. The deployment/router layer owns the generation registry, active pointer, CAS switch, and crash recovery.
+- No in-repository ADB/LDB integration throughput result is available for the DML fast path, so this release makes no 1.5x or 3x performance claim.
+
 ## 2.3.0 (2026-06-05)
 
 ### Added

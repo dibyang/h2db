@@ -1,12 +1,12 @@
 # H2DB 组合在线备份与影子恢复实施计划
 
-状态：实施中（P0-P8 已完成，P9 联调与灰度进行中）
+状态：已完成（P0-P9 与仓库侧发布门禁均已收口）
 规划日期：2026-07-28  
 目标仓库：`D:\work\java\h2db`  
 需求来源：`D:\work\java2\vexra-adb\docs\requirements\h2db-online-backup-restore-requirements.md`  
-实现分支制品基线：`h2/gradle.properties`中的 `2.4.0-SNAPSHOT`  
+正式发布制品基线：`h2/gradle.properties`中的 `2.4.0`
 兼容输入基线：已发布 `2.3.0`的数据文件、传统备份、插件和 TCP client/server  
-版本元数据现状：`Constants.VERSION`仍报告 `2.3.0`，发布前必须与 Gradle 制品版本统一  
+版本元数据：Gradle 制品版本与 `Constants.VERSION/FULL_VERSION`统一为 `2.4.0`
 兼容基线：JDK 8
 
 ## 意图
@@ -631,8 +631,8 @@ ACTIVATION_ABORT
 - [x] 确认缺少 identity metadata 的只读旧库拒绝组合备份；通过独立可写 clone onboarding 时建立全新 identity 和备份链。
 - [x] 确认 OQ-09 必须先完成 P0.6 并发原型验证，再决定 prepared snapshot 超时后的自动回收策略。
 - [x] 根据 P0.6 结果确认 idle 自动 abort、materializing 协作取消、reader 排空后 unpin，以及卡死 reader 保持 pin并熔断。
-- [x] 确认当前 `2.4.0-SNAPSHOT`分支实现、新能力不回移 2.3.x，并将 2.3.0 固定为兼容性输入基线。
-- [x] 记录 Gradle `2.4.0-SNAPSHOT`与运行时 `Constants.VERSION=2.3.0`的版本元数据差异，并将发布前消除纳入 G22/P9。
+- [x] 确认从 `2.4.0-SNAPSHOT`开发线实现并以 `2.4.0`正式发布；新能力不回移 2.3.x，并将 2.3.0 固定为兼容性输入基线。
+- [x] 消除开发期 Gradle 与运行时版本元数据差异，统一正式制品、运行时、manifest 与日志中的 `2.4.0`版本。
 - [x] 对现有 `TestBackup`、`TestMVStoreConcurrent`、`TestOpenClose`和 plugin 测试建立变更前基线。
 
 验收：
@@ -1328,7 +1328,7 @@ java -cp "build/classes/java/legacyTest;build/classes/java/main;build/resources/
 - ADB `b92b9c2`增加生产灰度策略，模式严格按 `DISABLED -> GENERATE_ONLY -> SHADOW_VALIDATE -> ACTIVATE`放开；首次生产入口只接受单个已认证 `adb_ldb`，该限制不进入 H2 SPI、bundle 格式或 H2 core。
 - 真实已发布 `h2db-2.3.0.jar`参与兼容测试：旧版本创建的数据文件和传统 zip 可由当前版本打开/恢复；2.3 client 对 2.4 server、2.4 client 对 2.3 server 的普通 JDBC/传统 `BACKUP TO`保持可用，v21 管理操作在协商到 v20 后由客户端本地拒绝；仅按 2.3 API 编译的插件可由当前插件加载器加载。
 - 修复 Windows 显式插件路径解析：只把反斜杠加逗号解释为逗号转义，普通 `C:\...`不再被通用字符串拆分器吞掉反斜杠。
-- 当前 `runOnlineBackupCheck`为 82/82，`runPluginArchitectureCheck`为 140/140；Gradle 制品、`Constants.VERSION/FULL_VERSION`和 bundle manifest 已统一为 `2.4.0-SNAPSHOT`语义。
+- 当前 `runOnlineBackupCheck`为 82/82，`runPluginArchitectureCheck`为 140/140；Gradle 制品、`Constants.VERSION/FULL_VERSION`和 bundle manifest 已统一为正式 `2.4.0`语义。
 - `AdbOnlineBackupParticipantIntegrationTest#restoresSameMonotonicCutFromH2AndLdbArtifacts`在一个事务中向 MVStore 和 ADB/LDB 写入相同单调序号；恢复后的两边最大序号同为 40，切点后提交的 41 在两边都不存在。
 - `AdbOnlineBackupPerformanceGateTest`在最终全量验收轮次的持续 DML 下测得 30 次 prepare 的 P50/P95/P99/max 为 `0/1/2/2 ms`；500 ms 提交基线为 601，1,012 ms 内出现 809 提交的恢复窗口，达到“5 秒内恢复到基线 90%”门禁，LDB 净文件增长 0 byte。
 - `AdbOnlineBackupMixedLoadGateTest`在 1 MiB 预装 LDB 脏数据、持续 LDB DML、持续 MVStore DDL 和一个未提交 MVStore 长事务并存时，20 次 prepare 的 P50/P95/P99/max 为 `4/7/21/21 ms`，期间完成 48 次 DML 提交和 14 轮 DDL，长事务回滚后为 0 行。详见 `docs/online-backup/p9-performance-report.md`。
@@ -1512,7 +1512,7 @@ P99 由 ADB 或专项性能工具对逐操作 report 聚合，不在 H2 core 内
 | OQ-09 | prepared snapshot 超时后能否自动 abort？ | idle 时允许 watchdog 自动 abort；materializing 时只协作取消，最后一个 reader 退出后 unpin；卡死 reader 保持 pin并告警/熔断，禁止强制 close。P0.6 已验证该状态协议。 | P0.6/P3 | 已确认 |
 | OQ-10 | 临时 quiesce、fence、timeout 使用什么 SQLState？ | 分别使用 `40001`、`08006`、`HYT00`，并新增三个独立 H2 vendor code，映射到 `SQLTransactionRollbackException`、`SQLNonTransientConnectionException`和`SQLTimeoutException`。 | P7/P8 | 已确认 |
 | OQ-11 | 只读旧库缺少 databaseId 时如何处理？ | 明确拒绝组合备份，不创建 sidecar/临时 ID，也不接受调用方 identity；旧备份方式保持可用。需要接入时复制到独立可写 clone，生成新 identity 并建立新的备份链。 | P2/P4/P9 | 已确认 |
-| OQ-12 | 需求基线 2.3.0 与当前 2.4.0-SNAPSHOT 如何处理？ | 当前 2.4.x 开发线实现，不向已发布 2.3.x 回移；2.3.0 作为数据文件、传统 zip、插件和 TCP 兼容输入基线。发布前统一 Gradle 与运行时版本元数据。 | P0/P9 | 已确认 |
+| OQ-12 | 需求基线 2.3.0 与 2.4.0 发布线如何处理？ | 在 2.4.x 开发线实现并以 2.4.0 发布，不向已发布 2.3.x 回移；2.3.0 作为数据文件、传统 zip、插件和 TCP 兼容输入基线。Gradle 与运行时版本元数据在发布前统一。 | P0/P9 | 已确认 |
 | OQ-13 | 在线备份协调是否影响 H2 默认存储实现，如何启用？ | 增加 `ONLINE_BACKUP_COORDINATION`启动期配置，默认 `FALSE`；仅 Database 打开时确定且禁止热切换。关闭时不创建 gate、metadata map 或 participant，不改变旧备份和默认存储语义。 | P0/P1/P2/P9 | 已确认 |
 
 ### 决策记录模板
@@ -1533,7 +1533,7 @@ P99 由 ADB 或专项性能工具对逐操作 report 聚合，不在 H2 core 内
 | 2026-07-28 | OQ-10 | quiesce、fence、activation timeout 分别使用 `40001`、`08006`、`HYT00`，但分配独立 vendor code 并显式映射 JDBC 异常类型。 | 标准 SQLState 便于 JDBC 调用方分类；H2 现有相近错误分别代表 deadlock、lock timeout 和普通 connection broken，复用 vendor code 会混淆诊断与自动恢复。 | P7 实现错误码和连接生命周期；P8 验证 embedded/TCP 等价；ADB 使用 vendor code 或结构化 reason 决策。 |
 | 2026-07-28 | OQ-11 | 缺少 identity metadata 的只读旧库拒绝组合备份；旧工具保持可用。通过独立可写 clone onboarding 时生成新 identity 并开始新备份链。 | 临时派生或外部注入 identity 不能保证跨复制/compact 稳定、catalog transaction 原子性和防串库；sidecar 又会重引入 OQ-05 已排除的双重事实来源。 | P2 实现稳定拒绝和只读无写测试；P9 编写 clone onboarding 与新 lineage 运维流程。 |
 | 2026-07-28 | OQ-09 | idle prepared snapshot 允许 watchdog 自动 abort；materializing 只协作取消，reader 排空后 unpin；卡死 reader 保持 pin并熔断，禁止强制 close。 | P0.6 的 6 项测试证明 cleanup 可线性化且不会提前恢复真实 MVStore `reuseSpace`；卡死 reader 场景必须保留 pin，说明强制回收不安全。 | P3 实现正式 lease 状态机并接入 compact/reclamation；P8 让 TCP disconnect 复用相同 cleanup；增加告警、熔断和受控重启手册。 |
-| 2026-07-28 | OQ-12 | 新能力在当前 2.4.x 开发线实现，不回移已发布 2.3.x；2.3.0 是数据文件、传统 zip、插件和 TCP 的兼容输入基线。 | 需求中的 2.3.0 表示既有部署兼容目标，而当前制品已进入 2.4.0-SNAPSHOT；回移会扩大协议和磁盘语义风险。仓库还存在 Gradle 2.4 snapshot 与运行时 2.3.0 的版本报告差异。 | P0 固定基线并建立既有测试结果；P9 完成兼容矩阵，发布前统一全部版本元数据。 |
+| 2026-07-28 | OQ-12 | 新能力在 2.4.x 开发线实现并以 2.4.0 发布，不回移已发布 2.3.x；2.3.0 是数据文件、传统 zip、插件和 TCP 的兼容输入基线。 | 需求中的 2.3.0 表示既有部署兼容目标；回移会扩大协议和磁盘语义风险。开发期 Gradle snapshot 与运行时版本报告差异在正式发布前消除。 | P0 固定基线并建立既有测试结果；P9 完成兼容矩阵并统一全部版本元数据。 |
 
 ## 建议的开放问题讨论顺序
 

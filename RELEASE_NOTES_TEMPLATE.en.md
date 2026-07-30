@@ -1,35 +1,37 @@
-# h2db 2.3.0
+# h2db 2.4.0
 
 [中文](RELEASE_NOTES_TEMPLATE.md)
 
 ## Summary
 
-This 2.3.0 release is the first h2db baseline with complete public release materials. It focuses on open-source publishing readiness, the experimental MVStore space reclamation maintenance API, the LongRun stress-test distribution, and the static H2 plugin foundation.
+This release focuses on coordinated online backup and shadow restore, DML fast path V1, and lifecycle reliability across execution, storage, networking, and tools. An operation gate, persistent database identity, prepared snapshots, participant coordination, atomic bundles, shadow validation, and a generation activation fence provide consistency across the database and external persistence participants.
 
 ## Compatibility
 
-This release keeps the H2 embedded and server database model. Maven coordinates are `net.xdob.h2db:h2db:2.3.0`. Pluginization is published as a static loading model; users do not load plugin classes through JDBC URLs. Existing regular H2 URLs and the legacy table engine class-name path remain compatible.
+This release keeps the H2 embedded and server database model. Maven coordinates are `net.xdob.h2db:h2db:2.4.0`. Verification covers 2.3 database files, legacy zip backups, 2.3 API plugins, and regular JDBC / legacy backup paths in both version directions.
+
+Coordinated online backup is disabled by default and fixed when a database is opened. Enabling it writes internal database identity metadata; the database must not subsequently be opened for writes by 2.3.x. Legacy databases can continue with legacy backup or use clone onboarding.
 
 ## Changes
 
-* Added the static plugin foundation: `ServiceLoader` automatic discovery, unified provider registry, and table/storage/system catalog/JDBC URL prefix/transaction event/database lifecycle providers.
-* Added plugin version coexistence, dependency resolution, and diagnostic views: `INFORMATION_SCHEMA.PLUGINS`, `PLUGIN_PROVIDERS`, `PLUGIN_CAPABILITIES`, and `PLUGIN_DEPENDENCIES`.
-* Hardened plugin permission boundaries and diagnostics. Forbidden provider types, plugin-level allowed provider type violations, ServiceLoader discovery failures, invalid descriptors, missing dependencies, and dependency cycles now fail with diagnostics.
-* Added documentation, status introspection, entry-point introspection, and diagnostic event listener support for the experimental MVStore space reclamation maintenance API.
-* Added the standalone LongRun stress-test distribution with smoke, performance, crash/recovery, fault-injection, nightly, comprehensive, and 30-day soak profiles.
-* Added release-facing README, contributing guide, security policy, support guide, Maven Central release guide, GitHub Release guide, third-party notices, and bilingual companions.
+* Added coordinated online backup and shadow restore with an operation gate, database identity/schema epoch, MVStore prepared snapshots, participant SPI, atomic manifests, shadow validation, generation tokens, and an activation fence.
+* Added TCP online-backup control protocol v21/v22; older clients can continue through regular JDBC and legacy backup.
+* Added provider certification, fault matrix, performance report, and bilingual online-backup operations guides.
+* Completed experimental DML fast path V1 for simple `INSERT ... VALUES` and JDBC batches, including plan recognition, read-only parameter views, batch parameter views, table bulk writes, and transaction/error compatibility safeguards.
+* Fixed immediate LOB-close races, SourceCompiler concurrent output, FilePathDisk retry convergence, GUI Console caller interrupt contamination, and interruption semantics across executor/session/server/auth/pool/file-lock/network lifecycles.
+* Added clearer GitHub issue, contribution, and security intake paths.
 
 ## Security
 
-This release does not declare a dedicated security fix. Release materials now include `SECURITY.md` and credential-protection checks; release credentials, GPG private keys, and staging secrets must not be committed.
+This release does not declare a dedicated security fix. The online-backup control path validates identity, generation tokens, and activation fences. Release credentials, GPG private keys, and staging secrets must not be committed.
 
 ## Storage and Recovery Notes
 
-MVStore space reclamation remains an experimental maintenance API. It does not add SQL entry points and does not schedule itself automatically. Pluginized storage extension supports provider registration, storage id persistence, missing-provider read-only rescue downgrade, and maintenance capability gates; production main-path storage engines must remain MVStore-backed.
+Coordinated online backup creates an atomic bundle and restores it into a separate shadow directory for validation before generation activation. The deployment/router layer owns the generation registry, active pointer, CAS switch, and crash recovery. The first production rollout certifies one real `adb_ldb` participant.
 
 ## SQL and JDBC Notes
 
-`JdbcUrlPrefixProvider` can map Driver-level prefixes such as `jdbc:vendor:*` to H2 URLs after automatic discovery. Plugin class loading through JDBC URL settings is no longer supported; URLs only select already discovered providers. Parser, function, auth, optimizer, and wire protocol extension points are outside this release scope.
+The DML fast path remains experimental and safely falls back. Generated keys, triggers, constraints, delta tables, `INSERT SELECT`, `MERGE`, `UPDATE`, and `DELETE` stay on the native execution path. There is no in-repository ADB/LDB integration throughput result, so this release makes no 1.5x or 3x performance claim.
 
 ## Maven
 
@@ -37,7 +39,7 @@ MVStore space reclamation remains an experimental maintenance API. It does not a
 <dependency>
     <groupId>net.xdob.h2db</groupId>
     <artifactId>h2db</artifactId>
-    <version>2.3.0</version>
+    <version>2.4.0</version>
 </dependency>
 ```
 
@@ -49,28 +51,26 @@ Main verification commands:
 cd h2
 .\gradlew.bat runPluginArchitectureCheck
 .\gradlew.bat runH2LegacySmoke
+.\gradlew.bat runOnlineBackupCheck
 .\gradlew.bat runMvStoreSpaceReclamationCheck
 .\gradlew.bat runMvStoreRecoveryCheck
 .\gradlew.bat --rerun-tasks runLongRunJUnitCheck
 .\gradlew.bat --rerun-tasks longRunTestDistZip
+.\gradlew.bat runH2TestAllCi
+.\gradlew.bat clean jar sourceJar javadocJar generatePomFileForMavenPublication
+.\gradlew.bat publishToMavenLocal "-Dmaven.repo.local=build\test-m2-release-clean"
 ```
 
-### LongRun Acceptance
+### Online Backup Acceptance
 
-If this release includes the LongRun distribution package, list accepted profiles:
-
-| Profile | Command | Result | Key Metrics |
-| --- | --- | --- | --- |
-| smoke | `./bin/h2-longrun watch -c config/smoke.properties` | PASS | About 14.09 million operations, 4 reopen checks, 60 reclamation success events, and 0 suspicious log lines. |
-| performance | `./bin/h2-longrun watch -c config/performance.properties` | PASS | Online reclamation added moderate throughput overhead while significantly reducing final file size and MVStore size amplification. |
-| crash/recovery | `./bin/h2-longrun watch -c config/crash-recovery.properties` | PASS | 15 crash cycles, 29 recovery checks, 0 warnings, and 0 suspicious log lines. |
-| fault-injection | `./bin/h2-longrun watch -c config/fault-injection.properties` | PASS | 14 fault injection events, 11 recovered, 3 detected or detected by verify, and 0 unexpected. |
-
-Performance profile note: online reclamation adds moderate throughput overhead in this release, but significantly reduces MVStore file growth and size amplification; this trade-off matches the long-running stability goal.
+* Online-backup checks: 82/82.
+* Plugin architecture checks: 140/140.
+* The 2.3 compatibility matrix, fault matrix, shadow restore, and generation activation fence checks passed.
+* Prepare latency p99/max under continuous DML: 2ms/2ms.
+* Prepare latency p99/max under mixed DML, DDL, and long transactions: 21ms/21ms.
 
 ## Known Issues
 
-* The plugin model is static; hot loading, unloading, and online replacement are not supported.
-* Plugin manifest/signing, dedicated sandboxing, and parser/function/auth/optimizer/wire protocol extension points are outside this release scope.
-* Non-MVStore production main paths are deferred until system catalog tables, LOBs, transaction logs, and temporary results are separated from `Store`.
-* MVStore space reclamation is an experimental maintenance API. It does not expose SQL and does not schedule itself automatically.
+* The first production rollout certifies only one real `adb_ldb` participant. New providers must pass the certification specification and fault matrix.
+* Coordinated online backup does not replace deployment-layer generation registry, active pointer, CAS, or crash recovery.
+* The DML fast path remains experimental V1; its scope and performance claims are limited as described above.

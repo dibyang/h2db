@@ -26,7 +26,7 @@ public class Constants {
     /**
      * Whether this is a snapshot version.
      */
-    public static final boolean BUILD_SNAPSHOT = false;
+    public static final boolean BUILD_SNAPSHOT = true;
 
     /**
      * If H2 is compiled to be included in a product, this should be set to
@@ -89,7 +89,7 @@ public class Constants {
     /**
      * The minor version of this database.
      */
-    public static final int VERSION_MINOR = 4;
+    public static final int VERSION_MINOR = 5;
 
     /**
      * The lock mode that means no locking is used at all.

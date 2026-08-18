@@ -20,8 +20,12 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.h2.api.ErrorCode;
 import org.h2.engine.Database;
@@ -87,6 +91,7 @@ public class TestMVStoreRecoveryCorruption extends TestDb {
         runScenario("T-RECOVERY-GENERATION-MATCH-01", false, this::testRecoveryPhysicalChunkGenerationMatch);
         runScenario("T-RECOVERY-LAYOUT-CYCLE-01", true, this::testLayoutCycleRecovery);
         runScenario("T-RECOVERY-PHYSICAL-VIEW-01", true, this::testPhysicalViewDoesNotReplaceLayoutMetadata);
+        runScenario("T-CLEAN-DEAD-CHUNK-OVERLAP-01", true, this::testCleanHeaderDeadChunkOverlapRecovery);
         runScenario("T-REPAIR-ROBUST-01", true, this::testRepairDoesNotThrowOnCompactMoveSample);
         runScenario("T-SHUTDOWN-COMPACT-01", false, this::testTcpShutdownCompactKeepsCommittedData);
         runScenario("T-QUERY-NO-AUTO-COMPACT-01", false, this::testQueryDoesNotExposeAutomaticCompactHook);
@@ -276,6 +281,48 @@ public class TestMVStoreRecoveryCorruption extends TestDb {
             runCompactMoveWorkload(base, 1, 142, true, true, true);
             assertMarkerReadable(base);
         } finally {
+            deleteFilesUnlessKept(base);
+        }
+    }
+
+    private void testCleanHeaderDeadChunkOverlapRecovery() throws Exception {
+        String base = mvStoreFile("cleanDeadChunkOverlap");
+        MVStore store = null;
+        try {
+            deleteFiles(base);
+            createParentDirectories(base);
+            store = new MVStore.Builder().fileName(base).autoCommitDisabled().autoCompactFillRate(0).open();
+            store.setRetentionTime(Integer.MAX_VALUE);
+            store.setVersionsToKeep(64);
+            MVMap<Integer, byte[]> data = store.openMap("data");
+            data.put(-1, new byte[] { MARKER });
+            for (int i = 0; i < 64; i++) {
+                data.put(1, filledBytes(i, 16 * 1024));
+                store.commit();
+            }
+            data.remove(1);
+            store.commit();
+            store.getFileStore().sync();
+
+            FileStore<?> fileStore = store.getFileStore();
+            List<Chunk<?>> deadChunks = deadChunks(fileStore);
+            assertTrue("not enough retained dead chunks: " + deadChunks.size(), deadChunks.size() > 20);
+            Chunk<?> stale = deadChunks.get(0);
+            Chunk<?> physicalOwner = deadChunks.get(1);
+            long staleOriginalBlock = stale.block;
+            fileStore.executeFilestoreOperation(() -> {
+                stale.block = physicalOwner.block;
+                saveChunkMetadata(fileStore, stale);
+            });
+            store.commit();
+            store.getFileStore().sync();
+            assertTrue(staleOriginalBlock != stale.block);
+            closeStore(store);
+            store = null;
+
+            assertMarkerReadable(base);
+        } finally {
+            closeStoreImmediately(store);
             deleteFilesUnlessKept(base);
         }
     }
@@ -816,6 +863,29 @@ public class TestMVStoreRecoveryCorruption extends TestDb {
         chunks.put(1, chunk);
         field.set(fileStore, chunks);
         field.setAccessible(false);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Chunk<?>> deadChunks(FileStore<?> fileStore) throws Exception {
+        Field field = FileStore.class.getDeclaredField("chunks");
+        field.setAccessible(true);
+        ConcurrentHashMap<Integer, Chunk<?>> chunks =
+                (ConcurrentHashMap<Integer, Chunk<?>>) field.get(fileStore);
+        ArrayList<Chunk<?>> dead = new ArrayList<>();
+        for (Map.Entry<Integer, Chunk<?>> entry : chunks.entrySet()) {
+            Chunk<?> chunk = entry.getValue();
+            if (chunk.block != 0 && chunk.maxLenLive == 0) {
+                dead.add(chunk);
+            }
+        }
+        field.setAccessible(false);
+        dead.sort(Comparator.comparingInt(chunk -> chunk.id));
+        return dead;
+    }
+
+    @SuppressWarnings({ "rawtypes", "unchecked" })
+    private static void saveChunkMetadata(FileStore<?> fileStore, Chunk<?> chunk) {
+        ((FileStore) fileStore).saveChunkMetadataChanges(chunk);
     }
 
     private static String sqlPath(String fileName) {

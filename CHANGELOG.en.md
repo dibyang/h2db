@@ -4,6 +4,18 @@ This is the English companion of [CHANGELOG.md](CHANGELOG.md). The Chinese docum
 
 This file records public h2db release changes for external users. Keep one section per version.
 
+## 2.3.1 (2026-08-19)
+
+### Fixed
+
+- Fixed an MVStore lifecycle race between online space reclamation and store close. No reclamation write can start after closing begins, preventing inconsistent reclamation metadata from being left behind.
+- Improved startup validation and recovery handling of allocated MVStore chunk ranges. Overlaps are checked even when a clean-shutdown marker is present, avoiding duplicate free-space mark errors when abandoned chunk metadata overlaps.
+
+### Verification
+
+- Full CI gate passed: `runLongRunJUnitCheck`, `runMvStoreRecoveryCheck`, `runMvStoreSpaceReclamationCheck`, `runMvStoreReclamationJUnitCheck`, and `runH2TestAllCi`.
+- The 12-hour LongRun comprehensive gate passed: `PASS`, 1,776,387,749 operations, 1,772,644 commits, 58 reopen checks, and 23 recovery checks. All 4,308 online reclamation events succeeded with 0 backoffs, 0 warnings, and 0 suspicious log lines; the final database file was 22,556,639 bytes.
+
 ## 2.3.0 (2026-06-05)
 
 ### Added

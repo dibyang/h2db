@@ -1,35 +1,33 @@
-# h2db 2.3.0
+# h2db 2.3.1
 
 [中文](RELEASE_NOTES_TEMPLATE.md)
 
 ## Summary
 
-This 2.3.0 release is the first h2db baseline with complete public release materials. It focuses on open-source publishing readiness, the experimental MVStore space reclamation maintenance API, the LongRun stress-test distribution, and the static H2 plugin foundation.
+This 2.3.1 release is an MVStore stability update. It fixes a lifecycle race between online space reclamation and store close, and a startup failure caused by overlapping physical ranges in abandoned chunk metadata.
 
 ## Compatibility
 
-This release keeps the H2 embedded and server database model. Maven coordinates are `net.xdob.h2db:h2db:2.3.0`. Pluginization is published as a static loading model; users do not load plugin classes through JDBC URLs. Existing regular H2 URLs and the legacy table engine class-name path remain compatible.
+This release keeps the H2 embedded and server database model. Maven coordinates are `net.xdob.h2db:h2db:2.3.1`. It does not change SQL, the JDBC API, or the MVStore on-disk format; databases from 2.3.0 can be upgraded directly.
 
 ## Changes
 
-* Added the static plugin foundation: `ServiceLoader` automatic discovery, unified provider registry, and table/storage/system catalog/JDBC URL prefix/transaction event/database lifecycle providers.
-* Added plugin version coexistence, dependency resolution, and diagnostic views: `INFORMATION_SCHEMA.PLUGINS`, `PLUGIN_PROVIDERS`, `PLUGIN_CAPABILITIES`, and `PLUGIN_DEPENDENCIES`.
-* Hardened plugin permission boundaries and diagnostics. Forbidden provider types, plugin-level allowed provider type violations, ServiceLoader discovery failures, invalid descriptors, missing dependencies, and dependency cycles now fail with diagnostics.
-* Added documentation, status introspection, entry-point introspection, and diagnostic event listener support for the experimental MVStore space reclamation maintenance API.
-* Added the standalone LongRun stress-test distribution with smoke, performance, crash/recovery, fault-injection, nightly, comprehensive, and 30-day soak profiles.
-* Added release-facing README, contributing guide, security policy, support guide, Maven Central release guide, GitHub Release guide, third-party notices, and bilingual companions.
+* Fixed the MVStore lifecycle race between online space reclamation and store close. New reclamation writes cannot start after closing begins.
+* Added validation of all allocated chunk physical ranges before rebuilding the free-space bitmap, even when a clean-shutdown marker is present.
+* Routed overlaps that only involve abandoned chunks with no live pages through recovery, avoiding duplicate free-space mark errors during database open.
+* Added deterministic regression coverage for overlapping abandoned chunks, live-chunk conflicts, and concurrent reclamation/store close.
 
 ## Security
 
-This release does not declare a dedicated security fix. Release materials now include `SECURITY.md` and credential-protection checks; release credentials, GPG private keys, and staging secrets must not be committed.
+This release does not declare a dedicated security fix. Release credentials, GPG private keys, and staging secrets must not be committed.
 
 ## Storage and Recovery Notes
 
-MVStore space reclamation remains an experimental maintenance API. It does not add SQL entry points and does not schedule itself automatically. Pluginized storage extension supports provider registration, storage id persistence, missing-provider read-only rescue downgrade, and maintenance capability gates; production main-path storage engines must remain MVStore-backed.
+MVStore space reclamation remains an experimental maintenance API. It does not add SQL entry points or schedule itself automatically. Eligible legacy damaged files can persist recovered metadata after a writable open and clean close. Files with overlapping live ranges or unverifiable consistency are still rejected; this fix is not a general-purpose database corruption repair tool. Keep an original backup before upgrade or repair.
 
 ## SQL and JDBC Notes
 
-`JdbcUrlPrefixProvider` can map Driver-level prefixes such as `jdbc:vendor:*` to H2 URLs after automatic discovery. Plugin class loading through JDBC URL settings is no longer supported; URLs only select already discovered providers. Parser, function, auth, optimizer, and wire protocol extension points are outside this release scope.
+This release has no SQL semantic or JDBC API behavior changes.
 
 ## Maven
 
@@ -37,7 +35,7 @@ MVStore space reclamation remains an experimental maintenance API. It does not a
 <dependency>
     <groupId>net.xdob.h2db</groupId>
     <artifactId>h2db</artifactId>
-    <version>2.3.0</version>
+    <version>2.3.1</version>
 </dependency>
 ```
 
@@ -51,26 +49,20 @@ cd h2
 .\gradlew.bat runH2LegacySmoke
 .\gradlew.bat runMvStoreSpaceReclamationCheck
 .\gradlew.bat runMvStoreRecoveryCheck
+.\gradlew.bat runMvStoreReclamationJUnitCheck
+.\gradlew.bat runH2TestAllCi
 .\gradlew.bat --rerun-tasks runLongRunJUnitCheck
-.\gradlew.bat --rerun-tasks longRunTestDistZip
+.\gradlew.bat --rerun-tasks longRunTestDistZip longRunTestDistTar
 ```
 
 ### LongRun Acceptance
 
-If this release includes the LongRun distribution package, list accepted profiles:
-
 | Profile | Command | Result | Key Metrics |
 | --- | --- | --- | --- |
-| smoke | `./bin/h2-longrun watch -c config/smoke.properties` | PASS | About 14.09 million operations, 4 reopen checks, 60 reclamation success events, and 0 suspicious log lines. |
-| performance | `./bin/h2-longrun watch -c config/performance.properties` | PASS | Online reclamation added moderate throughput overhead while significantly reducing final file size and MVStore size amplification. |
-| crash/recovery | `./bin/h2-longrun watch -c config/crash-recovery.properties` | PASS | 15 crash cycles, 29 recovery checks, 0 warnings, and 0 suspicious log lines. |
-| fault-injection | `./bin/h2-longrun watch -c config/fault-injection.properties` | PASS | 14 fault injection events, 11 recovered, 3 detected or detected by verify, and 0 unexpected. |
-
-Performance profile note: online reclamation adds moderate throughput overhead in this release, but significantly reduces MVStore file growth and size amplification; this trade-off matches the long-running stability goal.
+| comprehensive 12h | `java -jar h2-longrun.jar -c config/comprehensive.properties` | PASS | 1,776,387,749 operations, 58 reopen checks, 23 recovery checks, all 4,308 reclamation events successful, 0 warnings, and 0 suspicious log lines. |
 
 ## Known Issues
 
-* The plugin model is static; hot loading, unloading, and online replacement are not supported.
-* Plugin manifest/signing, dedicated sandboxing, and parser/function/auth/optimizer/wire protocol extension points are outside this release scope.
-* Non-MVStore production main paths are deferred until system catalog tables, LOBs, transaction logs, and temporary results are separated from `Store`.
 * MVStore space reclamation is an experimental maintenance API. It does not expose SQL and does not schedule itself automatically.
+* Automatic recovery is limited to overlapping chunks confirmed to be abandoned with no live pages. Overlapping live ranges are still rejected as corruption.
+* 2.3.1 handles the overlapping abandoned-chunk failure covered by this release; it does not promise automatic repair for unrelated truncation, page corruption, or storage-media failures.

@@ -4,6 +4,18 @@
 
 本文件记录 h2db 面向外部用户的公开 release 变更。格式遵循“每个版本一节”的方式。
 
+## 2.3.1（2026-08-19）
+
+### 修复
+
+- 修复 MVStore 在线空间回收与关闭并发时的生命周期竞态；关闭开始后不会再启动回收写入，避免留下不一致的回收元数据。
+- 改进 MVStore 对已分配 chunk 物理区间的启动校验和恢复处理；即使文件带有 clean shutdown 标记，也会检测重叠区间，避免因废弃 chunk 元数据重叠而在打开时出现重复空闲空间标记错误。
+
+### 验证
+
+- 完整 CI 门禁通过：`runLongRunJUnitCheck`、`runMvStoreRecoveryCheck`、`runMvStoreSpaceReclamationCheck`、`runMvStoreReclamationJUnitCheck` 和 `runH2TestAllCi`。
+- LongRun comprehensive 12 小时门禁通过：`PASS`，1,776,387,749 次操作、1,772,644 次提交、58 次 reopen 检查、23 次 recovery 检查；4,308 次在线回收全部成功、0 backoff、0 warnings、0 suspicious log lines，最终数据库文件为 22,556,639 字节。
+
 ## 2.3.0（2026-06-05）
 
 ### 新增

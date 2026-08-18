@@ -21,7 +21,7 @@ public class Constants {
      * Sequential version number. Even numbers are used for official releases,
      * odd numbers are used for development builds.
      */
-    public static final int BUILD_ID = 0;
+    public static final int BUILD_ID = 1;
 
     /**
      * Whether this is a snapshot version.

@@ -9,6 +9,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 
 import org.h2.mvstore.ChunkLivenessSnapshot;
@@ -132,6 +134,8 @@ public class TestMVStoreSpaceReclamation extends TestBase {
         runScenario("T-S2-AUTOMATIC-MODE-ACCEPTANCE-01", this::testAutomaticModeAcceptanceSignals);
         runScenario("T-S2-DEFAULT-HOUSEKEEPING-DISABLED-01", this::testHousekeepingCanDisableOnlineReclamation);
         runScenario("T-S2-DEFAULT-HOUSEKEEPING-CLOSED-01", this::testHousekeepingSkipsClosedStore);
+        runScenario("T-S2-COORDINATOR-CLOSED-01", this::testCoordinatorSkipsClosedStore);
+        runScenario("T-S2-CONCURRENT-CLOSE-RECLAMATION-01", this::testConcurrentCloseDuringOnlineReclamation);
         runScenario("T-S2-CONCURRENT-WRITE-RECLAMATION-01", this::testConcurrentWriteDuringOnlineReclamation);
         runScenario("T-S2-PERF-NO-CANDIDATE-FAST-01", this::testNoCandidateReclamationReturnsQuickly);
         runScenario("T-S2-PERF-BOUNDED-SPACE-BASELINE-01", this::testBoundedReclamationDoesNotGrowFile);
@@ -1373,6 +1377,68 @@ public class TestMVStoreSpaceReclamation extends TestBase {
             assertEquals(MVStoreReclamationStatus.SKIPPED, result.getStatus());
             assertEquals(MVStoreReclamationCode.RECLAMATION_STORE_CLOSED, result.getMessage());
             store = null;
+        } finally {
+            closeStoreImmediately(store);
+            deleteFilesUnlessKept(base);
+        }
+    }
+
+    private void testCoordinatorSkipsClosedStore() {
+        String base = mvStoreFile("coordinatorClosed");
+        MVStore store = null;
+        try {
+            store = new MVStore.Builder().fileName(base).autoCommitDisabled().autoCompactFillRate(0).open();
+            closeStore(store);
+            MVStoreOnlineReclamationResult result = MVStoreReclamationCoordinator.run(store,
+                    new MVStoreReclamationRequest.Builder().targetFillRate(100).journalEnabled(true).build());
+            assertEquals(MVStoreReclamationStatus.SKIPPED, result.getStatus());
+            assertEquals(MVStoreReclamationCode.RECLAMATION_STORE_CLOSED, result.getMessage());
+            store = null;
+        } finally {
+            closeStoreImmediately(store);
+            deleteFilesUnlessKept(base);
+        }
+    }
+
+    private void testConcurrentCloseDuringOnlineReclamation() throws Exception {
+        String base = mvStoreFile("concurrentCloseReclamation");
+        MVStore store = null;
+        try {
+            createBloatedStore(base);
+            store = new MVStore.Builder().fileName(base).autoCommitDisabled().autoCompactFillRate(0).open();
+            store.setRetentionTime(0);
+            final MVStore runningStore = store;
+            final CountDownLatch start = new CountDownLatch(1);
+            final AtomicReference<Throwable> reclamationFailure = new AtomicReference<>();
+            Thread reclamation = new Thread(() -> {
+                try {
+                    start.await();
+                    MVStoreReclamationCoordinator.run(runningStore,
+                            new MVStoreReclamationRequest.Builder().targetFillRate(100)
+                                    .journalEnabled(true).maxLiveBytesToRewrite(Integer.MAX_VALUE).build());
+                } catch (Throwable t) {
+                    reclamationFailure.set(t);
+                }
+            }, "mvstore-reclamation-close-race");
+            Thread closer = new Thread(() -> {
+                try {
+                    start.await();
+                    runningStore.close();
+                } catch (Throwable t) {
+                    reclamationFailure.compareAndSet(null, t);
+                }
+            }, "mvstore-reclamation-closer");
+            reclamation.start();
+            closer.start();
+            start.countDown();
+            reclamation.join();
+            closer.join();
+            Throwable failure = reclamationFailure.get();
+            if (failure != null) {
+                throw new AssertionError("concurrent close must not access closed reclamation metadata", failure);
+            }
+            store = null;
+            assertOnlyMarkerReadable(base);
         } finally {
             closeStoreImmediately(store);
             deleteFilesUnlessKept(base);

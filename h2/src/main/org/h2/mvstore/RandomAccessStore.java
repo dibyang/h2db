@@ -299,6 +299,14 @@ public abstract class RandomAccessStore extends FileStore<SFChunk>
             }
         }
 
+        // A clean marker only proves that the close sequence completed. It
+        // does not prove that allocated ranges in the layout do not overlap.
+        // Overlaps require full chunk-set validation before rebuilding the
+        // free-space bitmap.
+        if (assumeCleanShutdown && hasOverlappingAllocatedChunks()) {
+            assumeCleanShutdown = false;
+        }
+
         if (!assumeCleanShutdown) {
             // now we know, that previous shutdown did not go well and file
             // is possibly corrupted but there is still hope for a quick
@@ -337,6 +345,26 @@ public abstract class RandomAccessStore extends FileStore<SFChunk>
             }
         }
         assert validateFileLength("on open");
+    }
+
+    private boolean hasOverlappingAllocatedChunks() {
+        ArrayList<SFChunk> allocated = new ArrayList<>();
+        for (SFChunk chunk : getChunks().values()) {
+            if (chunk.isAllocated()) {
+                allocated.add(chunk);
+            }
+        }
+        allocated.sort(Chunk.PositionComparator.instance());
+        long endBlock = 0;
+        boolean first = true;
+        for (SFChunk chunk : allocated) {
+            if (!first && chunk.block < endBlock) {
+                return true;
+            }
+            first = false;
+            endBlock = Math.max(endBlock, chunk.block + chunk.len);
+        }
+        return false;
     }
 
     @Override
@@ -530,6 +558,7 @@ public abstract class RandomAccessStore extends FileStore<SFChunk>
             // this will ensure better recognition of the last chunk
             // in case of power failure, since we are going to move older chunks
             // to the end of the file
+            storeHeader.remove(HDR_CLEAN);
             writeStoreHeader();
             sync();
 

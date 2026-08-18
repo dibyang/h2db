@@ -30,6 +30,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiConsumer;
 import java.util.function.LongConsumer;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 import org.h2.compress.CompressDeflate;
 import org.h2.compress.CompressLZF;
 import org.h2.compress.Compressor;
@@ -976,6 +977,27 @@ public class MVStore implements AutoCloseable {
                     DataUtils.ERROR_INTERNAL, "{0}", e.toString(), e));
         } finally {
             unlockAndCheckPanicCondition();
+        }
+    }
+
+    /**
+     * Execute a complete online reclamation round while holding the store
+     * lifecycle lock. Closing waits for an active round to leave, and no new
+     * reclamation write starts after closing has begun.
+     *
+     * @param operation the reclamation operation
+     * @param closedResult the result for an already closed store
+     * @return the reclamation result
+     */
+    <R> R executeReclamationOperation(Supplier<R> operation, R closedResult) {
+        storeLock.lock();
+        try {
+            if (!isOpen()) {
+                return closedResult;
+            }
+            return operation.get();
+        } finally {
+            storeLock.unlock();
         }
     }
 

@@ -24,9 +24,14 @@ public final class MVStoreReclamationCoordinator {
         if (store == null) {
             throw new IllegalArgumentException("store");
         }
-        if (request == null) {
-            request = MVStoreReclamationRequest.DEFAULT;
-        }
+        final MVStoreReclamationRequest effectiveRequest = request == null
+                ? MVStoreReclamationRequest.DEFAULT : request;
+        return store.executeReclamationOperation(() -> runUnderLifecycleLock(store, effectiveRequest),
+                closedStoreResult(effectiveRequest));
+    }
+
+    private static MVStoreOnlineReclamationResult runUnderLifecycleLock(MVStore store,
+            MVStoreReclamationRequest request) {
         MVStoreReclamationJournal.recover(store);
         MVStoreReclamationAnalysis before = MVStoreReclamationAnalyzer.analyze(store,
                 request.getTargetFillRate());
@@ -48,9 +53,19 @@ public final class MVStoreReclamationCoordinator {
             phase(journal, "EVACUATING");
             rewritten = store.compact(request.getTargetFillRate(), request.getMaxLiveBytesToRewrite());
         } catch (RuntimeException e) {
-            MVStoreReclamationAnalysis afterFailure = MVStoreReclamationAnalyzer.analyze(store,
-                    request.getTargetFillRate());
-            phase(journal, "FAILED");
+            MVStoreReclamationAnalysis afterFailure = before;
+            if (store.isOpen()) {
+                try {
+                    afterFailure = MVStoreReclamationAnalyzer.analyze(store, request.getTargetFillRate());
+                } catch (RuntimeException cleanupFailure) {
+                    e.addSuppressed(cleanupFailure);
+                }
+                try {
+                    phase(journal, "FAILED");
+                } catch (RuntimeException cleanupFailure) {
+                    e.addSuppressed(cleanupFailure);
+                }
+            }
             return result(MVStoreReclamationStatus.FAILED,
                     MVStoreReclamationCode.RECLAMATION_FAILED + ": " + e.getMessage(), before, afterFailure,
                     false, request, selected);
@@ -83,6 +98,15 @@ public final class MVStoreReclamationCoordinator {
         }
         return result(MVStoreReclamationStatus.SUCCESS, MVStoreReclamationCode.RECLAMATION_ROUND_FINISHED,
                 before, after, true, request, tailCompactionPlanned, tailCompactionAttempted, selected);
+    }
+
+    private static MVStoreOnlineReclamationResult closedStoreResult(MVStoreReclamationRequest request) {
+        MVStoreReclamationAnalysis analysis = new MVStoreReclamationAnalysis(0, 0L, 0, 0,
+                new ArrayList<ChunkLivenessSnapshot>(), new ArrayList<ChunkLivenessSnapshot>());
+        return new MVStoreOnlineReclamationResult(MVStoreReclamationStatus.SKIPPED,
+                MVStoreReclamationCode.RECLAMATION_STORE_CLOSED, analysis, analysis, false,
+                request.isRelocationMapAllowed(), false, request.isTailCompactionAllowed(), false, false,
+                new ArrayList<Integer>());
     }
 
     public static MVStoreReclamationRecovery recover(MVStore store) {

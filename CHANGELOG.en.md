@@ -4,6 +4,24 @@ This is the English companion of [CHANGELOG.md](CHANGELOG.md). The Chinese docum
 
 This file records public h2db release changes for external users. Keep one section per version.
 
+## 2.4.1 (2026-08-19)
+
+### Fixed
+
+- Fixed an MVStore startup failure where a file carried a clean-shutdown marker but its layout metadata still contained overlapping physical ranges for allocated chunks. Startup could rebuild the free-space bitmap directly, report `Double mark`, and refuse to open the database. Startup now detects overlaps and performs full chunk-set validation; when an overlap involves only abandoned chunks with no live data, a valid version can be selected for recovery.
+- Fixed a lifecycle race between online space reclamation and `MVStore.close()`. A complete reclamation round now runs under the store lifecycle lock, an already closed store returns `SKIPPED / RECLAMATION_STORE_CLOSED`, and failure cleanup no longer accesses closed reclamation metadata.
+- The clean-shutdown marker is now cleared before chunks are moved and the store header is rewritten, so an interruption during the move is not incorrectly treated as a trustworthy clean shutdown.
+
+### Compatibility
+
+- This release does not change SQL, the JDBC API, or the MVStore disk format. Valid 2.4.0 database files can be upgraded directly.
+- Automatic recovery is limited to overlapping ranges that are determined to belong to abandoned chunks with no live data. Any physical-range conflict involving live data is still rejected as corruption to prevent silent data loss.
+
+### Verification
+
+- Added deterministic regression coverage for abandoned-chunk overlap under a clean-shutdown marker, reclamation requests on closed stores, and concurrent online reclamation and store close.
+- `runMvStoreRecoveryCheck`, `runMvStoreSpaceReclamationCheck`, and `runMvStoreReclamationJUnitCheck` passed on `v2.4.x`.
+
 ## 2.4.0 (2026-07-30)
 
 ### Added

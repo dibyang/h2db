@@ -16,7 +16,6 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLServerSocket;
 import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSocket;
-import org.h2.build.BuildBase;
 import org.h2.engine.SysProperties;
 import org.h2.test.TestBase;
 import org.h2.util.NetUtils;
@@ -62,7 +61,7 @@ public class TestNetUtils extends TestBase {
      * (no SSL certificate is needed).
      */
     private void testAnonymousTlsSession() throws Exception {
-        if (config.ci || BuildBase.getJavaVersion() >= 11) {
+        if (config.ci || getJavaVersion() >= 11) {
             // Issue #1303
             return;
         }
@@ -300,7 +299,7 @@ public class TestNetUtils extends TestBase {
     }
 
     private void testTcpQuickack() {
-        final boolean ssl = !config.ci && BuildBase.getJavaVersion() < 11;
+        final boolean ssl = !config.ci && getJavaVersion() < 11;
         try (ServerSocket serverSocket = NetUtils.createServerSocket(PORT, ssl)) {
             Thread thread = new Thread() {
                 @Override
@@ -329,6 +328,18 @@ public class TestNetUtils extends TestBase {
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    private static int getJavaVersion() {
+        String version = System.getProperty("java.specification.version", "1.8");
+        if (version.startsWith("1.")) {
+            version = version.substring(2);
+        }
+        int dot = version.indexOf('.');
+        if (dot >= 0) {
+            version = version.substring(0, dot);
+        }
+        return Integer.parseInt(version);
     }
 
 }

@@ -4,6 +4,24 @@
 
 本文件记录 h2db 面向外部用户的公开 release 变更。格式遵循“每个版本一节”的方式。
 
+## 2.4.1（2026-08-19）
+
+### 修复
+
+- 修复 MVStore 文件虽带有正常关闭标记，但布局元数据中仍存在 allocated chunk 物理区间重叠时，启动阶段直接重建空闲空间位图并报 `Double mark`、导致数据库无法打开的问题。启动时现在会先检测重叠并进入完整 chunk 集合校验；仅涉及已废弃且无存活数据的 chunk 时，可选择有效版本继续恢复。
+- 修复在线空间回收与 `MVStore.close()` 并发执行的生命周期竞态。完整回收轮次现在受 store 生命周期锁保护，已关闭的 store 会返回 `SKIPPED / RECLAMATION_STORE_CLOSED`，失败清理也不会继续访问已关闭的回收元数据。
+- 移动 chunk 并重写 store header 前会清除正常关闭标记，避免移动过程异常退出后误将文件视为可直接信任的干净关闭状态。
+
+### 兼容性
+
+- 本版本不改变 SQL、JDBC API 或 MVStore 磁盘格式；正常的 2.4.0 数据库文件可直接升级使用。
+- 自动恢复只适用于重叠范围中被判定为已废弃且无存活数据的 chunk。任何涉及存活数据的物理区间冲突仍会按损坏拒绝打开，避免静默丢失数据。
+
+### 验证
+
+- 增加确定性回归测试，覆盖正常关闭标记下的废弃 chunk 重叠、已关闭 store 的回收请求，以及在线回收与关闭并发执行。
+- `runMvStoreRecoveryCheck`、`runMvStoreSpaceReclamationCheck` 和 `runMvStoreReclamationJUnitCheck` 在 `v2.4.x` 上通过。
+
 ## 2.4.0（2026-07-30）
 
 ### 新增

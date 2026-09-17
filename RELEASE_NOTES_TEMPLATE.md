@@ -1,33 +1,30 @@
-# h2db 2.3.1
+# h2db 2.3.2
 
 [English](RELEASE_NOTES_TEMPLATE.en.md)
 
 ## 摘要
 
-本次 2.3.1 是 MVStore 稳定性修复版本，重点修复在线空间回收与关闭并发时的生命周期竞态，以及废弃 chunk 元数据物理区间重叠导致数据库无法重新打开的问题。
-
-## 兼容性
-
-本 release 继续保持 H2 嵌入式与服务端数据库模型，Maven 坐标为 `net.xdob.h2db:h2db:2.3.1`。本版本不改变 SQL、JDBC API 或 MVStore 磁盘格式，2.3.0 数据库可直接升级使用。
+2.3.2 修复大写字符串缓存项的不安全并发发布，避免读取未初始化的缓存键或值。该缓存用于 JDBC 按列名读取结果等路径。
 
 ## 变更
 
-* 修复 MVStore 在线空间回收与 store close 的生命周期竞态；关闭开始后不再允许启动新的回收写入。
-* 在重建空闲空间位图前校验所有已分配 chunk 的物理区间；即使存在 clean shutdown 标记，也不会跳过重叠检查。
-* 对只涉及废弃且无存活页 chunk 的重叠元数据进入恢复路径，避免打开数据库时出现重复空闲空间标记错误。
-* 增加重叠废弃 chunk、存活 chunk 冲突和在线回收/关闭并发的确定性回归测试。
+* 使用具有 final 字段的不可变缓存项，保持无锁缓存读取。
+* 增加缓存发布约束、哈希碰撞转换和独立连接并发 JDBC 回归测试。
+* 测试使用命名守护线程并保留超时检查，避免阻塞任务阻止测试 JVM 退出。
 
-## 安全
+## 兼容性与升级
 
-本 release 未声明单独安全修复。发布凭据、GPG 私钥和 staging secrets 不应提交到仓库。
+Maven 坐标为 `net.xdob.h2db:h2db:2.3.2`，保持 Java 8 兼容。
+本版本不改变 SQL 语义、JDBC API、网络协议或 MVStore 磁盘格式。2.3.1 数据库可升级使用；升级前备份数据库并停止使用旧驱动的进程，再替换 jar 和重启应用。
 
-## 存储与恢复说明
+## SQL 与 JDBC
 
-MVStore 空间回收能力仍是实验性维护 API，不改变 SQL 入口，也不自动调度。符合条件的旧损坏文件在可写打开并正常关闭后可固化恢复后的元数据；涉及存活数据区间重叠或无法确认一致性的文件仍会拒绝打开，不能把本修复视为通用数据库损坏修复工具。升级或修复前仍应保留原始文件备份。
+修复涉及全局字符串缓存，应用无需修改 SQL。生产报告的异常链为 `StringUtils.toUpperEnglish → JdbcResultSet.getColumnIndex → getString`。
+旧版完整 jar 的故障注入重现了相同 H2 异常链；自然并发压力测试未重现。并发发布竞态是高置信根因判断，而非自然复现直接证实。
 
-## SQL 与 JDBC 说明
+## 安全、存储与恢复
 
-本版本没有 SQL 语义或 JDBC API 行为变更。
+本版本未声明独立安全修复，也未新增数据库修复或恢复能力。MVStore 实验性回收 API 及上一版本的恢复限制保持不变。
 
 ## Maven
 
@@ -35,34 +32,19 @@ MVStore 空间回收能力仍是实验性维护 API，不改变 SQL 入口，也
 <dependency>
     <groupId>net.xdob.h2db</groupId>
     <artifactId>h2db</artifactId>
-    <version>2.3.1</version>
+    <version>2.3.2</version>
 </dependency>
 ```
 
 ## 验证
 
-主要验证命令：
+JDK 8 下发布 jar、sources、javadoc 和 POM 构建通过；实际 `SELECT H2VERSION()` 返回 `2.3.2`。
 
-```powershell
-cd h2
-.\gradlew.bat runPluginArchitectureCheck
-.\gradlew.bat runH2LegacySmoke
-.\gradlew.bat runMvStoreSpaceReclamationCheck
-.\gradlew.bat runMvStoreRecoveryCheck
-.\gradlew.bat runMvStoreReclamationJUnitCheck
-.\gradlew.bat runH2TestAllCi
-.\gradlew.bat --rerun-tasks runLongRunJUnitCheck
-.\gradlew.bat --rerun-tasks longRunTestDistZip longRunTestDistTar
-```
+`runPluginArchitectureCheck`、`runH2LegacySmoke`、`runMvStoreSpaceReclamationCheck`、`runMvStoreRecoveryCheck`、`runMvStoreReclamationJUnitCheck`、`runLongRunJUnitCheck` 和 `runH2TestAllCi` 全部通过。完整 CI 用时 19 分 47 秒。
 
-### LongRun 验收
+完整 CI 配置未执行 `TestMVStoreBenchmark`、`TestLargeBlob`、`TestSubqueryPerformanceOnLazyExecutionMode` 和 `TestDefrag` 四项慢速/基准测试。
+本次未重新运行 12 小时 LongRun；2.3.1 的长稳结果不作为 2.3.2 验收结果。
 
-| Profile | 命令 | 结果 | 关键指标 |
-| --- | --- | --- | --- |
-| comprehensive 12h | `java -jar h2-longrun.jar -c config/comprehensive.properties` | PASS | 1,776,387,749 次操作，58 次 reopen 检查，23 次 recovery 检查，4,308 次回收全部成功，0 warnings，0 suspicious log lines。 |
+## 发布状态
 
-## 已知问题
-
-* MVStore 空间回收能力是实验性维护 API，不暴露 SQL，不自动调度。
-* 自动恢复仅适用于能够确认废弃、无存活页的重叠 chunk；存活区间重叠仍按损坏拒绝打开。
-* 2.3.1 能处理本次已固化的重叠废弃 chunk 故障，不保证自动修复其他类型的文件截断、页损坏或存储介质错误。
+本文件用于 2.3.2 发布准备；实际 Maven Central 发布、标签和 GitHub Release 状态需在发布操作后确认。

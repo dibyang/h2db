@@ -4,7 +4,7 @@ This is the English companion of [CHANGELOG.md](CHANGELOG.md). The Chinese docum
 
 This file records public h2db release changes for external users. Keep one section per version.
 
-## Unreleased (v2.3.x)
+## 2.3.2 (2026-09-17)
 
 ### Fixed
 
@@ -13,6 +13,7 @@ This file records public h2db release changes for external users. Keep one secti
 ### Verification
 
 - Added cache publication checks and concurrent JDBC regression tests using independent connections, integrated into `TestStringUtils`. JDK 8 compilation and `runH2LegacySmoke` passed.
+- 2.3.2 packaging, plugin, MVStore recovery/reclamation, LongRun unit gates, and full `runH2TestAllCi` passed. Full CI took 19 minutes 47 seconds; its four excluded slow/benchmark tests and the unexecuted 12-hour endurance run are not counted as passed.
 - Fault injection reproduces the same NPE expression in the old implementation. Natural concurrency stress did not reproduce the failure, so the specific trigger of the reported production exception remains unconfirmed.
 
 ## 2.3.1 (2026-08-19)

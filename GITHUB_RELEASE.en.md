@@ -37,8 +37,8 @@ Use `RELEASE_NOTES_TEMPLATE.md` as the starting point. Every public release shou
 Use a tag that matches the Maven version, such as:
 
 ```sh
-git tag -s v2.3.1
-git push origin v2.3.1
+git tag -s v2.3.2
+git push origin v2.3.2
 ```
 
 If signing tags is not available, document how release authenticity is verified through Maven Central PGP signatures.

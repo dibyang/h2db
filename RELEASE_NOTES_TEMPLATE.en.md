@@ -1,33 +1,30 @@
-# h2db 2.3.1
+# h2db 2.3.2
 
 [中文](RELEASE_NOTES_TEMPLATE.md)
 
 ## Summary
 
-This 2.3.1 release is an MVStore stability update. It fixes a lifecycle race between online space reclamation and store close, and a startup failure caused by overlapping physical ranges in abandoned chunk metadata.
-
-## Compatibility
-
-This release keeps the H2 embedded and server database model. Maven coordinates are `net.xdob.h2db:h2db:2.3.1`. It does not change SQL, the JDBC API, or the MVStore on-disk format; databases from 2.3.0 can be upgraded directly.
+2.3.2 fixes unsafe concurrent publication of uppercase string cache entries, preventing reads of uninitialized keys or values. This cache is used by JDBC result retrieval by column label and other paths.
 
 ## Changes
 
-* Fixed the MVStore lifecycle race between online space reclamation and store close. New reclamation writes cannot start after closing begins.
-* Added validation of all allocated chunk physical ranges before rebuilding the free-space bitmap, even when a clean-shutdown marker is present.
-* Routed overlaps that only involve abandoned chunks with no live pages through recovery, avoiding duplicate free-space mark errors during database open.
-* Added deterministic regression coverage for overlapping abandoned chunks, live-chunk conflicts, and concurrent reclamation/store close.
+* Use immutable cache entries with final fields while retaining lock-free cache reads.
+* Add publication checks, hash-collision conversion checks, and concurrent JDBC regression tests with independent connections.
+* Use named daemon test workers with timeout checks so blocked tasks cannot prevent the test JVM from exiting.
 
-## Security
+## Compatibility and Upgrade
 
-This release does not declare a dedicated security fix. Release credentials, GPG private keys, and staging secrets must not be committed.
+Maven coordinates are `net.xdob.h2db:h2db:2.3.2`. Java 8 remains supported.
+SQL semantics, JDBC APIs, network protocols, and the MVStore on-disk format are unchanged. Databases from 2.3.1 can be upgraded. Back up databases and stop processes using the old driver before replacing the jar and restarting applications.
 
-## Storage and Recovery Notes
+## SQL and JDBC
 
-MVStore space reclamation remains an experimental maintenance API. It does not add SQL entry points or schedule itself automatically. Eligible legacy damaged files can persist recovered metadata after a writable open and clean close. Files with overlapping live ranges or unverifiable consistency are still rejected; this fix is not a general-purpose database corruption repair tool. Keep an original backup before upgrade or repair.
+Applications do not need SQL changes. The reported production stack is `StringUtils.toUpperEnglish → JdbcResultSet.getColumnIndex → getString`.
+Fault injection into the complete old jar reproduced the same H2 exception chain. Natural concurrency stress did not reproduce the failure. Unsafe publication is a high-confidence root-cause assessment, not directly demonstrated by a natural reproduction.
 
-## SQL and JDBC Notes
+## Security, Storage and Recovery
 
-This release has no SQL semantic or JDBC API behavior changes.
+This release declares no dedicated security fix and adds no database repair or recovery capabilities. The experimental MVStore reclamation API and the previous release's recovery limitations remain unchanged.
 
 ## Maven
 
@@ -35,34 +32,19 @@ This release has no SQL semantic or JDBC API behavior changes.
 <dependency>
     <groupId>net.xdob.h2db</groupId>
     <artifactId>h2db</artifactId>
-    <version>2.3.1</version>
+    <version>2.3.2</version>
 </dependency>
 ```
 
 ## Verification
 
-Main verification commands:
+JDK 8 jar, sources, javadoc, and POM packaging passed. Running `SELECT H2VERSION()` against the packaged jar returned `2.3.2`.
 
-```powershell
-cd h2
-.\gradlew.bat runPluginArchitectureCheck
-.\gradlew.bat runH2LegacySmoke
-.\gradlew.bat runMvStoreSpaceReclamationCheck
-.\gradlew.bat runMvStoreRecoveryCheck
-.\gradlew.bat runMvStoreReclamationJUnitCheck
-.\gradlew.bat runH2TestAllCi
-.\gradlew.bat --rerun-tasks runLongRunJUnitCheck
-.\gradlew.bat --rerun-tasks longRunTestDistZip longRunTestDistTar
-```
+`runPluginArchitectureCheck`, `runH2LegacySmoke`, `runMvStoreSpaceReclamationCheck`, `runMvStoreRecoveryCheck`, `runMvStoreReclamationJUnitCheck`, `runLongRunJUnitCheck`, and `runH2TestAllCi` all passed. Full CI took 19 minutes 47 seconds.
 
-### LongRun Acceptance
+The CI configuration did not execute four slow/benchmark tests: `TestMVStoreBenchmark`, `TestLargeBlob`, `TestSubqueryPerformanceOnLazyExecutionMode`, and `TestDefrag`.
+The 12-hour LongRun has not been repeated for this release; the 2.3.1 endurance result is not a 2.3.2 acceptance result.
 
-| Profile | Command | Result | Key Metrics |
-| --- | --- | --- | --- |
-| comprehensive 12h | `java -jar h2-longrun.jar -c config/comprehensive.properties` | PASS | 1,776,387,749 operations, 58 reopen checks, 23 recovery checks, all 4,308 reclamation events successful, 0 warnings, and 0 suspicious log lines. |
+## Release Status
 
-## Known Issues
-
-* MVStore space reclamation is an experimental maintenance API. It does not expose SQL and does not schedule itself automatically.
-* Automatic recovery is limited to overlapping chunks confirmed to be abandoned with no live pages. Overlapping live ranges are still rejected as corruption.
-* 2.3.1 handles the overlapping abandoned-chunk failure covered by this release; it does not promise automatic repair for unrelated truncation, page corruption, or storage-media failures.
+This document prepares the 2.3.2 release. Maven Central publication, tags, and GitHub Release status must be confirmed after the corresponding publishing operations.

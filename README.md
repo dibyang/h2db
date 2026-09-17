@@ -25,7 +25,7 @@ h2db 发布产物使用以下坐标。请将版本号替换为你要使用的正
 <dependency>
     <groupId>net.xdob.h2db</groupId>
     <artifactId>h2db</artifactId>
-    <version>2.3.1</version>
+    <version>2.3.2</version>
 </dependency>
 ```
 

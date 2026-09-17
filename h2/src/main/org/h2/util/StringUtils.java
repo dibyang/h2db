@@ -35,7 +35,22 @@ public class StringUtils {
     // 4 * 1024 * 2 (strings per pair) * 64 * 2 (bytes per char) = 0.5 MB
     private static final int TO_UPPER_CACHE_LENGTH = 2 * 1024;
     private static final int TO_UPPER_CACHE_MAX_ENTRY_LENGTH = 64;
-    private static final String[][] TO_UPPER_CACHE = new String[TO_UPPER_CACHE_LENGTH][];
+    private static final UpperCaseCacheEntry[] TO_UPPER_CACHE = new UpperCaseCacheEntry[TO_UPPER_CACHE_LENGTH];
+
+    /**
+     * 不可变缓存项。槽位允许并发覆盖和读到旧值，但 final 字段的初始化安全性
+     * 保证读到非空缓存项时不会看到尚未初始化的键或值；构造期间不得泄露 this。
+     */
+    private static final class UpperCaseCacheEntry {
+        final String key;
+        final String value;
+
+        /** 同时初始化键和值，供其他线程无锁读取。 */
+        UpperCaseCacheEntry(String key, String value) {
+            this.key = key;
+            this.value = value;
+        }
+    }
 
     static {
         for (int i = 0; i < HEX_DECODE.length; i++) {
@@ -87,14 +102,14 @@ public class StringUtils {
             return s.toUpperCase(Locale.ENGLISH);
         }
         int index = s.hashCode() & (TO_UPPER_CACHE_LENGTH - 1);
-        String[] e = TO_UPPER_CACHE[index];
+        UpperCaseCacheEntry e = TO_UPPER_CACHE[index];
         if (e != null) {
-            if (e[0].equals(s)) {
-                return e[1];
+            if (e.key.equals(s)) {
+                return e.value;
             }
         }
         String s2 = s.toUpperCase(Locale.ENGLISH);
-        e = new String[] { s, s2 };
+        e = new UpperCaseCacheEntry(s, s2);
         TO_UPPER_CACHE[index] = e;
         return s2;
     }

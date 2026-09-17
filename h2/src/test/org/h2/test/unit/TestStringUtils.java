@@ -32,6 +32,7 @@ public class TestStringUtils extends TestBase {
 
     @Override
     public void test() throws Exception {
+        TestUpperCaseCache.main();
         testParseUInt31();
         testHex();
         testXML();

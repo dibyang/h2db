@@ -4,6 +4,17 @@ This is the English companion of [CHANGELOG.md](CHANGELOG.md). The Chinese docum
 
 This file records public h2db release changes for external users. Keep one section per version.
 
+## Unreleased (v2.3.x)
+
+### Fixed
+
+- Fixed unsafe concurrent publication of uppercase cache entries in `StringUtils.toUpperEnglish()`. Immutable entries with `final` fields prevent readers from observing uninitialized keys or values. This defect can affect JDBC result retrieval by column label.
+
+### Verification
+
+- Added cache publication checks and concurrent JDBC regression tests using independent connections, integrated into `TestStringUtils`. JDK 8 compilation and `runH2LegacySmoke` passed.
+- Fault injection reproduces the same NPE expression in the old implementation. Natural concurrency stress did not reproduce the failure, so the specific trigger of the reported production exception remains unconfirmed.
+
 ## 2.3.1 (2026-08-19)
 
 ### Fixed

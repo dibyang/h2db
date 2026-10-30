@@ -1,76 +1,31 @@
-# h2db 2.4.0
+# h2db 2.4.2 (2026-10-30)
 
 [中文](RELEASE_NOTES_TEMPLATE.md)
 
-## Summary
+## Summary and changes
 
-This release focuses on coordinated online backup and shadow restore, DML fast path V1, and lifecycle reliability across execution, storage, networking, and tools. An operation gate, persistent database identity, prepared snapshots, participant coordination, atomic bundles, shadow validation, and a generation activation fence provide consistency across the database and external persistence participants.
+- Fix obsolete dead-chunk header checks and premature fallback from incomplete quick-recovery candidates. Retain the latest header-validated candidate and require a full scan before falling below a known version; legitimate full-scan recovery remains supported.
+- Fix unsafe publication of uppercase cache entries with immutable final-field entries, preventing JDBC column-label lookup from observing uninitialized keys or values.
+- Add regressions for reused dead-chunk locations, recovery selection and cache publication. Preserve existing v2.4.x prepared-snapshot and interrupt protections.
 
-## Compatibility
+## Compatibility, upgrade and rollback
 
-This release keeps the H2 embedded and server database model. Maven coordinates are `net.xdob.h2db:h2db:2.4.0`. Verification covers 2.3 database files, legacy zip backups, 2.3 API plugins, and regular JDBC / legacy backup paths in both version directions.
+Coordinates: `net.xdob.h2db:h2db:2.4.2`. Java 8 supported. This patch does not change SQL/JDBC APIs, network protocols or the MVStore disk format.
+Existing 2.4.x coordinated-backup restrictions still apply: after enabling it and writing internal database identity metadata, do not write to that database with 2.3.x. No-format-change for this patch does not permit downgrading across that boundary.
+Stop old-driver processes and retain a stopped-database backup before upgrading; validate on a copy first. Reverting binaries does not undo writes; retain the pre-upgrade backup. Do not overwrite production databases directly with damaged or recovered copies.
 
-Coordinated online backup is disabled by default and fixed when a database is opened. Enabling it writes internal database identity metadata; the database must not subsequently be opened for writes by 2.3.x. Legacy databases can continue with legacy backup or use clone onboarding.
+## Verification status
 
-## Changes
+The port passed JDK 8 compilation, 28 recovery scenarios, space reclamation and reclamation-contract checks on v2.4.x.
+Full TestAll CI directly against the final 2.4.2 JAR passed, exit 0, in 21m47s. Online backup: 89 tests; reclamation contracts: 7; LongRun unit: 51; no failures. Plugin: 141 tests, 1 skipped, no failures. Legacy smoke, recovery and space-reclamation gates passed.
+`SELECT H2VERSION()` returned `2.4.2`. Jar, sources, Javadoc and POM build, isolated local Maven dry run, license checks and all four signatures passed. Main JAR bytes match the full-CI artifact.
+The 2.3.3 Linux comparison and full CI results are not 2.4.2 acceptance. Excluded slow/benchmark tests, unexecuted endurance runs and full real-business acceptance are not counted as passed.
 
-* Added coordinated online backup and shadow restore with an operation gate, database identity/schema epoch, MVStore prepared snapshots, participant SPI, atomic manifests, shadow validation, generation tokens, and an activation fence.
-* Added TCP online-backup control protocol v21/v22; older clients can continue through regular JDBC and legacy backup.
-* Added provider certification, fault matrix, performance report, and bilingual online-backup operations guides.
-* Completed experimental DML fast path V1 for simple `INSERT ... VALUES` and JDBC batches, including plan recognition, read-only parameter views, batch parameter views, table bulk writes, and transaction/error compatibility safeguards.
-* Fixed immediate LOB-close races, SourceCompiler concurrent output, FilePathDisk retry convergence, GUI Console caller interrupt contamination, and interruption semantics across executor/session/server/auth/pool/file-lock/network lifecycles.
-* Added clearer GitHub issue, contribution, and security intake paths.
+## Known limits
 
-## Security
+The fix cannot reconstruct overwritten data or guarantee recovery of every damaged database, and does not claim complete HA protection. Synthetic injection is not natural reclamation; one live-chunk corruption test does not cover all corruption forms.
+Coordinated backup does not replace deployment-side generation registries, active pointers, CAS or crash recovery. The DML fast path remains experimental; no new performance claims.
 
-This release does not declare a dedicated security fix. The online-backup control path validates identity, generation tokens, and activation fences. Release credentials, GPG private keys, and staging secrets must not be committed.
+## Release status
 
-## Storage and Recovery Notes
-
-Coordinated online backup creates an atomic bundle and restores it into a separate shadow directory for validation before generation activation. The deployment/router layer owns the generation registry, active pointer, CAS switch, and crash recovery. The first production rollout certifies one real `adb_ldb` participant.
-
-## SQL and JDBC Notes
-
-The DML fast path remains experimental and safely falls back. Generated keys, triggers, constraints, delta tables, `INSERT SELECT`, `MERGE`, `UPDATE`, and `DELETE` stay on the native execution path. There is no in-repository ADB/LDB integration throughput result, so this release makes no 1.5x or 3x performance claim.
-
-## Maven
-
-```xml
-<dependency>
-    <groupId>net.xdob.h2db</groupId>
-    <artifactId>h2db</artifactId>
-    <version>2.4.0</version>
-</dependency>
-```
-
-## Verification
-
-Main verification commands:
-
-```powershell
-cd h2
-.\gradlew.bat runPluginArchitectureCheck
-.\gradlew.bat runH2LegacySmoke
-.\gradlew.bat runOnlineBackupCheck
-.\gradlew.bat runMvStoreSpaceReclamationCheck
-.\gradlew.bat runMvStoreRecoveryCheck
-.\gradlew.bat --rerun-tasks runLongRunJUnitCheck
-.\gradlew.bat --rerun-tasks longRunTestDistZip
-.\gradlew.bat runH2TestAllCi
-.\gradlew.bat clean jar sourceJar javadocJar generatePomFileForMavenPublication
-.\gradlew.bat publishToMavenLocal "-Dmaven.repo.local=build\test-m2-release-clean"
-```
-
-### Online Backup Acceptance
-
-* Online-backup checks: 82/82.
-* Plugin architecture checks: 140/140.
-* The 2.3 compatibility matrix, fault matrix, shadow restore, and generation activation fence checks passed.
-* Prepare latency p99/max under continuous DML: 2ms/2ms.
-* Prepare latency p99/max under mixed DML, DDL, and long transactions: 21ms/21ms.
-
-## Known Issues
-
-* The first production rollout certifies only one real `adb_ldb` participant. New providers must pass the certification specification and fault matrix.
-* Coordinated online backup does not replace deployment-layer generation registry, active pointer, CAS, or crash recovery.
-* The DML fast path remains experimental V1; its scope and performance claims are limited as described above.
+Local release finalized; not uploaded to Central. Central upload is performed manually by the user; this does not confirm remote availability. No push, tag or deployment in this run. 2.4.2 Linux dual-node real-business acceptance was not run; local gates are not a production-environment guarantee.

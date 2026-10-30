@@ -25,7 +25,7 @@ Published h2db artifacts use the following coordinates. Replace the version with
 <dependency>
     <groupId>net.xdob.h2db</groupId>
     <artifactId>h2db</artifactId>
-    <version>2.4.0</version>
+    <version>2.4.2</version>
 </dependency>
 ```
 
@@ -40,7 +40,7 @@ Published h2db artifacts use the following coordinates. Replace the version with
 * [Plugin usage guide](docs/plugin/plugin-usage.en.md)
 * [Plugin developer guide](docs/h2db-plugin-developer-guide.en.md)
 * [Coordinated online backup and shadow restore operations](docs/en/online-backup/operations.md)
-* [2.4.0 release notes](RELEASE_NOTES_TEMPLATE.en.md)
+* [2.4.2 release notes](RELEASE_NOTES_TEMPLATE.en.md)
 
 ## Build
 

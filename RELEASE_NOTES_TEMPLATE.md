@@ -1,76 +1,31 @@
-# h2db 2.4.0
+# h2db 2.4.2（2026-10-30）
 
 [English](RELEASE_NOTES_TEMPLATE.en.md)
 
-## 摘要
+## 摘要与变更
 
-本次 release 的重点是协调式在线备份与影子恢复、DML 快路径 V1，以及跨执行器、存储、网络和工具进程的生命周期可靠性。在线备份通过数据库操作门禁、持久化数据库身份、prepared snapshot、参与者协调、原子 bundle、影子校验和 generation 激活栅栏，保证数据库与外部持久化参与者的一致性。
+- 修复 MVStore 启动时误检 dead chunk 的旧物理头，以及快速恢复因候选不完整而过早接受旧版本的问题。保留文件头已验证的最新候选，低于已知版本前先执行完整扫描；完整扫描后的合法恢复仍保留。
+- 修复大写缓存项的并发发布问题，使用 final 字段的不可变缓存项，避免 JDBC 按列名读取结果时观察到未初始化的键或值。
+- 增加 dead chunk 位置复用、恢复选版及缓存发布回归测试。保留 v2.4.x 既有的 prepared snapshot 和中断处理保护。
 
-## 兼容性
+## 兼容性、升级与回滚
 
-本 release 继续保持 H2 嵌入式与服务端数据库模型，Maven 坐标为 `net.xdob.h2db:h2db:2.4.0`。已验证 2.3 数据库文件、传统 zip 备份、2.3 API 插件，以及新旧版本之间的常规 JDBC 和传统备份路径。
+坐标为 `net.xdob.h2db:h2db:2.4.2`，支持 Java 8。本次补丁不改变 SQL/JDBC API、网络协议或 MVStore 磁盘格式。
+2.4.x 协调式在线备份的原有限制继续适用：启用并写入内部数据库身份元数据后，不得使用 2.3.x 写入该数据库；不能将本补丁“不改磁盘格式”理解为允许跨此边界降级。
+升级前停止旧驱动进程并保留停机备份，先在副本验证。回退程序不撤销已写内容，应保留升级前备份作为回滚来源；不要用损坏文件或恢复副本直接覆盖生产库。
 
-协调式在线备份默认关闭，并在数据库打开时固定。启用后会写入内部数据库身份元数据；此后不得再使用 2.3.x 对该数据库执行写操作。旧数据库可继续使用传统备份，或通过 clone onboarding 接入协调式在线备份。
+## 验证状态
 
-## 变更
+移植阶段已在 v2.4.x 通过 JDK 8 编译、28 项恢复回归、空间回收和回收契约检查。
+2.4.2 最终 JAR 直接运行完整 TestAll CI，通过并返回退出码 0，用时 21 分 47 秒。在线备份 89 项、回收契约 7 项、LongRun 单元 51 项无失败；插件 141 项中 1 项跳过，其余无失败。legacy smoke、恢复和空间回收门禁通过。
+实际 `SELECT H2VERSION()` 返回 `2.4.2`。jar、sources、Javadoc 和 POM 构建、本地隔离 Maven dry run、许可证及四份产物签名验证通过；主 JAR 与完整 CI 制品字节一致。
+2.3.3 的 Linux 对照和完整 CI 不是 2.4.2 的验收结果。被配置排除的慢速/基准测试、未执行的长稳和完整真实业务验收不计入通过范围。
 
-* 增加协调式在线备份与影子恢复：operation gate、数据库 identity/schema epoch、MVStore prepared snapshot、参与者 SPI、原子 manifest、shadow validation、generation token 与 activation fence。
-* 增加 TCP 在线备份控制协议 v21/v22；旧客户端仍可走常规 JDBC 和传统备份。
-* 增加 provider 认证规范、故障矩阵、性能报告及中英文在线备份运维手册。
-* 完成实验性 DML 快路径 V1，覆盖简单 `INSERT ... VALUES` 与 JDBC batch 的计划识别、只读参数视图、批参数视图、表级批写和事务/错误兼容保护。
-* 修复 LOB 立即关闭竞态、SourceCompiler 并发输出、FilePathDisk 重试收敛、GUI Console 调用线程中断污染，以及多处 executor/session/server/auth/pool/file-lock/network 生命周期中断语义。
-* 补充 GitHub issue、贡献和安全问题入口。
+## 已知边界
 
-## 安全
+本修复不能重建已经覆盖的数据，不保证所有旧损坏库自动恢复，也不宣称解决全部 HA 问题。合成故障注入不等于自然回收过程；单一活跃块损坏测试不覆盖全部损坏形式。
+协调式备份不代替部署层 generation registry、活动指针、CAS 和崩溃恢复；DML 快路径仍保持实验性边界，不新增性能承诺。
 
-本 release 未声明单独安全修复。在线备份控制路径增加身份、generation token 与激活栅栏校验；发布凭据、GPG 私钥和 staging secrets 不应提交到仓库。
+## 发布状态
 
-## 存储与恢复说明
-
-协调式在线备份产生原子 bundle 并在独立 shadow 目录完成恢复与验证，只有通过 generation 激活栅栏后才允许切换。generation registry、活动指针、CAS 切换和崩溃恢复由部署/路由层负责。首批生产灰度仅认证一个真实 `adb_ldb` 参与者。
-
-## SQL 与 JDBC 说明
-
-DML 快路径保持实验性和可回退。生成键、触发器、约束、delta table、`INSERT SELECT`、`MERGE`、`UPDATE` 与 `DELETE` 继续走原生执行路径。本 release 没有本仓库内 ADB/LDB 集成吞吐结论，不声明 1.5x 或 3x 性能目标。
-
-## Maven
-
-```xml
-<dependency>
-    <groupId>net.xdob.h2db</groupId>
-    <artifactId>h2db</artifactId>
-    <version>2.4.0</version>
-</dependency>
-```
-
-## 验证
-
-主要验证命令：
-
-```powershell
-cd h2
-.\gradlew.bat runPluginArchitectureCheck
-.\gradlew.bat runH2LegacySmoke
-.\gradlew.bat runOnlineBackupCheck
-.\gradlew.bat runMvStoreSpaceReclamationCheck
-.\gradlew.bat runMvStoreRecoveryCheck
-.\gradlew.bat --rerun-tasks runLongRunJUnitCheck
-.\gradlew.bat --rerun-tasks longRunTestDistZip
-.\gradlew.bat runH2TestAllCi
-.\gradlew.bat clean jar sourceJar javadocJar generatePomFileForMavenPublication
-.\gradlew.bat publishToMavenLocal "-Dmaven.repo.local=build\test-m2-release-clean"
-```
-
-### 在线备份专项验收
-
-* 在线备份检查：82/82。
-* 插件架构检查：140/140。
-* 2.3 兼容矩阵、故障矩阵、影子恢复及 generation 激活栅栏验证通过。
-* 持续 DML 场景 prepare 延迟 p99/max：2ms/2ms。
-* 混合 DML、DDL 与长事务场景 prepare 延迟 p99/max：21ms/21ms。
-
-## 已知问题
-
-* 首批生产灰度只认证一个真实 `adb_ldb` 参与者，新增 provider 必须先通过认证规范和故障矩阵。
-* 协调式在线备份不会替代部署层的 generation registry、活动指针、CAS 和崩溃恢复。
-* DML 快路径仍是实验性 V1，覆盖范围和性能声明受上述边界限制。
+本地发布定稿，尚未上传中央仓库。中央仓库上传由用户手动执行，不据此确认远程可用性。本轮不推送、不打标签或部署；未运行 2.4.2 Linux 双节点真实业务验收，不将本地门禁扩大为生产环境保证。

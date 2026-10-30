@@ -4,7 +4,7 @@
 
 本文件记录 h2db 面向外部用户的公开 release 变更。格式遵循“每个版本一节”的方式。
 
-## 2.4.2（未发布）
+## 2.4.2（2026-10-30，本地发布定稿）
 
 ### 修复
 
@@ -13,6 +13,8 @@
 
 ### 验证
 
+- 最终 2.4.2 JAR 直接运行完整 TestAll CI 通过，耗时 21 分 47 秒；在线备份 89 项、回收契约 7 项、LongRun 单元 51 项无失败，插件 141 项中 1 项跳过，其余无失败。legacy smoke、28 项恢复与空间回收门禁通过。
+- 本地隔离 Maven dry run、POM/许可证及四份产物签名验证通过，主 JAR 与门禁制品字节一致；中央仓库上传未执行。未执行的长稳、配置排除的慢速/基准测试及 2.4.2 Linux 双节点真实业务验收不计入通过范围。
 - 本次恢复修复在 `v2.4.x` 上完成 JDK 8 编译、28 项 `runMvStoreRecoveryCheck`、`runMvStoreSpaceReclamationCheck` 和 `runMvStoreReclamationJUnitCheck`；未将 2.3.3 的完整 CI 或 Linux 验收视为 2.4.x 验收结果。
 - 新增缓存发布约束和独立连接并发 JDBC 回归测试，接入 `TestStringUtils`；JDK 8 编译和 `runH2LegacySmoke` 通过。
 - 故障注入可在旧实现中重现相同 NPE 表达式；自然并发压力测试未复现，因此尚未确认所报告生产异常的具体触发原因。

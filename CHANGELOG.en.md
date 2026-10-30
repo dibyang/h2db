@@ -4,7 +4,7 @@ This is the English companion of [CHANGELOG.md](CHANGELOG.md). The Chinese docum
 
 This file records public h2db release changes for external users. Keep one section per version.
 
-## 2.4.2 (Unreleased)
+## 2.4.2 (2026-10-30, local release finalized)
 
 ### Fixed
 
@@ -13,6 +13,8 @@ This file records public h2db release changes for external users. Keep one secti
 
 ### Verification
 
+- Full TestAll CI directly against the final 2.4.2 JAR passed in 21m47s. Online backup: 89 tests; reclamation contracts: 7; LongRun unit: 51; no failures. Plugin: 141 tests, 1 skipped, no failures. Legacy smoke, 28 recovery scenarios and space-reclamation gates passed.
+- Isolated local Maven dry run, POM/license checks and all four artifact signatures passed; main JAR bytes match the gated artifact. Central upload was not performed. Unexecuted endurance runs, configured slow/benchmark exclusions and 2.4.2 Linux dual-node real-business acceptance are not counted as passed.
 - This recovery port passed JDK 8 compilation, 28 `runMvStoreRecoveryCheck` scenarios, `runMvStoreSpaceReclamationCheck` and `runMvStoreReclamationJUnitCheck` on `v2.4.x`. The 2.3.3 full CI and Linux acceptance results are not counted as 2.4.x acceptance.
 - Added cache publication checks and concurrent JDBC regression tests using independent connections, integrated into `TestStringUtils`. JDK 8 compilation and `runH2LegacySmoke` passed.
 - Fault injection reproduces the same NPE expression in the old implementation. Natural concurrency stress did not reproduce the failure, so the specific trigger of the reported production exception remains unconfirmed.

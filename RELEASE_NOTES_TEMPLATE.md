@@ -1,50 +1,28 @@
-# h2db 2.3.2
+# h2db 2.3.3（2026-10-30）
 
 [English](RELEASE_NOTES_TEMPLATE.en.md)
 
-## 摘要
+## 摘要与变更
 
-2.3.2 修复大写字符串缓存项的不安全并发发布，避免读取未初始化的缓存键或值。该缓存用于 JDBC 按列名读取结果等路径。
+- 修复 MVStore 启动时对 dead chunk 旧物理位置的误检；无存活页的 chunk 不再要求可能已回收或复用的位置保有原 header/footer。
+- 保留文件头已验证的最新 chunk 候选；快速恢复若需降至已知版本以下，先执行完整扫描。完整扫描后经过校验的合法旧版本恢复仍保留。
+- 新增 dead chunk 位置复用和独立恢复选版回归测试；活跃 chunk 损坏不被无条件忽略。
 
-## 变更
+## 兼容性、升级与回滚
 
-* 使用具有 final 字段的不可变缓存项，保持无锁缓存读取。
-* 增加缓存发布约束、哈希碰撞转换和独立连接并发 JDBC 回归测试。
-* 测试使用命名守护线程并保留超时检查，避免阻塞任务阻止测试 JVM 退出。
+Maven 坐标为 `net.xdob.h2db:h2db:2.3.3`，保持 Java 8 兼容。不改变 SQL/JDBC API、网络协议或 MVStore 磁盘格式。
+升级前停止旧驱动进程并保留停机备份；先在新副本验证，再替换应用依赖。回退程序不撤销已写入的数据，应保留升级前备份作为回滚来源。
+本修复不能重建已覆盖的数据，也不保证所有旧损坏库自动恢复。故障库仅在副本上检查，不直接覆盖生产库。
 
-## 兼容性与升级
+## 验证及边界
 
-Maven 坐标为 `net.xdob.h2db:h2db:2.3.2`，保持 Java 8 兼容。
-本版本不改变 SQL 语义、JDBC API、网络协议或 MVStore 磁盘格式。2.3.1 数据库可升级使用；升级前备份数据库并停止使用旧驱动的进程，再替换 jar 和重启应用。
-
-## SQL 与 JDBC
-
-修复涉及全局字符串缓存，应用无需修改 SQL。生产报告的异常链为 `StringUtils.toUpperEnglish → JdbcResultSet.getColumnIndex → getString`。
-旧版完整 jar 的故障注入重现了相同 H2 异常链；自然并发压力测试未重现。并发发布竞态是高置信根因判断，而非自然复现直接证实。
-
-## 安全、存储与恢复
-
-本版本未声明独立安全修复，也未新增数据库修复或恢复能力。MVStore 实验性回收 API 及上一版本的恢复限制保持不变。
-
-## Maven
-
-```xml
-<dependency>
-    <groupId>net.xdob.h2db</groupId>
-    <artifactId>h2db</artifactId>
-    <version>2.3.2</version>
-</dependency>
-```
-
-## 验证
-
-JDK 8 下发布 jar、sources、javadoc 和 POM 构建通过；实际 `SELECT H2VERSION()` 返回 `2.3.2`。
-
-`runPluginArchitectureCheck`、`runH2LegacySmoke`、`runMvStoreSpaceReclamationCheck`、`runMvStoreRecoveryCheck`、`runMvStoreReclamationJUnitCheck`、`runLongRunJUnitCheck` 和 `runH2TestAllCi` 全部通过。完整 CI 用时 19 分 47 秒。
-
-完整 CI 配置未执行 `TestMVStoreBenchmark`、`TestLargeBlob`、`TestSubqueryPerformanceOnLazyExecutionMode` 和 `TestDefrag` 四项慢速/基准测试。
-本次未重新运行 12 小时 LongRun；2.3.1 的长稳结果不作为 2.3.2 验收结果。
+同修复逻辑、仍标记为 2.3.2 的旧候选已完成 JDK 8 编译、28 项恢复回归、插件、回收、legacy smoke、LongRun 单元门禁及完整 TestAll CI 重跑（19 分 19 秒）。首次 TestValueMemory 失败原因未完全确定；单独基线/候选和整套重跑均通过，首次记录保留。
+旧候选在 Windows 新副本上的 32 轮实际 Core 工作量保留 920 个 PUBLIC 对象和三表 1/2/3；活跃 chunk 损坏副本返回 90030。
+Linux 同 agent 双节点候选断电恢复已完成；可控 dead chunk 同输入对照显示原版选 47 且最新标记丢失，候选选 50 且标记保留；单一活跃块损坏仍拒绝打开。对照报告审查通过，结论仅限这些受控条件，不宣称自然回收过程、原生产同因或全部 HA 问题均已验证。
+以上结果不自动等同于本次 2.3.3 最终制品验收。版本、哈希及最终制品门禁须另行核对；被配置排除的慢速/基准测试和未执行的 12 小时长稳不计入通过范围。
 
 ## 发布状态
 
-本文件用于 2.3.2 发布准备；实际 Maven Central 发布、标签和 GitHub Release 状态需在发布操作后确认。
+2.3.3 的 jar、sources、Javadoc、POM 构建通过；实际 `SELECT H2VERSION()` 返回 `2.3.3`。恢复、空间回收、插件、回收契约、LongRun 单元及 legacy smoke 门禁通过。完整 TestAll CI 直接加载最终封装 JAR 并排除 main classes，21 分 56 秒通过，退出码 0。制品对应性核验未发现版本/日期及其内联常量之外的变化。本地隔离 Maven dry run 和四份产物的签名验证通过，主 JAR 与门禁验证制品一致；中央仓库上传未执行。
+
+用户已授权本地发布定稿。本次 dead chunk 校验及恢复选版修复的技术门禁已满足，保留上述限制与首次失败记录。中央仓库上传由用户手动执行；本文不确认中央仓库可用性，也不表示已推送、打标签或部署。

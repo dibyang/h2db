@@ -998,6 +998,9 @@ public abstract class FileStore<C extends Chunk<C>>
 
     protected final boolean findLastChunkWithCompleteValidChunkSet(Comparator<C> chunkComparator,
             Map<Long, C> validChunksByLocation, boolean afterFullScan) {
+        // 快速发现不是完整物理视图，不能据此跳过已知较新版本。
+        // 只有完整扫描之后才允许在严格校验后选择更旧的恢复版本。
+        long knownVersion = lastChunkVersion();
         // this collection will hold potential candidates for lastChunk to fall back to,
         // in order from the most to least likely
         C[] array = createChunksArray(validChunksByLocation.size());
@@ -1033,6 +1036,9 @@ public abstract class FileStore<C extends Chunk<C>>
         recoveryPhysicalChunksByGeneration = afterFullScan ? validChunksByGeneration : null;
         try {
             for (C chunk : lastChunkCandidates) {
+                if (!afterFullScan && chunk.version < knownVersion) {
+                    return false;
+                }
                 clearCaches();
                 boolean verified = true;
                 try {

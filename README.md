@@ -21,11 +21,13 @@ h2db 是 H2 Java SQL 数据库引擎的独立维护 fork。它保留 H2 的嵌�
 
 h2db 发布产物使用以下坐标。请将版本号替换为你要使用的正式发布版本。
 
+2.3.3 已完成本地发布定稿，中央仓库上传由维护者手动执行；状态与验证范围见[发布说明](RELEASE_NOTES_TEMPLATE.md)。
+
 ```xml
 <dependency>
     <groupId>net.xdob.h2db</groupId>
     <artifactId>h2db</artifactId>
-    <version>2.3.2</version>
+    <version>2.3.3</version>
 </dependency>
 ```
 

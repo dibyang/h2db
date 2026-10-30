@@ -92,6 +92,8 @@ public class TestMVStoreRecoveryCorruption extends TestDb {
         runScenario("T-RECOVERY-LAYOUT-CYCLE-01", true, this::testLayoutCycleRecovery);
         runScenario("T-RECOVERY-PHYSICAL-VIEW-01", true, this::testPhysicalViewDoesNotReplaceLayoutMetadata);
         runScenario("T-CLEAN-DEAD-CHUNK-OVERLAP-01", true, this::testCleanHeaderDeadChunkOverlapRecovery);
+        runScenario("T-CLEAN-DEAD-REUSED-01", false, this::testCleanHeaderReusedDeadChunk);
+        runScenario("T-QUICK-RECOVERY-OLD-CANDIDATE-01", false, this::testQuickRecoveryRejectsOldCandidate);
         runScenario("T-REPAIR-ROBUST-01", true, this::testRepairDoesNotThrowOnCompactMoveSample);
         runScenario("T-SHUTDOWN-COMPACT-01", false, this::testTcpShutdownCompactKeepsCommittedData);
         runScenario("T-QUERY-NO-AUTO-COMPACT-01", false, this::testQueryDoesNotExposeAutomaticCompactHook);
@@ -111,6 +113,10 @@ public class TestMVStoreRecoveryCorruption extends TestDb {
     }
 
     private void runScenario(String id, boolean knownCurrentFailure, Scenario scenario) throws Exception {
+        String selected = System.getProperty("h2.test.mvStoreRecoveryCorruption.scenario");
+        if (selected != null && !selected.equals(id)) {
+            return;
+        }
         try {
             scenario.run();
         } catch (Throwable t) {
@@ -320,6 +326,83 @@ public class TestMVStoreRecoveryCorruption extends TestDb {
             closeStore(store);
             store = null;
 
+            assertMarkerReadable(base);
+        } finally {
+            closeStoreImmediately(store);
+            deleteFilesUnlessKept(base);
+        }
+    }
+
+    /** 快速候选不完整时，必须交给完整扫描，不能仅因旧版本可读就接受回退。 */
+    private void testQuickRecoveryRejectsOldCandidate() throws Exception {
+        String base = mvStoreFile("quickRecoveryOldCandidate");
+        MVStore store = null;
+        try {
+            deleteFiles(base);
+            createParentDirectories(base);
+            store = new MVStore.Builder().fileName(base).autoCommitDisabled().autoCompactFillRate(0).open();
+            store.setRetentionTime(Integer.MAX_VALUE);
+            store.setVersionsToKeep(64);
+            MVMap<Integer, byte[]> data = store.openMap("data");
+            data.put(-1, new byte[] { 1 });
+            store.commit();
+            FileStore<?> fileStore = store.getFileStore();
+            Field last = FileStore.class.getDeclaredField("lastChunk");
+            last.setAccessible(true);
+            Chunk<?> old = (Chunk<?>) last.get(fileStore);
+            data.put(-1, new byte[] { MARKER });
+            store.commit();
+            long newestVersion = fileStore.lastChunkVersion();
+            assertTrue(newestVersion > old.version);
+            Map<Long, Chunk<?>> candidates = new HashMap<>();
+            candidates.put(old.block, old);
+            Method recover = FileStore.class.getDeclaredMethod("findLastChunkWithCompleteValidChunkSet",
+                    Comparator.class, Map.class, boolean.class);
+            recover.setAccessible(true);
+            Comparator<Chunk<?>> comparator = (a, b) -> Long.compare(b.version, a.version);
+            // 故障注入仅删去候选中的最新版本；没有 dead chunk、坏页或物理写入。
+            assertEquals(Boolean.FALSE, recover.invoke(fileStore, comparator, candidates, false));
+            assertEquals(newestVersion, fileStore.lastChunkVersion());
+            // 完整扫描已结束时，仍允许选择经过校验的旧版本，不能取消合法恢复。
+            assertEquals(Boolean.TRUE, recover.invoke(fileStore, comparator, candidates, true));
+            assertEquals(old.version, fileStore.lastChunkVersion());
+        } finally {
+            closeStoreImmediately(store);
+            deleteFilesUnlessKept(base);
+        }
+    }
+
+    /** dead chunk 的旧位置被复用后，重新打开仍须保留最新提交的标记。 */
+    private void testCleanHeaderReusedDeadChunk() throws Exception {
+        String base = mvStoreFile("cleanDeadReused");
+        MVStore store = null;
+        try {
+            deleteFiles(base);
+            createParentDirectories(base);
+            store = new MVStore.Builder().fileName(base).autoCommitDisabled().autoCompactFillRate(0).open();
+            store.setRetentionTime(Integer.MAX_VALUE);
+            store.setVersionsToKeep(64);
+            MVMap<Integer, byte[]> data = store.openMap("data");
+            for (int i = 0; i < 48; i++) {
+                data.put(1, filledBytes(i, 16 * 1024));
+                store.commit();
+            }
+            data.remove(1);
+            data.put(-1, new byte[] { MARKER });
+            store.commit();
+            FileStore<?> fileStore = store.getFileStore();
+            List<Chunk<?>> dead = deadChunks(fileStore);
+            assertTrue(dead.size() > 20);
+            dead.sort((a, b) -> Long.compare(b.version, a.version));
+            Chunk<?> stale = dead.get(0);
+            Chunk<?> owner = dead.get(1);
+            fileStore.executeFilestoreOperation(() -> {
+                stale.block = owner.block;
+                saveChunkMetadata(fileStore, stale);
+            });
+            store.commit();
+            closeStore(store);
+            store = null;
             assertMarkerReadable(base);
         } finally {
             closeStoreImmediately(store);

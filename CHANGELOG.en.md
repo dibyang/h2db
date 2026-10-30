@@ -4,6 +4,22 @@ This is the English companion of [CHANGELOG.md](CHANGELOG.md). The Chinese docum
 
 This file records public h2db release changes for external users. Keep one section per version.
 
+## 2.3.3 (2026-10-30, local release finalized)
+
+### Fixed
+
+- Fixed false failures in MVStore clean-shutdown startup checks for dead chunks: chunks without live pages no longer require their old physical locations to retain matching headers/footers after space reclamation or reuse.
+- Retained the latest header-validated chunk among recovery candidates. Quick recovery no longer accepts an older version from an incomplete candidate set below the known version without a full scan. Validated fallback after a full scan remains supported.
+
+### Verification and limitations
+
+- Added synthetic red regressions for reused dead-chunk locations and missing latest quick-recovery candidates. JDK 8 compilation, 28 recovery scenarios, reclamation, plugin, and legacy smoke gates passed.
+- On Windows, the candidate JAR preserved 920 PUBLIC objects and row counts of 1/2/3 in three key tables for 32 cycles of the actual Core validation workload on a fresh isolated copy. A copy with a damaged live-chunk header was still rejected with error 90030.
+- The full `runH2TestAllCi` rerun passed in 19 minutes 19 seconds. `TestValueMemory` failed in the first run; standalone baseline/candidate checks and the full rerun passed, but the initial failure is not fully explained. Excluded slow/benchmark tests and unexecuted endurance runs are not counted as passed.
+- No disk-format change. This fix cannot reconstruct overwritten data or guarantee automatic recovery of every previously damaged database. Retain a stopped-database backup before upgrading and validate damaged databases only on copies. Reverting binaries does not undo writes; use the retained pre-upgrade backup when rolling back.
+- Linux same-agent dual-node crash/recovery passed. With the same controlled dead-chunk input, the original selected 47 instead of 50 and lost the latest marker; the candidate retained 50 and the marker. A single live-chunk corruption remained rejected. Natural reclamation, all business workflows and every corruption form are outside this conclusion.
+- Full CI directly against the final packaged 2.3.3 JAR passed in 21m56s. The earlier accepted candidate and final JAR have no added/removed entries: 1225 entries match; disassembly of 8 changed classes shows only version/date and inlined-constant differences. This remains an unreleased record, not confirmation of the original production cause or complete HA protection.
+
 ## 2.3.2 (2026-09-17)
 
 ### Fixed

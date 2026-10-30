@@ -21,11 +21,13 @@ Upstream H2 documentation is available at https://h2database.com.
 
 Published h2db artifacts use the following coordinates. Replace the version with the release you intend to consume.
 
+The 2.3.3 local release is finalized; Central upload is performed manually by the maintainer. See the [release notes](RELEASE_NOTES_TEMPLATE.en.md) for status and verification scope.
+
 ```xml
 <dependency>
     <groupId>net.xdob.h2db</groupId>
     <artifactId>h2db</artifactId>
-    <version>2.3.2</version>
+    <version>2.3.3</version>
 </dependency>
 ```
 

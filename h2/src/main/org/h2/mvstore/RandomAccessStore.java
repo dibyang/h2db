@@ -246,6 +246,10 @@ public abstract class RandomAccessStore extends FileStore<SFChunk>
         };
 
         Map<Long,SFChunk> validChunksByLocation = new HashMap<>();
+        // 文件头已验证的最新 chunk 必须参与恢复，不能只留下抽样校验的旧 chunk。
+        if (newest != null) {
+            validChunksByLocation.put(newest.block, newest);
+        }
         if (assumeCleanShutdown) {
             // quickly check latest 20 chunks referenced in meta table
             Queue<SFChunk> chunksToVerify = new PriorityQueue<>(20, Collections.reverseOrder(chunkComparator));
@@ -256,6 +260,10 @@ public abstract class RandomAccessStore extends FileStore<SFChunk>
                 for (SFChunk c : getChunksFromLayoutMap()) {
                     // might be there already, due to meta traversal
                     // see readPage() ... getChunkIfFound()
+                    // dead chunk 的旧空间可能已回收或复用；layout 才是存活状态的权威来源。
+                    if (!c.isLive()) {
+                        continue;
+                    }
                     chunksToVerify.offer(c);
                     if (chunksToVerify.size() == 20) {
                         chunksToVerify.poll();

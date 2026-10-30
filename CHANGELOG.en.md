@@ -8,10 +8,12 @@ This file records public h2db release changes for external users. Keep one secti
 
 ### Fixed
 
+- Ported the 2.3.3 MVStore dead-chunk validation and recovery-selection fix: skip obsolete physical-header checks for chunks without live pages, retain the latest header-validated candidate, and require a full scan before quick recovery falls below a known version. Live-data validation and legitimate full-scan recovery remain supported; no disk-format change.
 - Fixed unsafe concurrent publication of uppercase cache entries in `StringUtils.toUpperEnglish()`. Immutable entries with `final` fields prevent readers from observing uninitialized keys or values. This defect can affect JDBC result retrieval by column label.
 
 ### Verification
 
+- This recovery port passed JDK 8 compilation, 28 `runMvStoreRecoveryCheck` scenarios, `runMvStoreSpaceReclamationCheck` and `runMvStoreReclamationJUnitCheck` on `v2.4.x`. The 2.3.3 full CI and Linux acceptance results are not counted as 2.4.x acceptance.
 - Added cache publication checks and concurrent JDBC regression tests using independent connections, integrated into `TestStringUtils`. JDK 8 compilation and `runH2LegacySmoke` passed.
 - Fault injection reproduces the same NPE expression in the old implementation. Natural concurrency stress did not reproduce the failure, so the specific trigger of the reported production exception remains unconfirmed.
 

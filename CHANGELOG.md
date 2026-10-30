@@ -8,10 +8,12 @@
 
 ### 修复
 
+- 移植 2.3.3 的 MVStore dead chunk 校验和恢复选版修复：跳过已无存活页 chunk 的旧物理头校验，保留 header 已验证的最新候选；快速恢复若需低于已知版本，先交给完整扫描。活跃数据校验和完整扫描后的合法恢复仍保留，不改变磁盘格式。
 - 修复 `StringUtils.toUpperEnglish()` 大写缓存项的并发发布问题：使用具有 `final` 字段的不可变缓存项，避免并发读取未初始化的键或值。此缺陷可能影响 JDBC 按列名读取结果的路径。
 
 ### 验证
 
+- 本次恢复修复在 `v2.4.x` 上完成 JDK 8 编译、28 项 `runMvStoreRecoveryCheck`、`runMvStoreSpaceReclamationCheck` 和 `runMvStoreReclamationJUnitCheck`；未将 2.3.3 的完整 CI 或 Linux 验收视为 2.4.x 验收结果。
 - 新增缓存发布约束和独立连接并发 JDBC 回归测试，接入 `TestStringUtils`；JDK 8 编译和 `runH2LegacySmoke` 通过。
 - 故障注入可在旧实现中重现相同 NPE 表达式；自然并发压力测试未复现，因此尚未确认所报告生产异常的具体触发原因。
 

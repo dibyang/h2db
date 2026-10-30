@@ -4,7 +4,7 @@ This is the English companion of [CHANGELOG.md](CHANGELOG.md). The Chinese docum
 
 This file records public h2db release changes for external users. Keep one section per version.
 
-## Unreleased (v2.4.x)
+## 2.4.2 (Unreleased)
 
 ### Fixed
 
